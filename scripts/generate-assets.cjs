@@ -668,7 +668,7 @@ function generateTilemap(roomWidth, roomHeight, opts) {
       // Door accent tile at doorway gaps
       for (const gap of doorGaps) {
         if (x >= gap.x1 && x <= gap.x2 && y >= gap.y1 && y <= gap.y2) {
-          gTile = 4;
+          gTile = gap.tile || 28;
         }
       }
       // Decorations layered on top
@@ -693,20 +693,20 @@ function generateTilemap(roomWidth, roomHeight, opts) {
           break;
         }
       }
+      let isDoorGap = false;
+      for (const gap of doorGaps) {
+        if (x >= gap.x1 && x <= gap.x2 && y >= gap.y1 && y <= gap.y2) {
+          isDoorGap = true;
+          break;
+        }
+      }
 
       if (isSign) {
         collision.push(5);
-      } else if (isInterior) {
+      } else if (isDoorGap) {
+        collision.push(0);
+      } else if (isInterior || isBorder) {
         collision.push(2);
-      } else if (isBorder) {
-        let isDoorGap = false;
-        for (const gap of doorGaps) {
-          if (x >= gap.x1 && x <= gap.x2 && y >= gap.y1 && y <= gap.y2) {
-            isDoorGap = true;
-            break;
-          }
-        }
-        collision.push(isDoorGap ? 0 : 2);
       } else {
         collision.push(0);
       }
@@ -757,22 +757,41 @@ console.log('  player.png   (64x64, 4x4 frames)');
 // The city is SEALED — no border gaps. The outer walls are the game boundary.
 // Escaping them is the endgame.
 //
-// Door zone positions from rooms.json (all at y=960 = row 60):
-//   House B:        x=368  → gap tiles x=23-24
-//   Protag house:   x=752  → gap tiles x=47-48
-//   House C:        x=1136 → gap tiles x=71-72
+// Door zone positions from rooms.json:
+//   Apt 4A:         x=128  → gap tiles x=8-9,   y=60
+//   House B:        x=368  → gap tiles x=23-24, y=60
+//   Protag house:   x=752  → gap tiles x=47-48, y=60
+//   Laundromat:     x=928  → gap tiles x=58-59, y=60
+//   House C:        x=1136 → gap tiles x=71-72, y=60
+//   Depot:          x=1312 → gap tiles x=82-83, y=60
 //
-// South building row: north faces at row 60 (where door zones sit).
-// Buildings are 8 wide × 5 tall. Gaps only in the north face for enterable ones.
-// Non-enterable buildings have solid north faces (sign markers sit just north at row ~58).
+//   Clinic:         x=160  → gap tiles x=10-11, y=19
+//   Records:        x=160  → gap tiles x=10-11, y=33
+//   Utility:        x=160  → gap tiles x=10-11, y=53
+//   Market:         x=1280 → gap tiles x=80-81, y=19
+//   Ration:         x=1312 → gap tiles x=82-83, y=33
+//   East Block:     x=1312 → gap tiles x=82-83, y=53
 //
 // City wall inner faces: y=1-5 (N), y=66-70 (S), x=1-4 (W), x=91-94 (E).
 const cityStreet = generateTilemap(96, 72, {
   groundTile: 1, // dark pavement
-  doorGaps: [],  // NO border gaps — city is sealed
+  doorGaps: [
+    { x1: 8,  x2: 9,  y1: 60, y2: 60 },
+    { x1: 23, x2: 24, y1: 60, y2: 60 },
+    { x1: 47, x2: 48, y1: 60, y2: 60 },
+    { x1: 58, x2: 59, y1: 60, y2: 60 },
+    { x1: 71, x2: 72, y1: 60, y2: 60 },
+    { x1: 82, x2: 83, y1: 60, y2: 60 },
+    { x1: 10, x2: 11, y1: 19, y2: 19 },
+    { x1: 10, x2: 11, y1: 33, y2: 33 },
+    { x1: 10, x2: 11, y1: 53, y2: 53 },
+    { x1: 80, x2: 81, y1: 19, y2: 19 },
+    { x1: 82, x2: 83, y1: 33, y2: 33 },
+    { x1: 82, x2: 83, y1: 53, y2: 53 },
+  ],
   decorations: [
     // Cracked pavement approach to south building row
-    { x1:  5, x2: 90, y1: 57, y2: 59, tile: 33 },
+    { x1:  5, x2: 90, y1: 57, y2: 59, tile: 32 },
     // Overgrown strips along north sidewalk (inside of north city wall)
     { x1:  5, x2: 90, y1:  6, y2:  7, tile: 6 },
     // Scattered overgrown patches — nature reclaiming the street
@@ -791,49 +810,52 @@ const cityStreet = generateTilemap(96, 72, {
     { x1:  1, x2:  4, y1:  6, y2: 65 }, // west
     { x1: 91, x2: 94, y1:  6, y2: 65 }, // east
 
-    // ── North-side building facades (4-tile deep south face — not enterable) ─
-    { x1: 10, x2: 22, y1: 13, y2: 16 }, // Clinic (west side)
+    // ── North-side building facades ──────────────────────────
+    { x1: 10, x2: 22, y1: 19, y2: 22 }, // Clinic (west side)
     { x1: 38, x2: 52, y1: 11, y2: 14 }, // Central block (north gate)
-    { x1: 72, x2: 86, y1: 13, y2: 16 }, // Market Grocer (east side)
+    { x1: 72, x2: 86, y1: 19, y2: 22 }, // Market Grocer (east side)
 
-    // ── West-side building facades (2 tiles wide, east face at col 11 = px 176) ─
-    { x1:  9, x2: 10, y1: 27, y2: 37 }, // Civic Records Office
-    { x1:  9, x2: 10, y1: 47, y2: 56 }, // Utilities Substation
+    // ── West-side building facades ──────────────────────────
+    { x1:  9, x2: 15, y1: 33, y2: 36 }, // Civic Records Office
+    { x1:  9, x2: 15, y1: 53, y2: 56 }, // Utilities Substation
 
-    // ── East-side building facades (2 tiles wide, west face at col 83 = px 1328) ─
-    { x1: 83, x2: 84, y1: 27, y2: 37 }, // Emergency Ration Office
-    { x1: 83, x2: 84, y1: 47, y2: 56 }, // East Block Apartments
+    // ── East-side building facades ──────────────────────────
+    { x1: 80, x2: 86, y1: 33, y2: 36 }, // Emergency Ration Office
+    { x1: 80, x2: 86, y1: 53, y2: 56 }, // East Block Apartments
 
     // ── South building row — 2 tiles deep (face + one body row)
-    // Rows 62-65 left open → back alley accessible through building gaps
     // Layout west→east: Apt4A | [HouseB] | Boarded | [Protag] | Laundromat | [HouseC] | Depot
 
-    // Apt 4A — not enterable
+    // Apt 4A
     { x1:  7, x2: 15, y1: 60, y2: 61 },
 
-    // House B — enterable, gap at x=23-24 (north face only)
-    { x1: 20, x2: 22, y1: 60, y2: 60 }, // north face left of gap
-    { x1: 25, x2: 28, y1: 60, y2: 60 }, // north face right of gap
-    { x1: 20, x2: 28, y1: 61, y2: 61 }, // body row
+    // House B — gap at x=23-24
+    { x1: 20, x2: 22, y1: 60, y2: 60 },
+    { x1: 25, x2: 28, y1: 60, y2: 60 },
+    { x1: 20, x2: 28, y1: 61, y2: 61 },
 
-    // Boarded suite — not enterable
+    // Boarded suite
     { x1: 32, x2: 39, y1: 60, y2: 61 },
 
-    // Protag house — enterable, gap at x=47-48
+    // Protag house — gap at x=47-48
     { x1: 44, x2: 46, y1: 60, y2: 60 },
     { x1: 49, x2: 52, y1: 60, y2: 60 },
     { x1: 44, x2: 52, y1: 61, y2: 61 },
 
-    // Laundromat — not enterable
-    { x1: 57, x2: 64, y1: 60, y2: 61 },
+    // Laundromat — gap at 58-59
+    { x1: 57, x2: 57, y1: 60, y2: 60 },
+    { x1: 60, x2: 64, y1: 60, y2: 60 },
+    { x1: 57, x2: 64, y1: 61, y2: 61 },
 
-    // House C — enterable, gap at x=71-72
+    // House C — gap at x=71-72
     { x1: 68, x2: 70, y1: 60, y2: 60 },
     { x1: 73, x2: 76, y1: 60, y2: 60 },
     { x1: 68, x2: 76, y1: 61, y2: 61 },
 
-    // Depot / Maintenance — not enterable
-    { x1: 80, x2: 88, y1: 60, y2: 61 },
+    // Depot / Maintenance — gap at 82-83
+    { x1: 80, x2: 81, y1: 60, y2: 60 },
+    { x1: 84, x2: 88, y1: 60, y2: 60 },
+    { x1: 80, x2: 88, y1: 61, y2: 61 },
   ],
   signPositions: [],
 });
