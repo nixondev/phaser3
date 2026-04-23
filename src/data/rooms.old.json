@@ -1,0 +1,146 @@
+{
+  "rooms": {
+    "city-street": {
+      "id": "city-street",
+      "name": "Residential District",
+      "mapKey": "city-street",
+      "tilemapPath": "assets/tilemaps/city-street.json",
+      "width": 80,
+      "height": 60,
+      "playerSpawn": { "x": 640, "y": 688 },
+      "doors": [
+        {
+          "id": "city-house-door",
+          "x": 624, "y": 704, "width": 32, "height": 16,
+          "targetRoom": "protag-house", "targetDoor": "house-exit",
+          "direction": "down",
+          "spawnX": 640, "spawnY": 688
+        },
+        {
+          "id": "city-house-b-door",
+          "x": 368, "y": 704, "width": 32, "height": 16,
+          "targetRoom": "house-b", "targetDoor": "house-b-exit",
+          "direction": "down",
+          "spawnX": 384, "spawnY": 688
+        },
+        {
+          "id": "city-house-c-door",
+          "x": 880, "y": 704, "width": 32, "height": 16,
+          "targetRoom": "house-c", "targetDoor": "house-c-exit",
+          "direction": "down",
+          "spawnX": 896, "spawnY": 688
+        }
+      ],
+      "interactables": []
+    },
+    "protag-house": {
+      "id": "protag-house",
+      "name": "Your Apartment",
+      "mapKey": "protag-house",
+      "tilemapPath": "assets/tilemaps/protag-house.json",
+      "width": 20,
+      "height": 15,
+      "playerSpawn": { "x": 248, "y": 184 },
+      "doors": [
+        {
+          "id": "house-exit",
+          "x": 144, "y": 0, "width": 32, "height": 16,
+          "targetRoom": "city-street", "targetDoor": "city-house-door",
+          "direction": "up",
+          "spawnX": 160, "spawnY": 32
+        }
+      ],
+      "interactables": [
+        {
+          "id": "desk-note",
+          "x": 56, "y": 56,
+          "type": "item",
+          "text": "A page torn from your notebook.\nYour handwriting. Yesterday's date.",
+          "item": {
+            "name": "Your Notes",
+            "tileFrame": 7,
+            "category": "document",
+            "content": "Day 14. Still no signal outside.\nThe city is quiet in the wrong way.\nI heard someone on the street last night —\nbut they were moving wrong."
+          }
+        }
+      ]
+    },
+    "house-b": {
+      "id": "house-b",
+      "name": "Apartment 4B",
+      "mapKey": "house-b",
+      "tilemapPath": "assets/tilemaps/house-b.json",
+      "width": 18,
+      "height": 13,
+      "playerSpawn": { "x": 144, "y": 104 },
+      "doors": [
+        {
+          "id": "house-b-exit",
+          "x": 128, "y": 0, "width": 32, "height": 16,
+          "targetRoom": "city-street", "targetDoor": "city-house-b-door",
+          "direction": "up",
+          "spawnX": 144, "spawnY": 32
+        }
+      ],
+      "interactables": [
+        {
+          "id": "house-b-calendar",
+          "x": 48, "y": 40,
+          "type": "sign",
+          "text": "A wall calendar. Every day crossed off\nup to the 11th. Then nothing."
+        },
+        {
+          "id": "house-b-note",
+          "x": 176, "y": 152,
+          "type": "item",
+          "text": "A handwritten note on the kitchen table.",
+          "item": {
+            "name": "Neighbor's Note",
+            "tileFrame": 7,
+            "category": "document",
+            "content": "They said it would pass in a week.\nThat was three weeks ago.\nI'm staying inside until someone\ncomes to tell us it's over."
+          }
+        }
+      ]
+    },
+    "house-c": {
+      "id": "house-c",
+      "name": "Community Room",
+      "mapKey": "house-c",
+      "tilemapPath": "assets/tilemaps/house-c.json",
+      "width": 26,
+      "height": 18,
+      "playerSpawn": { "x": 208, "y": 248 },
+      "doors": [
+        {
+          "id": "house-c-exit",
+          "x": 192, "y": 0, "width": 32, "height": 16,
+          "targetRoom": "city-street", "targetDoor": "city-house-c-door",
+          "direction": "up",
+          "spawnX": 208, "spawnY": 32
+        }
+      ],
+      "interactables": [
+        {
+          "id": "house-c-board",
+          "x": 208, "y": 40,
+          "type": "sign",
+          "text": "DISTRICT NOTICE BOARD\n— Emergency rations: Building C basement\n— Curfew extended indefinitely\n— Do not approach the afflicted"
+        },
+        {
+          "id": "house-c-logbook",
+          "x": 64, "y": 136,
+          "type": "item",
+          "text": "A logbook left open on a folding table.",
+          "item": {
+            "name": "Warden's Log",
+            "tileFrame": 7,
+            "category": "document",
+            "content": "Entry 9: Three more on the east block.\nThey don't respond. They don't stop.\nWe sealed the outer gate at 0600.\nI don't know if anyone outside knows."
+          }
+        }
+      ]
+    }
+  },
+  "startRoom": "protag-house"
+}
