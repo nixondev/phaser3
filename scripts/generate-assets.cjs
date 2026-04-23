@@ -668,7 +668,7 @@ function generateTilemap(roomWidth, roomHeight, opts) {
       // Door accent tile at doorway gaps
       for (const gap of doorGaps) {
         if (x >= gap.x1 && x <= gap.x2 && y >= gap.y1 && y <= gap.y2) {
-          gTile = gap.tile || 28;
+          gTile = gap.tile || 29;
         }
       }
       // Decorations layered on top

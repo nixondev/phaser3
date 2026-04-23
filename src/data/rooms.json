@@ -22,7 +22,7 @@
           "targetDoor": "house-b-exit",
           "direction": "down",
           "spawnX": 384,
-          "spawnY": 944,
+          "spawnY": 928,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -38,7 +38,7 @@
           "targetDoor": "house-exit",
           "direction": "down",
           "spawnX": 768,
-          "spawnY": 944
+          "spawnY": 928
         },
         {
           "id": "city-house-c-door",
@@ -50,7 +50,7 @@
           "targetDoor": "house-c-exit",
           "direction": "down",
           "spawnX": 1152,
-          "spawnY": 944,
+          "spawnY": 928,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -66,7 +66,7 @@
           "targetDoor": "clinic-exit",
           "direction": "down",
           "spawnX": 176,
-          "spawnY": 288
+          "spawnY": 272
         },
         {
           "id": "city-records-door",
@@ -78,7 +78,7 @@
           "targetDoor": "records-exit",
           "direction": "down",
           "spawnX": 176,
-          "spawnY": 512,
+          "spawnY": 496,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -94,7 +94,7 @@
           "targetDoor": "utility-exit",
           "direction": "down",
           "spawnX": 176,
-          "spawnY": 832,
+          "spawnY": 816,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -110,7 +110,7 @@
           "targetDoor": "market-exit",
           "direction": "down",
           "spawnX": 1296,
-          "spawnY": 288,
+          "spawnY": 272,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -126,7 +126,7 @@
           "targetDoor": "ration-exit",
           "direction": "down",
           "spawnX": 1328,
-          "spawnY": 512,
+          "spawnY": 496,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -142,7 +142,7 @@
           "targetDoor": "east-block-exit",
           "direction": "down",
           "spawnX": 1328,
-          "spawnY": 832,
+          "spawnY": 816,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -158,7 +158,7 @@
           "targetDoor": "laundromat-exit",
           "direction": "down",
           "spawnX": 944,
-          "spawnY": 944,
+          "spawnY": 928,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -174,7 +174,7 @@
           "targetDoor": "depot-exit",
           "direction": "down",
           "spawnX": 1328,
-          "spawnY": 944,
+          "spawnY": 928,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -190,7 +190,7 @@
           "targetDoor": "apt-4a-exit",
           "direction": "down",
           "spawnX": 144,
-          "spawnY": 944,
+          "spawnY": 928,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -362,8 +362,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
           "direction": "up",
-          "spawnX": 768,
-          "spawnY": 944
+          "spawnX": 160,
+          "spawnY": 48
         }
       ],
       "interactables": [
@@ -411,8 +411,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-b-door",
           "direction": "up",
-          "spawnX": 384,
-          "spawnY": 944
+          "spawnX": 144,
+          "spawnY": 48
         }
       ],
       "interactables": [
@@ -459,8 +459,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-c-door",
           "direction": "up",
-          "spawnX": 1152,
-          "spawnY": 944
+          "spawnX": 208,
+          "spawnY": 48
         }
       ],
       "interactables": [
@@ -507,8 +507,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-clinic-door",
           "direction": "up",
-          "spawnX": 176,
-          "spawnY": 288
+          "spawnX": 160,
+          "spawnY": 48
         }
       ],
       "interactables": [
@@ -548,8 +548,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-records-door",
           "direction": "up",
-          "spawnX": 176,
-          "spawnY": 512
+          "spawnX": 160,
+          "spawnY": 48
         }
       ]
     },
@@ -574,8 +574,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-utility-door",
           "direction": "up",
-          "spawnX": 176,
-          "spawnY": 832
+          "spawnX": 160,
+          "spawnY": 48
         },
         {
           "id": "utility-trapdoor",
@@ -587,7 +587,7 @@
           "targetDoor": "tunnel-utility-entrance",
           "direction": "down",
           "spawnX": 40,
-          "spawnY": 80
+          "spawnY": 160
         }
       ],
       "interactables": [
@@ -630,8 +630,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-market-door",
           "direction": "up",
-          "spawnX": 1296,
-          "spawnY": 288
+          "spawnX": 160,
+          "spawnY": 48
         }
       ]
     },
@@ -656,8 +656,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-ration-door",
           "direction": "up",
-          "spawnX": 1328,
-          "spawnY": 512
+          "spawnX": 160,
+          "spawnY": 48
         }
       ]
     },
@@ -682,8 +682,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-east-block-door",
           "direction": "up",
-          "spawnX": 1328,
-          "spawnY": 832
+          "spawnX": 160,
+          "spawnY": 48
         }
       ]
     },
@@ -708,8 +708,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-laundromat-door",
           "direction": "up",
-          "spawnX": 944,
-          "spawnY": 944
+          "spawnX": 160,
+          "spawnY": 48
         },
         {
           "id": "laundromat-tunnel-door",
@@ -720,8 +720,8 @@
           "targetRoom": "substation-tunnel",
           "targetDoor": "tunnel-laundromat-entrance",
           "direction": "down",
-          "spawnX": 600,
-          "spawnY": 80
+          "spawnX": 280,
+          "spawnY": 160
         }
       ]
     },
@@ -747,7 +747,7 @@
           "targetDoor": "utility-trapdoor",
           "direction": "up",
           "spawnX": 40,
-          "spawnY": 192
+          "spawnY": 48
         },
         {
           "id": "tunnel-laundromat-entrance",
@@ -758,8 +758,8 @@
           "targetRoom": "laundromat",
           "targetDoor": "laundromat-tunnel-door",
           "direction": "up",
-          "spawnX": 272,
-          "spawnY": 192
+          "spawnX": 600,
+          "spawnY": 48
         }
       ]
     },
@@ -784,8 +784,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-depot-door",
           "direction": "up",
-          "spawnX": 1328,
-          "spawnY": 944
+          "spawnX": 160,
+          "spawnY": 48
         }
       ]
     },
@@ -810,8 +810,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-apt-4a-door",
           "direction": "up",
-          "spawnX": 144,
-          "spawnY": 944
+          "spawnX": 160,
+          "spawnY": 48
         }
       ]
     }
