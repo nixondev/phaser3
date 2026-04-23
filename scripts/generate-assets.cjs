@@ -1028,7 +1028,7 @@ const laundromat = generateTilemap(20, 15, {
   ],
   interiorWalls: [
     { x1: 1, x2: 1, y1: 1, y2: 13 }, // Washers west
-    { x1: 18, x2: 18, y1: 1, y2: 13 }, // Washers east
+    { x1: 18, x2: 18, y1: 1, y2: 11 }, // Washers east (stop before tunnel entrance at y=12)
     { x1: 8, x2: 11, y1: 5, y2: 10 }, // Folding tables
   ],
 });

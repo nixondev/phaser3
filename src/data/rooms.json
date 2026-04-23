@@ -23,7 +23,10 @@
           "direction": "down",
           "spawnX": 384,
           "spawnY": 944,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-house-door",
@@ -48,7 +51,10 @@
           "direction": "down",
           "spawnX": 1152,
           "spawnY": 944,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-clinic-door",
@@ -73,7 +79,10 @@
           "direction": "down",
           "spawnX": 176,
           "spawnY": 512,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-utility-door",
@@ -86,7 +95,10 @@
           "direction": "down",
           "spawnX": 176,
           "spawnY": 832,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-market-door",
@@ -99,7 +111,10 @@
           "direction": "down",
           "spawnX": 1296,
           "spawnY": 288,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-ration-door",
@@ -112,7 +127,10 @@
           "direction": "down",
           "spawnX": 1328,
           "spawnY": 512,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-east-block-door",
@@ -125,7 +143,10 @@
           "direction": "down",
           "spawnX": 1328,
           "spawnY": 832,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-laundromat-door",
@@ -138,7 +159,10 @@
           "direction": "down",
           "spawnX": 944,
           "spawnY": 944,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-depot-door",
@@ -151,7 +175,10 @@
           "direction": "down",
           "spawnX": 1328,
           "spawnY": 944,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         },
         {
           "id": "city-apt-4a-door",
@@ -164,7 +191,10 @@
           "direction": "down",
           "spawnX": 144,
           "spawnY": 944,
-          "requiredKeys": ["skeleton-key", "master-key"]
+          "requiredKeys": [
+            "skeleton-key",
+            "master-key"
+          ]
         }
       ],
       "interactables": [
@@ -332,8 +362,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 32
+          "spawnX": 768,
+          "spawnY": 944
         }
       ],
       "interactables": [
@@ -347,7 +377,7 @@
             "name": "Your Notes",
             "tileFrame": 7,
             "category": "document",
-            "content": "Day 14. Still no signal outside.\nThe city is quiet in the wrong way.\nI heard someone on the street last night \u2014\nbut they were moving wrong."
+            "content": "Day 14. Still no signal outside.\nThe city is quiet in the wrong way.\nI heard someone on the street last night —\nbut they were moving wrong."
           }
         },
         {
@@ -381,8 +411,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-b-door",
           "direction": "up",
-          "spawnX": 144,
-          "spawnY": 32
+          "spawnX": 384,
+          "spawnY": 944
         }
       ],
       "interactables": [
@@ -429,8 +459,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-c-door",
           "direction": "up",
-          "spawnX": 208,
-          "spawnY": 32
+          "spawnX": 1152,
+          "spawnY": 944
         }
       ],
       "interactables": [
@@ -439,7 +469,7 @@
           "x": 208,
           "y": 40,
           "type": "sign",
-          "text": "DISTRICT NOTICE BOARD\n\u2014 Emergency rations: Building C basement\n\u2014 Curfew extended indefinitely\n\u2014 Do not approach the afflicted"
+          "text": "DISTRICT NOTICE BOARD\n— Emergency rations: Building C basement\n— Curfew extended indefinitely\n— Do not approach the afflicted"
         },
         {
           "id": "house-c-logbook",
@@ -477,8 +507,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-clinic-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 32
+          "spawnX": 176,
+          "spawnY": 288
         }
       ],
       "interactables": [
@@ -504,13 +534,22 @@
       "tilemapPath": "assets/tilemaps/records-office.json",
       "width": 20,
       "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "records-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-records-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-records-door",
+          "direction": "up",
+          "spawnX": 176,
+          "spawnY": 512
         }
       ]
     },
@@ -519,33 +558,51 @@
       "name": "Utilities Substation",
       "mapKey": "utility-substation",
       "tilemapPath": "assets/tilemaps/utility-substation.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "utility-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-utility-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-utility-door",
+          "direction": "up",
+          "spawnX": 176,
+          "spawnY": 832
         },
         {
           "id": "utility-trapdoor",
-          "x": 32, "y": 192, "width": 16, "height": 16,
-          "targetRoom": "substation-tunnel", "targetDoor": "tunnel-utility-entrance",
-          "direction": "down", "spawnX": 40, "spawnY": 32
+          "x": 32,
+          "y": 192,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "substation-tunnel",
+          "targetDoor": "tunnel-utility-entrance",
+          "direction": "down",
+          "spawnX": 40,
+          "spawnY": 80
         }
       ],
       "interactables": [
         {
           "id": "substation-charger",
-          "x": 280, "y": 56,
+          "x": 280,
+          "y": 56,
           "type": "recharge",
           "text": "The substation's backup cells are humming. Flashlight recharged.",
           "tileFrame": 39
         },
         {
           "id": "substation-trapdoor-desc",
-          "x": 32, "y": 192,
+          "x": 32,
+          "y": 192,
           "type": "sign",
           "text": "A heavy wooden trapdoor. It seems to lead to the maintenance tunnels.",
           "tileFrame": 34
@@ -557,14 +614,24 @@
       "name": "Market Street Grocer",
       "mapKey": "market",
       "tilemapPath": "assets/tilemaps/market.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "market-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-market-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-market-door",
+          "direction": "up",
+          "spawnX": 1296,
+          "spawnY": 288
         }
       ]
     },
@@ -573,14 +640,24 @@
       "name": "Emergency Ration Office",
       "mapKey": "ration-office",
       "tilemapPath": "assets/tilemaps/ration-office.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "ration-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-ration-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-ration-door",
+          "direction": "up",
+          "spawnX": 1328,
+          "spawnY": 512
         }
       ]
     },
@@ -589,14 +666,24 @@
       "name": "East Block Apartments",
       "mapKey": "east-block",
       "tilemapPath": "assets/tilemaps/east-block.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "east-block-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-east-block-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-east-block-door",
+          "direction": "up",
+          "spawnX": 1328,
+          "spawnY": 832
         }
       ]
     },
@@ -605,20 +692,36 @@
       "name": "Rinse & Repeat Laundromat",
       "mapKey": "laundromat",
       "tilemapPath": "assets/tilemaps/laundromat.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "laundromat-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-laundromat-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-laundromat-door",
+          "direction": "up",
+          "spawnX": 944,
+          "spawnY": 944
         },
         {
           "id": "laundromat-tunnel-door",
-          "x": 272, "y": 192, "width": 16, "height": 16,
-          "targetRoom": "substation-tunnel", "targetDoor": "tunnel-laundromat-entrance",
-          "direction": "down", "spawnX": 600, "spawnY": 32
+          "x": 272,
+          "y": 192,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "substation-tunnel",
+          "targetDoor": "tunnel-laundromat-entrance",
+          "direction": "down",
+          "spawnX": 600,
+          "spawnY": 80
         }
       ]
     },
@@ -627,20 +730,36 @@
       "name": "Maintenance Tunnel",
       "mapKey": "substation-tunnel",
       "tilemapPath": "assets/tilemaps/substation-tunnel.json",
-      "width": 40, "height": 10,
-      "playerSpawn": { "x": 40, "y": 32 },
+      "width": 40,
+      "height": 10,
+      "playerSpawn": {
+        "x": 40,
+        "y": 80
+      },
       "doors": [
         {
           "id": "tunnel-utility-entrance",
-          "x": 32, "y": 0, "width": 16, "height": 16,
-          "targetRoom": "utility-substation", "targetDoor": "utility-trapdoor",
-          "direction": "up", "spawnX": 40, "spawnY": 192
+          "x": 32,
+          "y": 0,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "utility-substation",
+          "targetDoor": "utility-trapdoor",
+          "direction": "up",
+          "spawnX": 40,
+          "spawnY": 192
         },
         {
           "id": "tunnel-laundromat-entrance",
-          "x": 592, "y": 0, "width": 16, "height": 16,
-          "targetRoom": "laundromat", "targetDoor": "laundromat-tunnel-door",
-          "direction": "up", "spawnX": 280, "spawnY": 192
+          "x": 592,
+          "y": 0,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "laundromat",
+          "targetDoor": "laundromat-tunnel-door",
+          "direction": "up",
+          "spawnX": 272,
+          "spawnY": 192
         }
       ]
     },
@@ -649,14 +768,24 @@
       "name": "Maintenance and Supply",
       "mapKey": "depot",
       "tilemapPath": "assets/tilemaps/depot.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "depot-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-depot-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-depot-door",
+          "direction": "up",
+          "spawnX": 1328,
+          "spawnY": 944
         }
       ]
     },
@@ -665,14 +794,24 @@
       "name": "Apartment 4A",
       "mapKey": "apt-4a",
       "tilemapPath": "assets/tilemaps/apt-4a.json",
-      "width": 20, "height": 15,
-      "playerSpawn": { "x": 160, "y": 64 },
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 64
+      },
       "doors": [
         {
           "id": "apt-4a-exit",
-          "x": 144, "y": 0, "width": 32, "height": 16,
-          "targetRoom": "city-street", "targetDoor": "city-apt-4a-door",
-          "direction": "up", "spawnX": 160, "spawnY": 32
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "city-street",
+          "targetDoor": "city-apt-4a-door",
+          "direction": "up",
+          "spawnX": 144,
+          "spawnY": 944
         }
       ]
     }
