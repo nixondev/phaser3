@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
+import { AudioManager } from '@systems/AudioManager';
 
 export class MenuScene extends Phaser.Scene {
   private started = false;
@@ -9,6 +10,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
+    AudioManager.getInstance().setScene(this);
     this.started = false;
     const w = GAME_CONFIG.WIDTH;
     const h = GAME_CONFIG.HEIGHT;
@@ -49,7 +51,9 @@ export class MenuScene extends Phaser.Scene {
 
     this.input.keyboard!.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
+    
   }
+
 
   private startGame(): void {
     if (this.started) return;

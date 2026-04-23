@@ -68,6 +68,7 @@ export interface RoomDefinition {
   doors: DoorDefinition[];
   interactables?: InteractableDef[];
   afflicted?: AfflictedDef[];
+  music?: string;
 }
 
 export interface RoomsData {

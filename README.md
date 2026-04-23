@@ -64,6 +64,7 @@ npm run preview      # Serve the production build locally
 | **TAB** | Toggle inventory |
 | **Q** | Drop selected inventory item |
 | **ESC** | Pause menu |
+| **- / +** | Adjust Volume (in Pause menu) |
 
 ## Project Structure
 

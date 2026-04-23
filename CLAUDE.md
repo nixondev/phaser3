@@ -118,6 +118,7 @@ Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, UI=40, TRANSITION=50
 | TAB | Toggle inventory |
 | Q | Drop selected inventory item |
 | ESC | Pause menu |
+| - / + | Adjust Volume (in Pause menu) |
 
 ### Event Bus (GameScene → UIScene)
 

@@ -7,6 +7,7 @@ import { InputManager } from '@systems/InputManager';
 import { RoomManager } from '@systems/RoomManager';
 import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
+import { AudioManager } from '@systems/AudioManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus } from '@/types';
 import { debug } from '@utils/Debug';
 
@@ -53,11 +54,20 @@ export class GameScene extends Phaser.Scene {
     this.afflictedGroup = this.physics.add.group();
     this.flashlight = new Flashlight(this);
 
+    // Audio setup
+    AudioManager.getInstance().setScene(this);
+
     const startRoom = this.roomManager.getStartRoom();
     this.roomManager.loadRoom(startRoom);
     this.rsm.visitRoom(startRoom);
 
     const roomDef = this.roomManager.getCurrentRoomDef();
+    
+    // Play music for the starting room
+    if (roomDef.music) {
+      AudioManager.getInstance().playMusic(roomDef.music);
+    }
+
     const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
     this.player = new Player(this, spawn.x, spawn.y);
 
@@ -595,6 +605,16 @@ export class GameScene extends Phaser.Scene {
       this.setupCamera();
       this.createWorldItemSprites();
       this.spawnAfflicted();
+
+      // Update music for new room
+      const roomDef = this.roomManager.getCurrentRoomDef();
+      if (roomDef.music) {
+        AudioManager.getInstance().playMusic(roomDef.music);
+      } else {
+        // Option: stop music if room has no music defined, or keep playing current
+        // AudioManager.getInstance().stopMusic();
+      }
+
       this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
     }).then(() => { this.isTransitioning = false; });
   }

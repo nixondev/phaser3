@@ -50,6 +50,11 @@ export class PreloadScene extends Phaser.Scene {
       debug('Queuing tilemap:', room.mapKey, room.tilemapPath);
       this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath);
     }
+
+    // Audio Assets
+    this.load.audio('bgm-street', 'assets/audio/gamemusic-001.mp3');
+    this.load.audio('bgm-interior', 'assets/audio/gamemusic-001.mp3');
+    this.load.audio('bgm-industrial', 'assets/audio/gamemusic-001.mp3');
   }
 
   create(): void {
