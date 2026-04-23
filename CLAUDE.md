@@ -70,14 +70,17 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 - `generatorFuel: number` — fuel available for the generator
 - `droppedItems: Map<roomId, DroppedItemState[]>`
 - `visitedRooms: Set<string>`
+- `tutorialShown: boolean` — whether the initial control help has been displayed
 
 ### Afflicted Entity (`src/entities/Afflicted.ts`)
 
 State machine with 4 states:
 - **wandering** — drifts slowly near origin point, blue tint, gentle wobble
-- **agitated** — triggered at 40px player proximity, flees from player, red tint, fast wobble. Calms at 80px distance.
-- **cured** — stands still, green tint. Interactable (E prompt). Not yet implemented how curing happens.
+- **agitated** — triggered at 40px player proximity, flees from player, red tint, fast wobble. Calms at 80px distance. Faster than wandering.
+- **cured** — stands still, green tint. Interactable (E prompt).
 - **recovered** — stands still, no tint. Interactable (repeat dialog).
+
+**Collision:** If the player overlaps with an agitated/wandering Afflicted, the screen shakes, fades out, and the player respawns at the `protag-house`.
 
 Each afflicted is defined in `rooms.json` with: `id`, `name`, `role`, `x`, `y`, `behaviorLoop`.
 On room entry, GameScene spawns afflicted and checks RoomStateManager to set initial state.
@@ -111,6 +114,7 @@ Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, UI=40, TRANSITION=50
 |-----|--------|
 | Arrow keys / WASD | Move |
 | E | Interact / use item / dismiss dialog |
+| F | Toggle Flashlight |
 | TAB | Toggle inventory |
 | Q | Drop selected inventory item |
 | ESC | Pause menu |
@@ -127,16 +131,18 @@ Events emitted by GameScene:
 
 ### Room / World Data (`src/data/rooms.json`)
 
-Current rooms (placeholder, will be replaced with city districts):
-- `entrance` — Entrance Hall, has sign + 1 afflicted (Elena, Pharmacist)
-- `library` — Ancient Library, has Torn Note (document)
-- `garden` — Garden Courtyard, has Vault Key + Copper Fitting (component)
-- `vault` — The Vault (locked, needs vault-key), has Fuel Canister + 1 afflicted (Marcus, Mechanic)
+The world consists of a central hub and various interior locations:
 
-Adding a room:
-1. Tiled JSON tilemap in `public/assets/tilemaps/`
-2. Entry in `rooms.json` with `id`, `mapKey`, `tilemapPath`, `doors`, optionally `interactables` and `afflicted`
-3. Reciprocal door entries on the connecting room
+- **Hub:** `city-street` — Large outdoor map (96x72) connecting all buildings. Populated with Afflicted.
+- **Residential:** `protag-house` (Start), `house-b`, `house-c`, `apt-4a`, `east-block`.
+- **Civic/Service:** `clinic`, `records-office`, `ration-office`, `utility-substation`, `depot`.
+- **Commercial:** `market`, `laundromat`.
+- **Secret:** `substation-tunnel` — Connects `utility-substation` and `laundromat`.
+
+**Special Features:**
+- `utility-substation` contains a **recharge** station for the flashlight.
+- `clinic` contains the **skeleton-key** used to unlock most buildings.
+- Locked doors support multiple keys (e.g., `["skeleton-key", "master-key"]`).
 
 Door locking: `requiredKey: "some-key-id"` on the door; matching item needs `category: "key"` and `keyId: "some-key-id"`.
 
@@ -156,26 +162,9 @@ Door locking: `requiredKey: "some-key-id"` on the door; matching item needs `cat
 - [x] **Phase 1 — Strip combat** (steps 1-4): Removed projectiles, attack system, weapon/armor equipping, health/damage, Enemy.ts, all combat from GameScene/UIScene/Player/RoomStateManager/Constants/InputManager.
 - [x] **Phase 2 — Update data model** (steps 5-7): New item categories, rooms.json rewritten for new tone, RoomStateManager has curedResidents/recoveredResidents/poweredDevices/generatorFuel.
 - [x] **Phase 3 — New entity foundation** (steps 8-10): Afflicted.ts with 4-state machine, spawning wired into GameScene, placeholder interaction for cured/recovered residents. Two test afflicted in rooms.json.
+- [x] **Phase 4 — Build out the city** (steps 11-12): Replaced prototype rooms with full city layout. `city-street` hub, 10+ interior rooms, tunnel system, and lock/key progression.
 
-### Next up — Phase 4: Build out the city
-
-The 4 placeholder dungeon rooms need to become a city. This is the next major piece of work.
-
-- [ ] **11. Replace prototype rooms with first city district (Residential)**
-  Design the residential district as the starting area. Outdoor street map(s) where the player wakes up, plus enterable building interiors (apartments, a small shop, maybe a clinic). Each building is a room connected by doors back to the street. Player wakes in an apartment, walks outside, sees the empty city. Needs new tilemaps in Tiled — the existing dungeon maps won't fit the city aesthetic. This step requires:
-  - New tileset or extended tileset for city tiles (buildings, streets, interiors)
-  - Residential street tilemap (larger, scrollable)
-  - 3-4 building interior tilemaps
-  - Updated rooms.json replacing the 4 dungeon rooms
-  - At least 1 afflicted placed in the district
-  - Interactables that establish the tone (notes, locked doors, dead screens)
-
-- [ ] **12. Add remaining districts one at a time**
-  Each district follows the same pattern: outdoor map(s) + building interiors + doors + afflicted + interactables. Build order:
-  - **Civic district** — government buildings, records office, papers and clues
-  - **Market/Warehouse** — scavenging hub, shops, storage
-  - **Energy Facility** — generator location, mostly dark, first power-up moment
-  - **Tunnel Network** — underground connections between buildings, entered via specific buildings
+### Next up — Phase 5: Interaction & Polish
 
 ### Phase 5 — Design decisions needed
 

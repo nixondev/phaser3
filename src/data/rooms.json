@@ -368,6 +368,13 @@
       ],
       "interactables": [
         {
+          "id": "controls-hint",
+          "x": 248,
+          "y": 144,
+          "type": "sign",
+          "text": "Flashlight: Press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nIt keeps the afflicted at bay."
+        },
+        {
           "id": "desk-note",
           "x": 56,
           "y": 56,

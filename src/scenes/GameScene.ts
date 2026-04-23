@@ -68,6 +68,18 @@ export class GameScene extends Phaser.Scene {
 
     this.emitFullState(roomDef.name);
     debug('GameScene created, starting in room:', startRoom);
+
+    if (!this.rsm.isTutorialShown()) {
+      this.time.delayedCall(1000, () => {
+        this.showTutorialDialog();
+      });
+    }
+  }
+
+  private showTutorialDialog(): void {
+    this.rsm.setTutorialShown(true);
+    this.dialogOpen = true;
+    this.events.emit('dialog-open', "Welcome. Controls: WASD to move, E to interact, TAB for inventory, F to toggle Flashlight, ESC for menu.");
   }
 
   update(_time: number, delta: number): void {

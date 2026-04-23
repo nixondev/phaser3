@@ -60,6 +60,7 @@ npm run preview      # Serve the production build locally
 |-----|--------|
 | **Arrow keys / WASD** | Move |
 | **E** | Interact / Use item / Dismiss dialog |
+| **F** | Toggle Flashlight |
 | **TAB** | Toggle inventory |
 | **Q** | Drop selected inventory item |
 | **ESC** | Pause menu |
@@ -75,8 +76,8 @@ npm run preview      # Serve the production build locally
 ## Development Status
 
 The project is currently in active development.
-- **Completed:** Combat system removal, core data model for cured residents, and basic entity state machines.
-- **Current Focus:** Replacing prototype rooms with the first city district (Residential) and implementing the cure mechanic.
+- **Completed:** Combat system removal, core data model for cured residents, city map expansion with functional interiors, and basic entity state machines.
+- **Current Focus:** Implementing the cure mechanic and expanding environmental storytelling.
 
 ---
 

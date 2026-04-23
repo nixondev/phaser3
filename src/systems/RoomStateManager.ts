@@ -12,6 +12,7 @@ export class RoomStateManager {
   private generatorFuel = 0;
   private inventory: (ItemDef | null)[] = new Array(12).fill(null);
   private droppedItems: Map<string, DroppedItemState[]> = new Map();
+  private tutorialShown = false;
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -151,6 +152,16 @@ export class RoomStateManager {
     return this.droppedItems.get(roomId) || [];
   }
 
+  // ── Tutorial ────────────────────────────────────────────────────────────
+
+  isTutorialShown(): boolean {
+    return this.tutorialShown;
+  }
+
+  setTutorialShown(shown: boolean): void {
+    this.tutorialShown = shown;
+  }
+
   // ── Reset ───────────────────────────────────────────────────────────────
 
   reset(): void {
@@ -164,5 +175,6 @@ export class RoomStateManager {
     this.generatorFuel = 0;
     this.inventory.fill(null);
     this.droppedItems.clear();
+    this.tutorialShown = false;
   }
 }

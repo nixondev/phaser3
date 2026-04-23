@@ -13,7 +13,7 @@ export class PauseScene extends Phaser.Scene {
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.6);
 
     this.add
-      .text(w / 2, h / 2 - 16, 'PAUSED', {
+      .text(w / 2, h / 2 - 40, 'PAUSED', {
         fontSize: '20px',
         color: '#ffffff',
         fontFamily: 'monospace',
@@ -21,10 +21,29 @@ export class PauseScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const hint = this.add
-      .text(w / 2, h / 2 + 16, 'Press ESC to resume', {
+    const controls = [
+      'WASD / Arrows : Move',
+      'E : Interact / Select',
+      'F : Toggle Flashlight',
+      'TAB : Inventory',
+      'Q : Drop Item',
+      'ESC : Resume Game'
+    ].join('\n');
+
+    this.add
+      .text(w / 2, h / 2 + 10, controls, {
         fontSize: '10px',
-        color: '#aaaaaa',
+        color: '#cccccc',
+        fontFamily: 'monospace',
+        align: 'center',
+        lineSpacing: 4
+      })
+      .setOrigin(0.5);
+
+    const hint = this.add
+      .text(w / 2, h / 2 + 60, 'Press ESC to resume', {
+        fontSize: '10px',
+        color: '#888888',
         fontFamily: 'monospace',
       })
       .setOrigin(0.5);
