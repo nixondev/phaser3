@@ -77,8 +77,8 @@ function fillRect(px, w, x1, y1, x2, y2, r, g, b, a = 255) {
   // ── Tileset (96×16, six 16×16 tiles) ────────────────────────────────────────
 
 function generateTileset() {
-  // 40 tiles × 16px = 640px wide
-  const W = 640, H = 16;
+  // 49 tiles × 16px = 784px wide
+  const W = 1024, H = 16;
   const px = new Uint8Array(W * H * 4);
 
   // Draw one 16×16 tile at column col (0-indexed)
@@ -190,57 +190,107 @@ function generateTileset() {
     }
   });
 
-  // ── GID 9 | frame 8 — Key item sprite ────────────────────────────────────
+  // ── GID 9 | frame 8 — Skeleton Key sprite ────────────────────────────────
   tile(8, (x, y, px_) => {
     tr(px_, y);
-    const K=[90,86,96], KL=[126,120,136], KD=[60,56,66];
-    const hx=x-7.5, hy=y-4.5, ring=hx*hx/9+hy*hy/9;
-    if (ring<1.0&&ring>0.32) { sp(px_,y,...(hy<0?KL:K)); }
-    if (x>=7&&x<=8&&y>=7&&y<=13) { sp(px_,y,...K); }
-    if (y>=10&&y<=11&&x>=9&&x<=10) { sp(px_,y,...KD); }
-    if (y>=12&&y<=13&&x>=9&&x<=11) { sp(px_,y,...KD); }
+    const K=[210,180,40], KL=[255,240,100], KD=[140,110,20]; // Golden Brass
+    
+    // Handle: Ornate ring (Clover shape)
+    const hx=x-7.5, hy=y-4;
+    const dist = Math.sqrt(hx*hx + hy*hy);
+    if (dist < 4.5 && dist > 1.5) {
+      const angle = Math.atan2(hy, hx);
+      const clover = Math.abs(Math.cos(angle * 2));
+      if (clover > 0.2) {
+        let c = K;
+        if (hy < 0 && hx < 0) c = KL;
+        if (hy > 0 && hx > 0) c = KD;
+        sp(px_, y, ...c);
+      }
+    }
+    
+    // Stem
+    if (x >= 7 && x <= 8 && y >= 7 && y <= 15) {
+      sp(px_, y, (x===7?KL:K)[0], (x===7?KL:K)[1], (x===7?KL:K)[2]);
+    }
+    
+    // Bit (teeth) — more key-like
+    if (y === 13 && x >= 9 && x <= 11) sp(px_, y, ...K);
+    if (y === 15 && x >= 9 && x <= 12) sp(px_, y, ...K);
+    if (x === 12 && y >= 13 && y <= 15) sp(px_, y, ...KD);
   });
 
   // ── GID 10 | frame 9 — Vial/cure item sprite ─────────────────────────────
   tile(9, (x, y, px_) => {
     tr(px_, y);
-    const VF=[26,40,62], VL=[52,84,126], VH=[76,114,166], CK=[68,48,26];
-    if (x>=6&&x<=9&&y>=1&&y<=3) { sp(px_,y,...(y===1||x===6||x===9?[48,34,14]:CK)); }
-    if (x>=6&&x<=9&&y>=4&&y<=6) { sp(px_,y,...VF); }
-    if (x>=4&&x<=11&&y>=7&&y<=13) {
-      if (x===4||x===11) sp(px_,y,...VF);
-      else sp(px_,y,...VL);
-      if (x===5&&y>=8&&y<=11) sp(px_,y,...VH);
+    const GL = [150, 200, 255, 180], G = [50, 100, 200, 220], GH = [200, 240, 255]; // Glass/Liquid
+    const CK = [80, 50, 30]; // Cork
+    
+    // Cork/Cap
+    if (x >= 7 && x <= 8 && y >= 1 && y <= 2) sp(px_, y, ...CK);
+    
+    // Neck
+    if (x >= 7 && x <= 8 && y >= 3 && y <= 5) sp(px_, y, ...GL);
+    
+    // Body (Round flask)
+    const dx = x - 7.5, dy = y - 10;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist < 4.5) {
+      let c = G;
+      if (dist < 4) {
+        c = (dx < -1 && dy < -1) ? GH : G;
+      }
+      if (dist > 4) c = GL;
+      sp(px_, y, ...c);
     }
-    if (x>=5&&x<=10&&y===14) { sp(px_,y,...VF); }
   });
 
-  // ── GID 11 | frame 10 — Fuel canister item sprite ────────────────────────
+  // ── GID 11 | frame 10 — Skeleton NPC / Remains sprite ──────────────────
   tile(10, (x, y, px_) => {
     tr(px_, y);
-    const FC=[56,30,16], FM=[76,46,26], FD=[46,24,12];
-    if (x>=6&&x<=9&&y>=1&&y<=3) { if(y===1||x===6||x===9) sp(px_,y,...MTL); }
-    if (x>=5&&x<=10&&y>=3&&y<=5) { sp(px_,y,...MTL); }
-    if (x>=3&&x<=12&&y>=6&&y<=14) {
-      if (x===3||x===12||y===14) sp(px_,y,...FD);
-      else sp(px_,y,...FC);
-      if (x===4&&y>=7&&y<=12) sp(px_,y,...FM);
+    const B = [220, 220, 200], BL = [255, 255, 240], BD = [160, 160, 140]; // Bone colors
+    
+    // Skull
+    if (x >= 6 && x <= 9 && y >= 1 && y <= 4) {
+      sp(px_, y, ...B);
+      if (y === 3 && (x === 7 || x === 8)) sp(px_, y, 20, 20, 20); // Eyes
     }
+    
+    // Spine
+    if (x === 7 && y >= 5 && y <= 11) sp(px_, y, ...BD);
+    if (x === 8 && y >= 5 && y <= 11) sp(px_, y, ...B);
+    
+    // Ribs
+    if (y === 6 || y === 8 || y === 10) {
+      if (x >= 5 && x <= 10) sp(px_, y, ...B);
+    }
+    
+    // Pelvis
+    if (y === 12 && x >= 6 && x <= 9) sp(px_, y, ...B);
+    
+    // Limbs (curled up/broken)
+    if (y >= 13 && x >= 4 && x <= 7) sp(px_, y, ...BD);
+    if (y >= 13 && x >= 8 && x <= 11) sp(px_, y, ...B);
   });
 
-  // ── GID 12 | frame 11 — Component item sprite (copper fitting) ───────────
+  // ── GID 12 | frame 11 — Component item sprite (Gear/Mechanical) ──────────
   tile(11, (x, y, px_) => {
     tr(px_, y);
-    const CD=[66,44,24], CM=[94,66,38], CL=[116,86,52];
-    if (x>=3&&x<=12&&y>=6&&y<=8) {
-      if (y===6||y===8) sp(px_,y,...CD); else sp(px_,y,...CM);
+    const C1 = [160, 160, 170], C2 = [100, 100, 110], C3 = [220, 220, 230];
+    const dx = x - 7.5, dy = y - 7.5, d = Math.sqrt(dx*dx + dy*dy);
+    
+    // Gear shape
+    if (d < 6) {
+      const angle = Math.atan2(dy, dx);
+      const teeth = Math.abs(Math.cos(angle * 4)); // 8 teeth
+      if (d < 4 || (d < 6 && teeth > 0.5)) {
+        let c = C2;
+        if (d < 5 && dx < 0 && dy < 0) c = C3;
+        else if (d < 5) c = C1;
+        if (d < 2) tr(px_, y); // Hole in center
+        sp(px_, y, ...c);
+      }
     }
-    if (x>=6&&x<=8&&y>=3&&y<=10) {
-      if (x===6||x===8) sp(px_,y,...CD); else sp(px_,y,...CM);
-    }
-    if (x===7&&y===7) { tr(px_,y); }
-    if (x===4&&y===7) sp(px_,y,...CL);
-    if (x===7&&y===4) sp(px_,y,...CL);
   });
 
   // ── GID 13 | frame 12 — Street lamp (off) ────────────────────────────────
@@ -550,6 +600,25 @@ function generateTileset() {
     sp(px_,y,r,g,b);
   });
 
+  // ── GID 38 | frame 37 — Small Bush ───────────────────────────────────────
+  tile(37, (x, y, px_) => {
+    tr(px_, y);
+    const d = Math.sqrt(Math.pow(x-8,2) + Math.pow(y-10,2));
+    if (d < 6) {
+      let c = GRN;
+      if ((x+y)%4===0) c = GRN2;
+      sp(px_,y,...c);
+    }
+  });
+
+  // ── GID 39 | frame 38 — Small dead tree ──────────────────────────────────
+  tile(38, (x, y, px_) => {
+    tr(px_, y);
+    if (x>=7 && x<=9 && y>=8) sp(px_,y,...WOD);
+    if ((x===6||x===10) && y>=10) sp(px_,y,...WOD2);
+    if (y < 10 && Math.abs(x-8) < (10-y)/2) sp(px_,y,...WOD);
+  });
+
   // ── GID 40 | frame 39 — Flashlight Charger ─────────────────────────────────
   tile(39, (x, y, px_) => {
     let [r,g,b] = MTL;
@@ -563,6 +632,61 @@ function generateTileset() {
        }
     }
     sp(px_,y,r,g,b);
+  });
+
+  // ── GID 41-49 | frame 40-48 — Large City Tree (3x3) ──────────────────────
+  // We'll define a helper to draw the 3x3 tree
+  const treeTiles = [40, 41, 42, 43, 44, 45, 46, 47, 48];
+  treeTiles.forEach((tileId, index) => {
+    const tx = index % 3;
+    const ty = Math.floor(index / 3);
+    tile(tileId, (x, y, px_) => {
+      tr(px_, y);
+      const gx = tx * 16 + x;
+      const gy = ty * 16 + y;
+
+      // Trunk logic (centered in bottom-middle)
+      const isTrunk = (gx >= 20 && gx <= 28 && gy >= 30) || (gx >= 22 && gx <= 26 && gy >= 16);
+      
+      // Foliage logic (SDF-ish)
+      const distToTop = Math.sqrt(Math.pow(gx-24, 2) + Math.pow(gy-12, 2));
+      const distToLeft = Math.sqrt(Math.pow(gx-12, 2) + Math.pow(gy-20, 2));
+      const distToRight = Math.sqrt(Math.pow(gx-36, 2) + Math.pow(gy-20, 2));
+      
+      let isFoliage = distToTop < 10 || distToLeft < 9 || distToRight < 9;
+      
+      // Make it gnarled/sparse
+      const noise = (Math.sin(gx * 0.5) * Math.cos(gy * 0.5) * 5);
+      if (isFoliage && (distToTop + noise > 9 && distToLeft + noise > 8 && distToRight + noise > 8)) {
+        if ((gx + gy) % 3 === 0) isFoliage = false; // Sparsity
+      }
+
+      if (isTrunk) {
+        let c = WOD;
+        if (gx % 4 === 0) c = WOD2;
+        sp(px_, y, ...c);
+      } else if (isFoliage) {
+        let c = GRN;
+        if ((gx + gy) % 5 === 0) c = GRN2;
+        if ((gx - gy) % 7 === 0) c = GRN3;
+        // Post-outbreak: some brown leaves
+        if ((gx * 3 + gy) % 13 === 0) c = RUB;
+        sp(px_, y, ...c);
+      }
+    });
+  });
+
+  // ── GID 50 | frame 49 — Fuel canister item sprite ────────────────────────
+  tile(49, (x, y, px_) => {
+    tr(px_, y);
+    const FC=[180,40,30], FM=[220,60,50], FD=[120,20,20]; // Red canister
+    if (x>=6&&x<=9&&y>=1&&y<=3) { if(y===1||x===6||x===9) sp(px_,y,...MTL); }
+    if (x>=5&&x<=10&&y>=3&&y<=5) { sp(px_,y,...MTL); }
+    if (x>=3&&x<=12&&y>=6&&y<=14) {
+      if (x===3||x===12||y===14) sp(px_,y,...FD);
+      else sp(px_,y,...FC);
+      if (x===4&&y>=7&&y<=12) sp(px_,y,...FM);
+    }
   });
 
   return encodePNG(W, H, px);
@@ -637,10 +761,10 @@ const TILESET_META = {
   name: 'tileset',
   tilewidth: 16,
   tileheight: 16,
-  tilecount: 40,
-  columns: 40,
+  tilecount: 64,
+  columns: 64,
   image: 'tileset.png',
-  imagewidth: 640,
+  imagewidth: 1024,
   imageheight: 16,
   margin: 0,
   spacing: 0,
@@ -653,6 +777,7 @@ function generateTilemap(roomWidth, roomHeight, opts) {
     decorations = [],
     interiorWalls = [],
     signPositions = [],
+    trees = [],
   } = opts;
 
   const ground = [];
@@ -675,9 +800,28 @@ function generateTilemap(roomWidth, roomHeight, opts) {
       for (const d of decorations) {
         if (x >= d.x1 && x <= d.x2 && y >= d.y1 && y <= d.y2) gTile = d.tile;
       }
+      
+      // Trees (3x3)
+      for (const t of trees) {
+        if (x >= t.x && x <= t.x + 2 && y >= t.y && y <= t.y + 2) {
+          const relX = x - t.x;
+          const relY = y - t.y;
+          const tIdx = relY * 3 + relX;
+          const tileId = 41 + tIdx;
+          
+          if (tIdx === 7) {
+            // Trunk tile
+            gTile = tileId;
+          } else {
+            // Foliage tile
+            above[above.length - 1] = tileId;
+          }
+        }
+      }
+      
       ground.push(gTile);
 
-      // Collision: border walls + interior walls + sign blocking
+      // Collision: border walls + interior walls + sign blocking + tree trunk
       const isBorder = x === 0 || x === roomWidth - 1 || y === 0 || y === roomHeight - 1;
       let isInterior = false;
       for (const w of interiorWalls) {
@@ -693,6 +837,13 @@ function generateTilemap(roomWidth, roomHeight, opts) {
           break;
         }
       }
+      let treeCollisionGID = 0;
+      for (const t of trees) {
+        if (x === t.x + 1 && y === t.y + 2) {
+          treeCollisionGID = 48; // Trunk GID
+          break;
+        }
+      }
       let isDoorGap = false;
       for (const gap of doorGaps) {
         if (x >= gap.x1 && x <= gap.x2 && y >= gap.y1 && y <= gap.y2) {
@@ -703,6 +854,8 @@ function generateTilemap(roomWidth, roomHeight, opts) {
 
       if (isSign) {
         collision.push(5);
+      } else if (treeCollisionGID) {
+        collision.push(treeCollisionGID);
       } else if (isDoorGap) {
         collision.push(0);
       } else if (isInterior || isBorder) {
@@ -744,9 +897,9 @@ const spriteDir = path.join(root, 'public', 'assets', 'sprites');
 fs.mkdirSync(tilemapDir, { recursive: true });
 fs.mkdirSync(spriteDir, { recursive: true });
 
-// Tileset PNG (40 tiles)
+// Tileset PNG (64 tiles)
 fs.writeFileSync(path.join(tilemapDir, 'tileset.png'), generateTileset());
-console.log('  tileset.png  (640x16, 40 tiles)');
+console.log(`  tileset.png  (${TILESET_META.imagewidth}x${TILESET_META.imageheight}, ${TILESET_META.tilecount} tiles)`);
 
 // Player spritesheet PNG
 fs.writeFileSync(path.join(spriteDir, 'player.png'), generatePlayer());
@@ -802,6 +955,14 @@ const cityStreet = generateTilemap(96, 72, {
     // Rubble patches near east and west walls
     { x1:  5, x2:  8, y1: 20, y2: 25, tile: 7 },
     { x1: 86, x2: 90, y1: 20, y2: 25, tile: 7 },
+  ],
+  trees: [
+    { x: 40, y: 42 },
+    { x: 50, y: 42 },
+    { x: 15, y: 10 },
+    { x: 75, y: 10 },
+    { x: 30, y: 25 },
+    { x: 60, y: 25 },
   ],
   interiorWalls: [
     // ── City wall inner faces (sealed, no gaps) ──────────────────────────
@@ -934,6 +1095,10 @@ const protagHouse = generateTilemap(20, 15, {
   decorations: [
     // Bed area (east side, lower half of room) — worn carpet
     { x1: 14, x2: 17, y1: 8, y2: 12, tile: 32 },
+    // Desk surface
+    { x1: 1, x2: 3, y1: 1, y2: 2, tile: 19 },
+    // Bed
+    { x1: 15, x2: 16, y1: 9, y2: 11, tile: 22 },
   ],
   interiorWalls: [
     // Desk (west wall, top corner)
@@ -954,6 +1119,8 @@ const clinic = generateTilemap(20, 15, {
   doorGaps: [{ x1: 9, x2: 10, y1: 0, y2: 0 }],
   decorations: [
     { x1: 2, x2: 17, y1: 2, y2: 4, tile: 32 }, // Worn carpet in waiting area
+    { x1: 1, x2: 3, y1: 10, y2: 12, tile: 22 }, // Medical beds
+    { x1: 6, x2: 8, y1: 10, y2: 12, tile: 22 },
   ],
   interiorWalls: [
     { x1: 1, x2: 5, y1: 1, y2: 1 }, // Shelves
@@ -971,6 +1138,7 @@ const records = generateTilemap(20, 15, {
   doorGaps: [{ x1: 9, x2: 10, y1: 0, y2: 0 }],
   decorations: [
     { x1: 2, x2: 17, y1: 5, y2: 10, tile: 7 }, // Scattered papers
+    { x1: 8, x2: 11, y1: 7, y2: 8, tile: 19 }, // Central desk
   ],
   interiorWalls: [
     { x1: 1, x2: 1, y1: 1, y2: 13 }, // Filing cabinets west

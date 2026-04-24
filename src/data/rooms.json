@@ -294,6 +294,34 @@
           "text": "A civic memorial wrapped in warning tape.\nSomeone left flowers that have gone brown."
         },
         {
+          "id": "memorial-tree-1",
+          "x": 656,
+          "y": 704,
+          "type": "sign",
+          "text": "A large city tree, its leaves are sparse and discolored.\nSomething about its twisted branches feels unnatural."
+        },
+        {
+          "id": "memorial-tree-2",
+          "x": 816,
+          "y": 704,
+          "type": "sign",
+          "text": "A gnarled tree that has somehow survived the concrete.\nIts roots are cracking the pavement beneath it."
+        },
+        {
+          "id": "city-tree-north-west",
+          "x": 256,
+          "y": 192,
+          "type": "sign",
+          "text": "An old tree, looking more gray than green in the dim light."
+        },
+        {
+          "id": "city-tree-north-east",
+          "x": 1216,
+          "y": 192,
+          "type": "sign",
+          "text": "A tall, sparse tree reaching towards the sealed city walls."
+        },
+        {
           "id": "north-gate-marker",
           "x": 768,
           "y": 256,
@@ -395,7 +423,7 @@
           "y": 184,
           "type": "recharge",
           "text": "Your bedside charging dock. Flashlight batteries topped up.",
-          "tileFrame": 33
+          "tileFrame": 39
         }
       ]
     },
@@ -522,6 +550,14 @@
       ],
       "interactables": [
         {
+          "id": "clinic-skeleton",
+          "x": 80,
+          "y": 64,
+          "type": "sign",
+          "text": "A medical skeleton model. It's missing a few ribs and looks surprisingly realistic.",
+          "tileFrame": 10
+        },
+        {
           "id": "skeleton-key-clinic",
           "x": 160,
           "y": 120,
@@ -529,7 +565,7 @@
           "text": "You found a heavy, old-fashioned key.\nIt's labeled 'Skeleton Key'.",
           "item": {
             "name": "Skeleton Key",
-            "tileFrame": 15,
+            "tileFrame": 8,
             "category": "key",
             "keyId": "skeleton-key"
           }
@@ -742,6 +778,7 @@
       "tilemapPath": "assets/tilemaps/substation-tunnel.json",
       "width": 40,
       "height": 10,
+      "dark": true,
       "playerSpawn": {
         "x": 40,
         "y": 80
@@ -822,6 +859,16 @@
           "direction": "up",
           "spawnX": 160,
           "spawnY": 48
+        }
+      ],
+      "interactables": [
+        {
+          "id": "skeleton-remains-apt4a",
+          "x": 80,
+          "y": 120,
+          "type": "sign",
+          "text": "The skeletal remains of someone who didn't make it out. They're clutching a faded photograph.",
+          "tileFrame": 10
         }
       ]
     }

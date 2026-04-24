@@ -25,6 +25,7 @@ export class GameScene extends Phaser.Scene {
   private dialogOpen = false;
   private lockedDoorCooldown = 0;
   private itemSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
+  private darknessLayer?: Phaser.GameObjects.RenderTexture;
 
   // Afflicted
   private afflictedGroup!: Phaser.Physics.Arcade.Group;
@@ -73,6 +74,7 @@ export class GameScene extends Phaser.Scene {
 
     this.setupCollisions();
     this.setupCamera();
+    this.setupLighting();
     this.createWorldItemSprites();
     this.spawnAfflicted();
 
@@ -103,6 +105,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     const input = this.inputManager.getState();
+    this.updateLighting();
 
     // Flashlight toggle — available in all non-transition states
     if (input.flashlight) {
@@ -546,6 +549,30 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private setupLighting(): void {
+    if (this.darknessLayer) {
+      this.darknessLayer.destroy();
+      this.darknessLayer = undefined;
+    }
+
+    const roomDef = this.roomManager.getCurrentRoomDef();
+    if (roomDef.dark) {
+      const roomW = roomDef.width * GAME_CONFIG.TILE_SIZE;
+      const roomH = roomDef.height * GAME_CONFIG.TILE_SIZE;
+      
+      this.darknessLayer = this.add.renderTexture(0, 0, roomW, roomH);
+      this.darknessLayer.setDepth(DEPTH.LIGHTING);
+    }
+  }
+
+  private updateLighting(): void {
+    if (!this.darknessLayer) return;
+
+    this.darknessLayer.clear();
+    this.darknessLayer.fill(0x000000, 0.95);
+    this.flashlight.renderMask(this.darknessLayer);
+  }
+
   // ── Door transitions ────────────────────────────────────────────────────
 
   private handleDoorTransition(doorDef: DoorDefinition): void {
@@ -603,6 +630,7 @@ export class GameScene extends Phaser.Scene {
       this.player.setPosition(spawn.x, spawn.y);
       this.setupCollisions();
       this.setupCamera();
+      this.setupLighting();
       this.createWorldItemSprites();
       this.spawnAfflicted();
 

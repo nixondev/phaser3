@@ -16,6 +16,7 @@ export const DEPTH = {
   ENTITIES: 10,
   PLAYER: 20,
   ABOVE: 30,
+  LIGHTING: 35,
   UI: 40,
   TRANSITION: 50,
 } as const;
