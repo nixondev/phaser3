@@ -2,7 +2,7 @@
   "rooms": {
     "city-street": {
       "id": "city-street",
-      "name": "Walled City",
+      "name": "WARDEN",
       "mapKey": "city-street",
       "tilemapPath": "assets/tilemaps/city-street.json",
       "width": 96,

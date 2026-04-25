@@ -1,4 +1,4 @@
-# The Hollow (working title)
+# WARDEN
 
 A 2D top-down exploration/puzzle game built with TypeScript and Phaser 3.
 

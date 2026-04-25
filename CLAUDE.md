@@ -1,4 +1,4 @@
-# The Hollow (working title) — CLAUDE.md
+# WARDEN — CLAUDE.md
 
 ## Project Overview
 

@@ -1,5 +1,5 @@
 /**
- * Procedural asset generator for Legend RPG placeholder art.
+ * Procedural asset generator for WARDEN placeholder art.
  * Pure Node.js — zero external dependencies (uses built-in zlib).
  * Run: node scripts/generate-assets.cjs
  */

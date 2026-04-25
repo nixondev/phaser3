@@ -17,7 +17,7 @@ export class MenuScene extends Phaser.Scene {
     const h = GAME_CONFIG.HEIGHT;
 
     this.add
-      .text(w / 2, h / 3, 'LEGEND RPG', {
+      .text(w / 2, h / 3, 'WARDEN', {
         fontSize: '28px',
         color: '#ffffff',
         fontFamily: 'monospace',
