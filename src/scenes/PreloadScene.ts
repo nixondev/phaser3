@@ -35,14 +35,16 @@ export class PreloadScene extends Phaser.Scene {
       debug('All assets loaded');
     });
 
+    const upscale = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
+
     this.load.image('tileset', 'assets/tilemaps/tileset.png');
     this.load.spritesheet('tileset-sprites', 'assets/tilemaps/tileset.png', {
-      frameWidth: 16,
-      frameHeight: 16,
+      frameWidth: upscale,
+      frameHeight: upscale,
     });
     this.load.spritesheet('player', 'assets/sprites/player.png', {
-      frameWidth: 16,
-      frameHeight: 16,
+      frameWidth: upscale,
+      frameHeight: upscale,
     });
 
     const roomsData = RoomManager.getRoomsData();
@@ -53,6 +55,7 @@ export class PreloadScene extends Phaser.Scene {
 
     // Audio Assets
     this.load.audio('bgm-main', 'assets/audio/gamemusic-001.mp3');
+    this.load.audio('bgm-title', 'assets/audio/gametheme-003.mp3');
   }
 
   create(): void {

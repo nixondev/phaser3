@@ -49,6 +49,11 @@ export class RoomManager {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');
     }
 
+    const visualScale = 1 / GAME_CONFIG.ASSET_SCALE;
+    ground.setScale(visualScale);
+    collision.setScale(visualScale);
+    above.setScale(visualScale);
+
     this.currentLayers = { ground, collision, above };
 
     ground.setDepth(DEPTH.GROUND);

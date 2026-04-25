@@ -60,6 +60,10 @@ function encodePNG(width, height, pixels) {
 
 // ── Drawing helpers ─────────────────────────────────────────────────────────
 
+const S = 4; // Scale Factor (e.g. 4x)
+const BASE = 16;
+const TILE = BASE * S;
+
 function setPixel(px, w, x, y, r, g, b, a = 255) {
   if (x < 0 || y < 0 || x >= w) return;
   const i = (y * w + x) * 4;
@@ -70,26 +74,27 @@ function setPixel(px, w, x, y, r, g, b, a = 255) {
 }
 
 function fillRect(px, w, x1, y1, x2, y2, r, g, b, a = 255) {
-  for (let y = y1; y <= y2; y++)
-    for (let x = x1; x <= x2; x++) setPixel(px, w, x, y, r, g, b, a);
+  // Scale fillRect coordinates
+  for (let y = y1 * S; y <= (y2 + 1) * S - 1; y++)
+    for (let x = x1 * S; x <= (x2 + 1) * S - 1; x++) 
+      setPixel(px, w, x, y, r, g, b, a);
 }
 
-  // ── Tileset (96×16, six 16×16 tiles) ────────────────────────────────────────
+  // ── Tileset (Upscaled) ─────────────────────────────────────────────────────
 
 function generateTileset() {
-  // 49 tiles × 16px = 784px wide
-  const W = 1024, H = 16;
+  const W = 1024 * S, H = 16 * S;
   const px = new Uint8Array(W * H * 4);
 
-  // Draw one 16×16 tile at column col (0-indexed)
+  // Draw one TILExTILE tile at column col (0-indexed)
   function tile(col, fn) {
-    const ox = col * 16;
-    for (let y = 0; y < 16; y++)
-      for (let x = 0; x < 16; x++)
-        fn(x, y, ox + x);
+    const ox = col * TILE;
+    for (let py = 0; py < TILE; py++)
+      for (let px = 0; px < TILE; px++)
+        fn(px / S, py / S, ox + px, py);
   }
-  function sp(x, y, r, g, b, a = 255) { setPixel(px, W, x, y, r, g, b, a); }
-  function tr(x, y) { setPixel(px, W, x, y, 0, 0, 0, 0); } // transparent
+  function sp(ax, ay, r, g, b, a = 255) { setPixel(px, W, ax, ay, r, g, b, a); }
+  function tr(ax, ay) { setPixel(px, W, ax, ay, 0, 0, 0, 0); } // transparent
 
   // ── Palette ────────────────────────────────────────────────────────────────
   const PAV  = [30, 30, 40];   const PAV2 = [42, 42, 54];   const PAV3 = [56, 56, 70];
@@ -104,95 +109,96 @@ function generateTileset() {
   const PAP  = [182, 164, 126]; const PAP2 = [140, 124, 90]; const PAP3 = [112, 98, 70];
 
   // ── GID 1 | frame 0 — Dark pavement (city street ground) ─────────────────
-  tile(0, (x, y, px_) => {
+  tile(0, (x, y, px, py) => {
     let [r,g,b] = PAV;
-    if (x === 0 || x === 8 || y === 0 || y === 8) { [r,g,b] = PAV2; }
-    if ((x*7 + y*13 + x*y) % 19 === 0) { r += 8; g += 8; b += 10; }
-    sp(px_, y, r, g, b);
+    const fx = Math.floor(x), fy = Math.floor(y);
+    if (fx === 0 || fx === 8 || fy === 0 || fy === 8) { [r,g,b] = PAV2; }
+    if ((fx*7 + fy*13 + fx*fy) % 19 === 0) { r += 8; g += 8; b += 10; }
+    sp(px, py, r, g, b);
   });
 
   // ── GID 2 | frame 1 — Exterior wall (dark brick, used for ALL collision walls)
-  tile(1, (x, y, px_) => {
+  tile(1, (x, y, px, py) => {
     const row = Math.floor(y / 4);
     const lx  = (x + (row % 2) * 8) % 8;
     const ly  = y % 4;
-    if (lx === 0 || ly === 0) { sp(px_, y, ...WAL); }
+    if (lx < 1 || ly < 1) { sp(px, py, ...WAL); }
     else {
       let [r,g,b] = WAL2;
-      if (lx === 1 && ly === 1) { [r,g,b] = WAL3; }
-      sp(px_, y, r, g, b);
+      if (lx < 2 && ly < 2) { [r,g,b] = WAL3; }
+      sp(px, py, r, g, b);
     }
   });
 
   // ── GID 3 | frame 2 — Interior floor (warm wood tile, apartment ground) ──
-  tile(2, (x, y, px_) => {
+  tile(2, (x, y, px, py) => {
     const lx = x % 8, ly = y % 8;
-    if (lx === 0 || ly === 0) { sp(px_, y, ...FLR); }
+    if (lx < 1 || ly < 1) { sp(px, py, ...FLR); }
     else {
       let [r,g,b] = FLR2;
-      if ((x + y * 2) % 7 === 0) { r -= 6; g -= 5; b -= 4; }
-      if (lx === 2 && ly === 2)  { [r,g,b] = FLR3; }
-      sp(px_, y, r, g, b);
+      if ((Math.floor(x) + Math.floor(y) * 2) % 7 === 0) { r -= 6; g -= 5; b -= 4; }
+      if (lx < 2 && ly < 2)  { [r,g,b] = FLR3; }
+      sp(px, py, r, g, b);
     }
   });
 
   // ── GID 4 | frame 3 — Concrete floor (industrial/energy facility) ─────────
-  tile(3, (x, y, px_) => {
+  tile(3, (x, y, px, py) => {
     let [r,g,b] = CON;
-    if (x === 0 || y === 0) { [r,g,b] = CON2; }
-    if ((x * 3 + y * 5) % 11 === 0) { r += 5; g += 5; b += 5; }
-    sp(px_, y, r, g, b);
+    if (x < 1 || y < 1) { [r,g,b] = CON2; }
+    if ((Math.floor(x) * 3 + Math.floor(y) * 5) % 11 === 0) { r += 5; g += 5; b += 5; }
+    sp(px, py, r, g, b);
   });
 
   // ── GID 5 | frame 4 — Barricade (prop collision tile) ────────────────────
-  tile(4, (x, y, px_) => {
+  tile(4, (x, y, px, py) => {
     const board = Math.floor(y / 3);
-    if (y % 3 === 0) { sp(px_, y, ...WOD); }
+    if (y % 3 < 1) { sp(px, py, ...WOD); }
     else {
       let [r,g,b] = WOD2;
-      if (x === 0 || x === 15) { [r,g,b] = WOD; }
-      if ((x + board * 3) % 6 === 0) { r -= 8; g -= 6; b -= 4; }
-      sp(px_, y, r, g, b);
+      if (x < 1 || x >= 15) { [r,g,b] = WOD; }
+      if ((Math.floor(x) + board * 3) % 6 === 0) { r -= 8; g -= 6; b -= 4; }
+      sp(px, py, r, g, b);
     }
   });
 
   // ── GID 6 | frame 5 — Overgrown ground (weeds reclaiming pavement) ───────
-  tile(5, (x, y, px_) => {
+  tile(5, (x, y, px, py) => {
     let [r,g,b] = PAV;
     const h = 15 - y;
     const d = (x * 7 + y * 11) % 13;
     if (h > 5 && d < 3)       { [r,g,b] = GRN; }
     else if (h > 2 && d < 2)  { [r,g,b] = GRN2; }
     else if (y < 5 && (x * 5 + y * 7) % 9 === 0) { [r,g,b] = GRN3; }
-    sp(px_, y, r, g, b);
+    sp(px, py, r, g, b);
   });
 
   // ── GID 7 | frame 6 — Rubble/debris ground ───────────────────────────────
-  tile(6, (x, y, px_) => {
+  tile(6, (x, y, px, py) => {
     let [r,g,b] = PAV;
     const h = (x * 13 + y * 7 + x * y) % 17;
     if (h < 3) { [r,g,b] = RUB2; }
     else if (h < 6) { [r,g,b] = RUB; }
     if (x>=4&&x<=7&&y>=6&&y<=9)   { [r,g,b] = RUB2; }
     if (x>=10&&x<=13&&y>=3&&y<=5) { [r,g,b] = PAV2; }
-    sp(px_, y, r, g, b);
+    sp(px, py, r, g, b);
   });
 
   // ── GID 8 | frame 7 — Document/paper item sprite ─────────────────────────
-  tile(7, (x, y, px_) => {
-    tr(px_, y);
+  tile(7, (x, y, px, py) => {
+    tr(px, py);
     if (x>=3&&x<=13&&y>=2&&y<=14) {
-      if (x===3||x===13||y===2||y===14) { sp(px_,y,...PAP2); }
+      if (x===3||x===13||y===2||y===14) { sp(px, py,...PAP2); }
       else {
-        sp(px_,y,...PAP);
-        if ((y===5||y===7||y===9||y===11) && x>=5&&x<=11) { sp(px_,y,...PAP3); }
+        sp(px, py,...PAP);
+        if ((y===5||y===7||y===9||y===11) && x>=5&&x<=11) { sp(px, py,...PAP3); }
       }
     }
   });
 
   // ── GID 9 | frame 8 — Skeleton Key sprite ────────────────────────────────
-  tile(8, (x, y, px_) => {
-    tr(px_, y);
+  tile(8, (x, y, px, py) => {
+    tr(px, py);
     const K=[210,180,40], KL=[255,240,100], KD=[140,110,20]; // Golden Brass
     
     // Handle: Ornate ring (Clover shape)
@@ -205,32 +211,33 @@ function generateTileset() {
         let c = K;
         if (hy < 0 && hx < 0) c = KL;
         if (hy > 0 && hx > 0) c = KD;
-        sp(px_, y, ...c);
+        sp(px, py, ...c);
       }
     }
     
     // Stem
-    if (x >= 7 && x <= 8 && y >= 7 && y <= 15) {
-      sp(px_, y, (x===7?KL:K)[0], (x===7?KL:K)[1], (x===7?KL:K)[2]);
+    if (x >= 7 && x < 9 && y >= 7 && y <= 15) {
+      const isLeft = x < 8;
+      sp(px, py, (isLeft?KL:K)[0], (isLeft?KL:K)[1], (isLeft?KL:K)[2]);
     }
     
     // Bit (teeth) — more key-like
-    if (y === 13 && x >= 9 && x <= 11) sp(px_, y, ...K);
-    if (y === 15 && x >= 9 && x <= 12) sp(px_, y, ...K);
-    if (x === 12 && y >= 13 && y <= 15) sp(px_, y, ...KD);
+    if (Math.floor(y) === 13 && x >= 9 && x <= 11) sp(px, py, ...K);
+    if (Math.floor(y) === 15 && x >= 9 && x <= 12) sp(px, py, ...K);
+    if (Math.floor(x) === 12 && y >= 13 && y <= 15) sp(px, py, ...KD);
   });
 
   // ── GID 10 | frame 9 — Vial/cure item sprite ─────────────────────────────
-  tile(9, (x, y, px_) => {
-    tr(px_, y);
+  tile(9, (x, y, px, py) => {
+    tr(px, py);
     const GL = [150, 200, 255, 180], G = [50, 100, 200, 220], GH = [200, 240, 255]; // Glass/Liquid
     const CK = [80, 50, 30]; // Cork
     
     // Cork/Cap
-    if (x >= 7 && x <= 8 && y >= 1 && y <= 2) sp(px_, y, ...CK);
+    if (x >= 7 && x <= 8 && y >= 1 && y <= 2) sp(px, py, ...CK);
     
     // Neck
-    if (x >= 7 && x <= 8 && y >= 3 && y <= 5) sp(px_, y, ...GL);
+    if (x >= 7 && x <= 8 && y >= 3 && y <= 5) sp(px, py, ...GL);
     
     // Body (Round flask)
     const dx = x - 7.5, dy = y - 10;
@@ -241,41 +248,41 @@ function generateTileset() {
         c = (dx < -1 && dy < -1) ? GH : G;
       }
       if (dist > 4) c = GL;
-      sp(px_, y, ...c);
+      sp(px, py, ...c);
     }
   });
 
   // ── GID 11 | frame 10 — Skeleton NPC / Remains sprite ──────────────────
-  tile(10, (x, y, px_) => {
-    tr(px_, y);
+  tile(10, (x, y, px, py) => {
+    tr(px, py);
     const B = [220, 220, 200], BL = [255, 255, 240], BD = [160, 160, 140]; // Bone colors
     
     // Skull
     if (x >= 6 && x <= 9 && y >= 1 && y <= 4) {
-      sp(px_, y, ...B);
-      if (y === 3 && (x === 7 || x === 8)) sp(px_, y, 20, 20, 20); // Eyes
+      sp(px, py, ...B);
+      if (y >= 2.5 && y <= 3.5 && (x >= 6.5 && x <= 7.5 || x >= 8 && x <= 9)) sp(px, py, 20, 20, 20); // Eyes
     }
     
     // Spine
-    if (x === 7 && y >= 5 && y <= 11) sp(px_, y, ...BD);
-    if (x === 8 && y >= 5 && y <= 11) sp(px_, y, ...B);
+    if (x >= 7 && x < 8 && y >= 5 && y <= 11) sp(px, py, ...BD);
+    if (x >= 8 && x < 9 && y >= 5 && y <= 11) sp(px, py, ...B);
     
     // Ribs
-    if (y === 6 || y === 8 || y === 10) {
-      if (x >= 5 && x <= 10) sp(px_, y, ...B);
+    if (Math.floor(y) === 6 || Math.floor(y) === 8 || Math.floor(y) === 10) {
+      if (x >= 5 && x <= 10) sp(px, py, ...B);
     }
     
     // Pelvis
-    if (y === 12 && x >= 6 && x <= 9) sp(px_, y, ...B);
+    if (Math.floor(y) === 12 && x >= 6 && x <= 9) sp(px, py, ...B);
     
     // Limbs (curled up/broken)
-    if (y >= 13 && x >= 4 && x <= 7) sp(px_, y, ...BD);
-    if (y >= 13 && x >= 8 && x <= 11) sp(px_, y, ...B);
+    if (y >= 13 && x >= 4 && x <= 7) sp(px, py, ...BD);
+    if (y >= 13 && x >= 8 && x <= 11) sp(px, py, ...B);
   });
 
   // ── GID 12 | frame 11 — Component item sprite (Gear/Mechanical) ──────────
-  tile(11, (x, y, px_) => {
-    tr(px_, y);
+  tile(11, (x, y, px, py) => {
+    tr(px, py);
     const C1 = [160, 160, 170], C2 = [100, 100, 110], C3 = [220, 220, 230];
     const dx = x - 7.5, dy = y - 7.5, d = Math.sqrt(dx*dx + dy*dy);
     
@@ -287,67 +294,67 @@ function generateTileset() {
         let c = C2;
         if (d < 5 && dx < 0 && dy < 0) c = C3;
         else if (d < 5) c = C1;
-        if (d < 2) tr(px_, y); // Hole in center
-        sp(px_, y, ...c);
+        if (d < 2) tr(px, py); // Hole in center
+        sp(px, py, ...c);
       }
     }
   });
 
   // ── GID 13 | frame 12 — Street lamp (off) ────────────────────────────────
-  tile(12, (x, y, px_) => {
-    tr(px_, y);
-    if (x>=7&&x<=8&&y>=4&&y<=15) sp(px_,y,...MTL);
-    if (x===7&&y>=4&&y<=15) sp(px_,y,...MTL2);
-    if (x>=5&&x<=10&&y>=1&&y<=4) {
-      if (y===4||x===5||x===10) sp(px_,y,...MTL);
-      else sp(px_,y,6,6,8);
+  tile(12, (x, y, px, py) => {
+    tr(px, py);
+    if (x >= 7 && x < 9 && y >= 4 && y <= 15) sp(px, py,...MTL);
+    if (x >= 7 && x < 8 && y >= 4 && y <= 15) sp(px, py,...MTL2);
+    if (x >= 5 && x <= 10 && y >= 1 && y <= 4) {
+      if (y >= 3.5 || x < 6 || x > 9.5) sp(px, py,...MTL);
+      else sp(px, py,6,6,8);
     }
-    if (y===4&&x>=8&&x<=11) sp(px_,y,...MTL);
+    if (y >= 4 && y < 5 && x >= 8 && x <= 11) sp(px, py,...MTL);
   });
 
   // ── GID 14 | frame 13 — Dead screen / monitor ────────────────────────────
-  tile(13, (x, y, px_) => {
-    tr(px_, y);
-    if (x>=1&&x<=14&&y>=2&&y<=13) {
-      if (x===1||x===14||y===2||y===13) sp(px_,y,...MTL);
+  tile(13, (x, y, px, py) => {
+    tr(px, py);
+    if (x >= 1 && x <= 14 && y >= 2 && y <= 13) {
+      if (x < 2 || x > 13 || y < 3 || y > 12) sp(px, py,...MTL);
       else {
-        sp(px_,y,5,5,8);
-        if (x===3&&y>=4&&y<=7) sp(px_,y,16,16,20); // faint reflection
+        sp(px, py,5,5,8);
+        if (x >= 3 && x < 4 && y >= 4 && y <= 7) sp(px, py,16,16,20); // faint reflection
       }
     }
-    if (x>=6&&x<=9&&y===14) sp(px_,y,...MTL);
-    if (x>=4&&x<=11&&y===15) sp(px_,y,...MTL);
+    if (x >= 6 && x <= 9 && y >= 13 && y <= 15) sp(px, py,...MTL);
+    if (x >= 4 && x <= 11 && y >= 14 && y <= 15) sp(px, py,...MTL);
   });
 
   // ── GID 15 | frame 14 — Security camera ──────────────────────────────────
-  tile(14, (x, y, px_) => {
-    tr(px_, y);
-    if (x>=6&&x<=9&&y>=1&&y<=4) sp(px_,y,...MTL2);
-    if (x>=2&&x<=13&&y>=4&&y<=10) {
-      if (x===2||x===13||y===4||y===10) sp(px_,y,...MTL);
-      else sp(px_,y,...MTL2);
+  tile(14, (x, y, px, py) => {
+    tr(px, py);
+    if (x >= 6 && x <= 9 && y >= 1 && y <= 4) sp(px, py,...MTL2);
+    if (x >= 2 && x <= 13 && y >= 4 && y <= 10) {
+      if (x < 3 || x > 12 || y < 5 || y > 9) sp(px, py,...MTL);
+      else sp(px, py,...MTL2);
     }
     const d = Math.abs(x-7.5)+Math.abs(y-7);
-    if (d<2.5) sp(px_,y,6,6,10);
-    else if (d<4.5) sp(px_,y,...MTL);
+    if (d<2.5) sp(px, py,6,6,10);
+    else if (d<4.5) sp(px, py,...MTL);
   });
 
   // ── GID 16 | frame 15 — Bench ────────────────────────────────────────────
-  tile(15, (x, y, px_) => {
-    tr(px_, y);
-    if (x>=1&&x<=14&&y>=5&&y<=8) {
-      if (x===1||x===14) sp(px_,y,...WOD); else sp(px_,y,...WOD2);
+  tile(15, (x, y, px, py) => {
+    tr(px, py);
+    if (x >= 1 && x <= 14 && y >= 5 && y <= 8) {
+      if (x < 2 || x > 13) sp(px, py,...WOD); else sp(px, py,...WOD2);
     }
-    if (x>=1&&x<=14&&y>=2&&y<=4) {
-      if (y===2) sp(px_,y,...WOD); else sp(px_,y,...WOD2);
+    if (x >= 1 && x <= 14 && y >= 2 && y <= 4.5) {
+      if (y < 3) sp(px, py,...WOD); else sp(px, py,...WOD2);
     }
     for (const lx of [2,3,12,13]) {
-      if (x===lx&&y>=9&&y<=13) sp(px_,y,...MTL);
+      if (x >= lx && x < lx + 1 && y >= 9 && y <= 13) sp(px, py,...MTL);
     }
   });
 
   // ── GID 17 | frame 16 — Trash pile ───────────────────────────────────────
-  tile(16, (x, y, px_) => {
+  tile(16, (x, y, px, py) => {
     let [r,g,b] = PAV;
     const d = Math.abs(x-8)*0.5 + Math.abs(y-10)*0.8;
     if (d<5) {
@@ -356,282 +363,282 @@ function generateTileset() {
       else if (h<3)  [r,g,b]=WOD;
       else           [r,g,b]=RUB2;
     } else if (d<7) { [r,g,b]=RUB; }
-    sp(px_, y, r, g, b);
+    sp(px, py, r, g, b);
   });
 
   // ── GID 18 | frame 17 — Crate / storage box ──────────────────────────────
-  tile(17, (x, y, px_) => {
-    tr(px_, y);
+  tile(17, (x, y, px, py) => {
+    tr(px, py);
     if (x>=1&&x<=14&&y>=2&&y<=13) {
-      if (x===1||x===14||y===2||y===13) sp(px_,y,...WOD);
+      if (x===1||x===14||y===2||y===13) sp(px, py,...WOD);
       else {
-        sp(px_,y,...WOD2);
-        if (x===7||x===8||y===7||y===8) sp(px_,y,...WOD);
-        if ((x<=3||x>=12)&&(y<=4||y>=11)) sp(px_,y,...MTL);
+        sp(px, py,...WOD2);
+        if (x===7||x===8||y===7||y===8) sp(px, py,...WOD);
+        if ((x<=3||x>=12)&&(y<=4||y>=11)) sp(px, py,...MTL);
       }
     }
   });
 
   // ── GID 19 | frame 18 — Interior wall (warmer brick, apartment walls) ─────
-  tile(18, (x, y, px_) => {
+  tile(18, (x, y, px, py) => {
     const IW=[40,34,28], IW2=[54,46,38], IW3=[68,58,48];
     const row=Math.floor(y/4), lx=(x+(row%2)*8)%8, ly=y%4;
-    if (lx===0||ly===0) sp(px_,y,...IW);
+    if (lx===0||ly===0) sp(px, py,...IW);
     else {
       let [r,g,b]=IW2;
       if (lx===1&&ly===1) [r,g,b]=IW3;
-      sp(px_,y,r,g,b);
+      sp(px, py,r,g,b);
     }
   });
 
   // ── GID 20 | frame 19 — Counter / desk surface (top-down) ────────────────
-  tile(19, (x, y, px_) => {
-    tr(px_, y);
+  tile(19, (x, y, px, py) => {
+    tr(px, py);
     if (x>=1&&x<=14&&y>=3&&y<=12) {
-      if (x===1||x===14||y===3||y===12) sp(px_,y,...MTL);
+      if (x===1||x===14||y===3||y===12) sp(px, py,...MTL);
       else {
-        sp(px_,y,...MTL2);
-        if (x===2&&y>=4&&y<=11) sp(px_,y,...MTL3);
+        sp(px, py,...MTL2);
+        if (x===2&&y>=4&&y<=11) sp(px, py,...MTL3);
       }
     }
   });
 
   // ── GID 21 | frame 20 — Shelving unit ────────────────────────────────────
-  tile(20, (x, y, px_) => {
-    tr(px_, y);
-    if ((x===1||x===14)&&y>=1&&y<=14) sp(px_,y,...WOD);
+  tile(20, (x, y, px, py) => {
+    tr(px, py);
+    if ((x===1||x===14)&&y>=1&&y<=14) sp(px, py,...WOD);
     for (const sy of [3,7,11]) {
-      if (y===sy&&x>=1&&x<=14) sp(px_,y,...WOD2);
+      if (y===sy&&x>=1&&x<=14) sp(px, py,...WOD2);
     }
-    if (y>=1&&y<=2&&x>=3&&x<=5)   sp(px_,y,...MTL);
-    if (y>=4&&y<=6&&x>=8&&x<=10)  sp(px_,y,...RUB);
-    if (y>=8&&y<=10&&x>=3&&x<=4)  sp(px_,y,...WOD);
+    if (y>=1&&y<=2&&x>=3&&x<=5)   sp(px, py,...MTL);
+    if (y>=4&&y<=6&&x>=8&&x<=10)  sp(px, py,...RUB);
+    if (y>=8&&y<=10&&x>=3&&x<=4)  sp(px, py,...WOD);
   });
 
   // ── GID 22 | frame 21 — Table (top-down) ──────────────────────────────────
-  tile(21, (x, y, px_) => {
-    tr(px_, y);
+  tile(21, (x, y, px, py) => {
+    tr(px, py);
     if (x>=2&&x<=13&&y>=3&&y<=12) {
-      if (x===2||x===13||y===3||y===12) sp(px_,y,...WOD);
+      if (x===2||x===13||y===3||y===12) sp(px, py,...WOD);
       else {
-        sp(px_,y,...WOD2);
-        if ((x+y)%6===0) sp(px_,y,...WOD);
+        sp(px, py,...WOD2);
+        if ((x+y)%6===0) sp(px, py,...WOD);
       }
     }
   });
 
   // ── GID 23 | frame 22 — Bed / cot ────────────────────────────────────────
-  tile(22, (x, y, px_) => {
-    tr(px_, y);
+  tile(22, (x, y, px, py) => {
+    tr(px, py);
     const MAT=[50,42,54], MATL=[66,56,72];
     if (x>=1&&x<=14&&y>=2&&y<=13) {
-      if (x===1||x===14||y===2||y===13) sp(px_,y,...MTL);
+      if (x===1||x===14||y===2||y===13) sp(px, py,...MTL);
       else {
-        sp(px_,y,...MAT);
-        if (x>=3&&x<=6&&y>=3&&y<=6) sp(px_,y,...MATL); // pillow
+        sp(px, py,...MAT);
+        if (x>=3&&x<=6&&y>=3&&y<=6) sp(px, py,...MATL); // pillow
       }
     }
   });
 
   // ── GID 24 | frame 23 — Locked gate / metal bars ─────────────────────────
-  tile(23, (x, y, px_) => {
+  tile(23, (x, y, px, py) => {
     let [r,g,b]=WAL;
-    if (x%4===1||x%4===2) { [r,g,b]=MTL2; }
-    if (y===7||y===8) { [r,g,b]=MTL; }
-    sp(px_,y,r,g,b);
+    if (Math.floor(x)%4 === 1 || Math.floor(x)%4 === 2) { [r,g,b]=MTL2; }
+    if (y >= 7 && y < 9) { [r,g,b]=MTL; }
+    sp(px, py,r,g,b);
     if (x>=6&&x<=9&&y>=6&&y<=9) {
-      sp(px_,y,...MTL);
-      if ((x===7||x===8)&&(y===7||y===8)) sp(px_,y,6,6,10);
+      sp(px, py,...MTL);
+      if (x >= 7 && x < 9 && y >= 7 && y < 9) sp(px, py,6,6,10);
     }
   });
 
   // ── GID 25 | frame 24 — Manhole cover ────────────────────────────────────
-  tile(24, (x, y, px_) => {
+  tile(24, (x, y, px, py) => {
     let [r,g,b]=PAV;
     const dx=x-7.5, dy=y-7.5, d=Math.sqrt(dx*dx+dy*dy);
-    if (d<7) {
-      if (d>6) { [r,g,b]=MTL; }
+    if (d < 7) {
+      if (d > 5.5) { [r,g,b] = MTL; }
       else {
-        [r,g,b]=MTL2;
-        if (Math.abs(dx)<0.7||Math.abs(dy)<0.7) [r,g,b]=MTL;
-        if (Math.abs(dx+dy)<0.9||Math.abs(dx-dy)<0.9) [r,g,b]=MTL;
+        [r,g,b] = MTL2;
+        if (Math.abs(dx) < 1.1 || Math.abs(dy) < 1.1) [r,g,b] = MTL;
+        if (Math.abs(dx+dy) < 1.3 || Math.abs(dx-dy) < 1.3) [r,g,b] = MTL;
       }
     }
-    sp(px_,y,r,g,b);
+    sp(px, py,r,g,b);
   });
 
   // ── GID 26 | frame 25 — Generator block ──────────────────────────────────
-  tile(25, (x, y, px_) => {
-    tr(px_, y);
+  tile(25, (x, y, px, py) => {
+    tr(px, py);
     if (x>=1&&x<=14&&y>=2&&y<=13) {
-      if (x===1||x===14||y===2||y===13) sp(px_,y,...MTL);
+      if (x < 2 || x > 13 || y < 3 || y > 12) sp(px, py,...MTL);
       else {
-        sp(px_,y,...MTL2);
+        sp(px, py,...MTL2);
         for (const vy of [4,6,8,10]) {
-          if (y===vy&&x>=3&&x<=12) sp(px_,y,...MTL);
+          if (Math.floor(y) === vy && x >= 3 && x <= 12) sp(px, py,...MTL);
         }
-        if (x>=6&&x<=8&&y>=11&&y<=12) sp(px_,y,38,10,8); // off indicator
+        if (x>=6&&x<=8&&y>=11&&y<=12) sp(px, py,38,10,8); // off indicator
       }
     }
   });
 
   // ── GID 27 | frame 26 — Electrical panel ─────────────────────────────────
-  tile(26, (x, y, px_) => {
-    tr(px_, y);
+  tile(26, (x, y, px, py) => {
+    tr(px, py);
     if (x>=2&&x<=13&&y>=1&&y<=14) {
-      if (x===2||x===13||y===1||y===14) sp(px_,y,...MTL);
+      if (x < 3 || x > 12 || y < 2 || y > 13) sp(px, py,...MTL);
       else {
-        sp(px_,y,...CON);
-        if (y>=2&&y<=3) sp(px_,y,...MTL);
+        sp(px, py,...CON);
+        if (y>=2&&y<=3) sp(px, py,...MTL);
         for (const sy of [5,8,11]) for (const sx of [4,7,10]) {
-          if (x===sx&&y===sy) sp(px_,y,...MTL2);
-          if (x===sx+1&&y===sy) sp(px_,y,...MTL);
+          if (Math.floor(x)===sx && Math.floor(y)===sy) sp(px, py,...MTL2);
+          if (Math.floor(x)===sx+1 && Math.floor(y)===sy) sp(px, py,...MTL);
         }
       }
     }
   });
 
   // ── GID 28 | frame 27 — Dark window (unlit) in wall ──────────────────────
-  tile(27, (x, y, px_) => {
+  tile(27, (x, y, px, py) => {
     let [r,g,b]=WAL2;
-    if (x>=2&&x<=13&&y>=2&&y<=13) {
-      if (x===2||x===13||y===2||y===13||x===7||x===8||y===7||y===8) [r,g,b]=MTL;
+    if (x >= 2 && x <= 13 && y >= 2 && y <= 13) {
+      if (x < 3 || x > 12 || y < 3 || y > 12 || (x >= 7 && x < 9) || (y >= 7 && y < 9)) [r,g,b] = MTL;
       else {
-        [r,g,b]=[10,12,18];
-        if (x>=3&&x<=5&&y>=3&&y<=5) [r,g,b]=[20,22,30];
+        [r,g,b] = [10,12,18];
+        if (x >= 3.5 && x <= 5.5 && y >= 3.5 && y <= 5.5) [r,g,b] = [20,22,30];
       }
     }
-    sp(px_,y,r,g,b);
+    sp(px, py,r,g,b);
   });
 
   // ── GID 29 | frame 28 — Door frame / threshold ───────────────────────────
-  tile(28, (x, y, px_) => {
+  tile(28, (x, y, px, py) => {
     let [r,g,b]=FLR;
-    if (x===0||x===15||y===0) { [r,g,b]=MTL; }
-    if (x>=2&&x<=13&&y>=1&&y<=13) { r+=10; g+=8; b+=6; }
-    if (y===14||y===15) { [r,g,b]=MTL; }
-    sp(px_,y,r,g,b);
+    if (x < 1 || x >= 15 || y < 1) { [r,g,b] = MTL; }
+    if (x >= 2 && x <= 13 && y >= 1 && y <= 13) { r += 10; g += 8; b += 6; }
+    if (y >= 14) { [r,g,b] = MTL; }
+    sp(px, py,r,g,b);
   });
 
   // ── GID 30 | frame 29 — Reinforced wall (sealed city boundary) ───────────
-  tile(29, (x, y, px_) => {
+  tile(29, (x, y, px, py) => {
     const RW=[16,14,20], RW2=[26,22,32];
     const row=Math.floor(y/8), lx=(x+(row%2)*8)%16, ly=y%8;
-    if (lx===0||ly===0) sp(px_,y,...RW); else sp(px_,y,...RW2);
+    if (lx < 1 || ly < 1) sp(px, py,...RW); else sp(px, py,...RW2);
   });
 
   // ── GID 31 | frame 30 — Memorial / civic marker ───────────────────────────
-  tile(30, (x, y, px_) => {
-    tr(px_, y);
+  tile(30, (x, y, px, py) => {
+    tr(px, py);
     const ST=[42,34,34], STL=[58,46,46];
     if (x>=3&&x<=12&&y>=10&&y<=14) {
-      if (x===3||x===12||y===14) sp(px_,y,...ST); else sp(px_,y,...STL);
+      if (x===3||x===12||y===14) sp(px, py,...ST); else sp(px, py,...STL);
     }
-    if (x>=6&&x<=9&&y>=5&&y<=10) sp(px_,y,...ST);
+    if (x>=6&&x<=9&&y>=5&&y<=10) sp(px, py,...ST);
     const d=Math.sqrt((x-7.5)**2+(y-3.5)**2);
-    if (d<3) sp(px_,y,...(d<2?STL:ST));
+    if (d<3) sp(px, py,...(d<2?STL:ST));
   });
 
   // ── GID 32 | frame 31 — Worn carpet (interior floor variation) ───────────
-  tile(31, (x, y, px_) => {
+  tile(31, (x, y, px, py) => {
     let [r,g,b]=CRP;
     if (x===0||x===15||y===0||y===15) { [r,g,b]=CRP2; }
     else if (x%4===0&&y%4===0) { [r,g,b]=CRP3; }
     else if ((x+y)%8<2) { r-=4; g-=4; b-=3; }
-    sp(px_,y,r,g,b);
+    sp(px, py,r,g,b);
   });
 
   // ── GID 33 | frame 32 — Cracked pavement (street variation) ──────────────
-  tile(32, (x, y, px_) => {
+  tile(32, (x, y, px, py) => {
     let [r,g,b]=PAV;
     if (x===0||x===8||y===0||y===8) { [r,g,b]=PAV2; }
     if ((x*7+y*13+x*y)%19===0) { r+=8; g+=8; b+=10; }
     // Diagonal crack from (3,1) to (11,14)
-    const cr=Math.abs(13*(x-3)-8*(y-1))/Math.sqrt(169+64);
-    if (cr<0.9&&x>=3&&x<=11&&y>=1&&y<=14) {
-      [r,g,b]=PAV3;
-      if (cr<0.35) { r+=8; g+=8; b+=10; }
+    const cr = Math.abs(13*(x-3)-8*(y-1))/Math.sqrt(169+64);
+    if (cr < 1.2 && x >= 3 && x <= 11 && y >= 1 && y <= 14) {
+      [r,g,b] = PAV3;
+      if (cr < 0.6) { r += 8; g += 8; b += 10; }
     }
-    sp(px_,y,r,g,b);
+    sp(px, py,r,g,b);
   });
 
   // ── GID 34 | frame 33 — Trap door ────────────────────────────────────────
-  tile(33, (x, y, px_) => {
-    tr(px_, y);
+  tile(33, (x, y, px, py) => {
+    tr(px, py);
     const WD=[42, 28, 16], WD2=[58, 42, 26];
     if (x>=1&&x<=14&&y>=1&&y<=14) {
-      if (x===1||x===14||y===1||y===14) sp(px_,y,...WD);
+      if (x===1||x===14||y===1||y===14) sp(px, py,...WD);
       else {
-        sp(px_,y,...WD2);
-        if (x>=6&&x<=9&&y>=6&&y<=9) sp(px_,y,...WD); // handle
+        sp(px, py,...WD2);
+        if (x>=6&&x<=9&&y>=6&&y<=9) sp(px, py,...WD); // handle
       }
     }
   });
 
   // ── GID 35 | frame 34 — Metal pipe (Horizontal) ──────────────────────────
-  tile(34, (x, y, px_) => {
-    tr(px_, y);
-    if (y>=5&&y<=10) {
+  tile(34, (x, y, px, py) => {
+    tr(px, py);
+    if (y >= 5 && y <= 10) {
       let c = MTL2;
-      if (y===5||y===10) c = MTL;
-      if (y===7) c = MTL3;
-      sp(px_,y,...c);
+      if (y < 6.5 || y > 8.5) c = MTL;
+      if (y >= 7 && y < 8) c = MTL3;
+      sp(px, py,...c);
     }
   });
 
   // ── GID 36 | frame 35 — Metal pipe (Vertical) ────────────────────────────
-  tile(35, (x, y, px_) => {
-    tr(px_, y);
-    if (x>=5&&x<=10) {
+  tile(35, (x, y, px, py) => {
+    tr(px, py);
+    if (x >= 5 && x <= 10) {
       let c = MTL2;
-      if (x===5||x===10) c = MTL;
-      if (x===7) c = MTL3;
-      sp(px_,y,...c);
+      if (x < 6.5 || x > 8.5) c = MTL;
+      if (x >= 7 && x < 8) c = MTL3;
+      sp(px, py,...c);
     }
   });
 
   // ── GID 37 | frame 36 — Drainage Grating ─────────────────────────────────
-  tile(36, (x, y, px_) => {
+  tile(36, (x, y, px, py) => {
     let [r,g,b] = PAV;
     if (x>=2&&x<=13&&y>=2&&y<=13) {
-      if (x%3===0) [r,g,b] = [10,10,15];
+      if (Math.floor(x)%3===0) [r,g,b] = [10,10,15];
       else [r,g,b] = MTL;
     }
-    sp(px_,y,r,g,b);
+    sp(px, py,r,g,b);
   });
 
   // ── GID 38 | frame 37 — Small Bush ───────────────────────────────────────
-  tile(37, (x, y, px_) => {
-    tr(px_, y);
+  tile(37, (x, y, px, py) => {
+    tr(px, py);
     const d = Math.sqrt(Math.pow(x-8,2) + Math.pow(y-10,2));
     if (d < 6) {
       let c = GRN;
-      if ((x+y)%4===0) c = GRN2;
-      sp(px_,y,...c);
+      if (Math.floor(x+y)%4 === 0) c = GRN2;
+      sp(px, py,...c);
     }
   });
 
   // ── GID 39 | frame 38 — Small dead tree ──────────────────────────────────
-  tile(38, (x, y, px_) => {
-    tr(px_, y);
-    if (x>=7 && x<=9 && y>=8) sp(px_,y,...WOD);
-    if ((x===6||x===10) && y>=10) sp(px_,y,...WOD2);
-    if (y < 10 && Math.abs(x-8) < (10-y)/2) sp(px_,y,...WOD);
+  tile(38, (x, y, px, py) => {
+    tr(px, py);
+    if (x>=7 && x<10 && y>=8) sp(px, py,...WOD);
+    if ((Math.floor(x)===6||Math.floor(x)===10) && y>=10) sp(px, py,...WOD2);
+    if (y < 10 && Math.abs(x-8) < (11-y)/2) sp(px, py,...WOD);
   });
 
   // ── GID 40 | frame 39 — Flashlight Charger ─────────────────────────────────
-  tile(39, (x, y, px_) => {
+  tile(39, (x, y, px, py) => {
     let [r,g,b] = MTL;
-    if (x>=2&&x<=13&&y>=2&&y<=13) {
+    if (x >= 2 && x <= 13 && y >= 2 && y <= 13) {
        [r,g,b] = MTL2;
-       if (x===2||x===13||y===2||y===13) [r,g,b] = MTL;
+       if (x < 3 || x > 12 || y < 3 || y > 12) [r,g,b] = MTL;
        // Lightning bolt / Indicator
-       const isBolt = (x===8 && y>=4 && y<=11) || (x===7 && y===7) || (x===9 && y===7);
+       const isBolt = (x >= 7.5 && x < 8.5 && y >= 4 && y <= 11) || (x >= 6.5 && x < 7.5 && y >= 7 && y < 8) || (x >= 8.5 && x < 9.5 && y >= 7 && y < 8);
        if (isBolt) {
          [r,g,b] = [255, 255, 0]; // Bright Yellow
        }
     }
-    sp(px_,y,r,g,b);
+    sp(px, py,r,g,b);
   });
 
   // ── GID 41-49 | frame 40-48 — Large City Tree (3x3) ──────────────────────
@@ -640,8 +647,8 @@ function generateTileset() {
   treeTiles.forEach((tileId, index) => {
     const tx = index % 3;
     const ty = Math.floor(index / 3);
-    tile(tileId, (x, y, px_) => {
-      tr(px_, y);
+    tile(tileId, (x, y, px, py) => {
+      tr(px, py);
       const gx = tx * 16 + x;
       const gy = ty * 16 + y;
 
@@ -663,39 +670,39 @@ function generateTileset() {
 
       if (isTrunk) {
         let c = WOD;
-        if (gx % 4 === 0) c = WOD2;
-        sp(px_, y, ...c);
+        if (Math.floor(gx) % 4 === 0) c = WOD2;
+        sp(px, py, ...c);
       } else if (isFoliage) {
         let c = GRN;
-        if ((gx + gy) % 5 === 0) c = GRN2;
-        if ((gx - gy) % 7 === 0) c = GRN3;
+        if (Math.floor(gx + gy) % 5 === 0) c = GRN2;
+        if (Math.floor(gx - gy) % 7 === 0) c = GRN3;
         // Post-outbreak: some brown leaves
-        if ((gx * 3 + gy) % 13 === 0) c = RUB;
-        sp(px_, y, ...c);
+        if (Math.floor(gx * 3 + gy) % 13 === 0) c = RUB;
+        sp(px, py, ...c);
       }
     });
   });
 
   // ── GID 50 | frame 49 — Fuel canister item sprite ────────────────────────
-  tile(49, (x, y, px_) => {
-    tr(px_, y);
+  tile(49, (x, y, px, py) => {
+    tr(px, py);
     const FC=[180,40,30], FM=[220,60,50], FD=[120,20,20]; // Red canister
-    if (x>=6&&x<=9&&y>=1&&y<=3) { if(y===1||x===6||x===9) sp(px_,y,...MTL); }
-    if (x>=5&&x<=10&&y>=3&&y<=5) { sp(px_,y,...MTL); }
+    if (x>=6&&x<=9&&y>=1&&y<=3) { if(y < 2 || x < 7 || x > 8) sp(px, py,...MTL); }
+    if (x>=5&&x<=10&&y>=3&&y<=5) { sp(px, py,...MTL); }
     if (x>=3&&x<=12&&y>=6&&y<=14) {
-      if (x===3||x===12||y===14) sp(px_,y,...FD);
-      else sp(px_,y,...FC);
-      if (x===4&&y>=7&&y<=12) sp(px_,y,...FM);
+      if (x < 4 || x > 11 || y > 13) sp(px, py,...FD);
+      else sp(px, py,...FC);
+      if (x >= 4 && x < 5 && y >= 7 && y <= 12) sp(px, py,...FM);
     }
   });
 
   return encodePNG(W, H, px);
 }
 
-// ── Player spritesheet (64×64, 4 cols × 4 rows of 16×16) ───────────────────
+// ── Player spritesheet (Upscaled) ──────────────────────────────────────────
 
 function generatePlayer() {
-  const W = 64, H = 64;
+  const W = 64 * S, H = 64 * S;
   const px = new Uint8Array(W * H * 4);
 
   const SKIN = [228, 190, 150];
@@ -704,6 +711,10 @@ function generatePlayer() {
   const HAIR = [70, 45, 25];
   const EYE = [15, 15, 25];
   const SHOE = [35, 30, 25];
+
+  function sp(x, y, r, g, b, a = 255) {
+    fillRect(px, W, x, y, x, y, r, g, b, a);
+  }
 
   function drawCharacter(col, row, facing, walkPhase) {
     const ox = col * 16;
@@ -714,14 +725,14 @@ function generatePlayer() {
     fillRect(px, W, ox + 4, oy + 14, ox + 11, oy + 15, 0, 0, 0, 40);
     fillRect(px, W, ox + 5, oy + 1 + bobY, ox + 10, oy + 3 + bobY, ...HAIR);
     fillRect(px, W, ox + 5, oy + 3 + bobY, ox + 10, oy + 6 + bobY, ...SKIN);
-    setPixel(px, W, ox + 4, oy + 4 + bobY, ...SKIN);
-    setPixel(px, W, ox + 11, oy + 4 + bobY, ...SKIN);
+    sp(ox + 4, oy + 4 + bobY, ...SKIN);
+    sp(ox + 11, oy + 4 + bobY, ...SKIN);
     fillRect(px, W, ox + 5, oy + 7 + bobY, ox + 10, oy + 10 + bobY, ...BODY);
     fillRect(px, W, ox + 6, oy + 7 + bobY, ox + 7, oy + 8 + bobY, ...BODY_HI);
 
     const armSwing = walkPhase === 1 ? 1 : walkPhase === 3 ? -1 : 0;
-    setPixel(px, W, ox + 4, oy + 8 + bobY + armSwing, ...SKIN);
-    setPixel(px, W, ox + 11, oy + 8 + bobY - armSwing, ...SKIN);
+    sp(ox + 4, oy + 8 + bobY + armSwing, ...SKIN);
+    sp(ox + 11, oy + 8 + bobY - armSwing, ...SKIN);
 
     fillRect(px, W, ox + 5 + legOffset, oy + 11, ox + 7 + legOffset, oy + 13, ...BODY);
     fillRect(px, W, ox + 8 - legOffset, oy + 11, ox + 10 - legOffset, oy + 13, ...BODY);
@@ -729,18 +740,18 @@ function generatePlayer() {
     fillRect(px, W, ox + 8 - legOffset, oy + 13, ox + 10 - legOffset, oy + 14, ...SHOE);
 
     if (facing === 'down') {
-      setPixel(px, W, ox + 6, oy + 5 + bobY, ...EYE);
-      setPixel(px, W, ox + 9, oy + 5 + bobY, ...EYE);
-      setPixel(px, W, ox + 7, oy + 6 + bobY, 200, 160, 130);
-      setPixel(px, W, ox + 8, oy + 6 + bobY, 200, 160, 130);
+      sp(ox + 6, oy + 5 + bobY, ...EYE);
+      sp(ox + 9, oy + 5 + bobY, ...EYE);
+      sp(ox + 7, oy + 6 + bobY, 200, 160, 130);
+      sp(ox + 8, oy + 6 + bobY, 200, 160, 130);
     } else if (facing === 'up') {
       fillRect(px, W, ox + 5, oy + 3 + bobY, ox + 10, oy + 4 + bobY, ...HAIR);
     } else if (facing === 'left') {
-      setPixel(px, W, ox + 5, oy + 5 + bobY, ...EYE);
-      setPixel(px, W, ox + 10, oy + 3 + bobY, ...HAIR);
+      sp(ox + 5, oy + 5 + bobY, ...EYE);
+      sp(ox + 10, oy + 3 + bobY, ...HAIR);
     } else if (facing === 'right') {
-      setPixel(px, W, ox + 10, oy + 5 + bobY, ...EYE);
-      setPixel(px, W, ox + 5, oy + 3 + bobY, ...HAIR);
+      sp(ox + 10, oy + 5 + bobY, ...EYE);
+      sp(ox + 5, oy + 3 + bobY, ...HAIR);
     }
   }
 
@@ -759,13 +770,13 @@ function generatePlayer() {
 const TILESET_META = {
   firstgid: 1,
   name: 'tileset',
-  tilewidth: 16,
-  tileheight: 16,
+  tilewidth: BASE * S,
+  tileheight: BASE * S,
   tilecount: 64,
   columns: 64,
   image: 'tileset.png',
-  imagewidth: 1024,
-  imageheight: 16,
+  imagewidth: 1024 * S,
+  imageheight: 16 * S,
   margin: 0,
   spacing: 0,
 };
@@ -872,8 +883,8 @@ function generateTilemap(roomWidth, roomHeight, opts) {
     infinite: false,
     orientation: 'orthogonal',
     renderorder: 'right-down',
-    tilewidth: 16,
-    tileheight: 16,
+    tilewidth: BASE * S,
+    tileheight: BASE * S,
     type: 'map',
     version: '1.10',
     tiledversion: '1.10.2',
@@ -903,7 +914,7 @@ console.log(`  tileset.png  (${TILESET_META.imagewidth}x${TILESET_META.imageheig
 
 // Player spritesheet PNG
 fs.writeFileSync(path.join(spriteDir, 'player.png'), generatePlayer());
-console.log('  player.png   (64x64, 4x4 frames)');
+console.log(`  player.png   (${64 * S}x${64 * S}, 4x4 frames of ${16 * S}x${16 * S})`);
 
 // ── City street (96×72 = 1536×1152px) ───────────────────────────────────────
 //

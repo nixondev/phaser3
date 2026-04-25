@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { DEPTH } from '@utils/Constants';
+import { Entity } from './Entity';
+import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import { AfflictedDef, AfflictedStatus, Position } from '@/types';
 
 const WANDER_SPEED      = 20;
@@ -14,7 +15,7 @@ const CALM_RANGE        = 120;  // px — agitated gives up chasing beyond this
 const FRIGHTEN_SPEED    = 100;  // px/s — flee speed when panicked by flashlight
 const FRIGHTEN_CALM     = 150;  // px — frightened calms down once this far from player
 
-export class Afflicted extends Phaser.Physics.Arcade.Sprite {
+export class Afflicted extends Entity {
   private afflictedId: string;
   private residentName: string;
   private role: string;
@@ -23,11 +24,12 @@ export class Afflicted extends Phaser.Physics.Arcade.Sprite {
   private origin: Position;
   private wanderTarget: Position | null = null;
   private wanderTimer?: Phaser.Time.TimerEvent;
+  private baseScale: number;
 
   constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
     super(scene, def.x, def.y, 'tileset-sprites', 10);
-    scene.add.existing(this);
-    scene.physics.add.existing(this);
+    
+    this.baseScale = 1 / GAME_CONFIG.ASSET_SCALE;
 
     this.afflictedId  = def.id;
     this.residentName = def.name;
@@ -38,8 +40,9 @@ export class Afflicted extends Phaser.Physics.Arcade.Sprite {
 
     this.setDepth(DEPTH.ENTITIES);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(12, 12);
-    body.setOffset(2, 2);
+    const s = GAME_CONFIG.ASSET_SCALE;
+    body.setSize(12 * s, 12 * s);
+    body.setOffset(2 * s, 2 * s);
     body.setCollideWorldBounds(true);
 
     this.setupVisuals();
@@ -52,13 +55,14 @@ export class Afflicted extends Phaser.Physics.Arcade.Sprite {
   }
 
   private setupVisuals(): void {
+    const bs = this.baseScale;
     switch (this.status) {
       case 'wandering':
         this.setTint(0x8888cc);
         this.scene.tweens.add({
           targets: this,
-          scaleX: { from: 1, to: 1.05 },
-          scaleY: { from: 1, to: 0.95 },
+          scaleX: { from: bs, to: bs * 1.05 },
+          scaleY: { from: bs, to: bs * 0.95 },
           duration: 600,
           yoyo: true,
           repeat: -1,
@@ -69,8 +73,8 @@ export class Afflicted extends Phaser.Physics.Arcade.Sprite {
         this.setTint(0xcc4444);
         this.scene.tweens.add({
           targets: this,
-          scaleX: { from: 1, to: 1.12 },
-          scaleY: { from: 1, to: 0.88 },
+          scaleX: { from: bs, to: bs * 1.12 },
+          scaleY: { from: bs, to: bs * 0.88 },
           duration: 200,
           yoyo: true,
           repeat: -1,
@@ -81,8 +85,8 @@ export class Afflicted extends Phaser.Physics.Arcade.Sprite {
         this.setTint(0xddaa22);
         this.scene.tweens.add({
           targets: this,
-          scaleX: { from: 0.9, to: 1.1 },
-          scaleY: { from: 1.1, to: 0.9 },
+          scaleX: { from: bs * 0.9, to: bs * 1.1 },
+          scaleY: { from: bs * 1.1, to: bs * 0.9 },
           duration: 120,
           yoyo: true,
           repeat: -1,
@@ -179,7 +183,7 @@ export class Afflicted extends Phaser.Physics.Arcade.Sprite {
     if (this.status === newStatus) return;
     this.status = newStatus;
     this.scene.tweens.killTweensOf(this);
-    this.setScale(1, 1);
+    this.setScale(this.baseScale);
     this.stopMovement();
     this.setupVisuals();
 

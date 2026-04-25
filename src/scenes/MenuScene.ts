@@ -11,6 +11,7 @@ export class MenuScene extends Phaser.Scene {
 
   create(): void {
     AudioManager.getInstance().setScene(this);
+    AudioManager.getInstance().playMusic('bgm-title', true, 0.5);
     this.started = false;
     const w = GAME_CONFIG.WIDTH;
     const h = GAME_CONFIG.HEIGHT;

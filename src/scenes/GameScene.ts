@@ -490,6 +490,7 @@ export class GameScene extends Phaser.Scene {
 
   private createItemSprite(id: string, tileFrame: number, x: number, y: number): void {
     const sprite = this.add.sprite(x, y, 'tileset-sprites', tileFrame);
+    sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
     this.tweens.add({
       targets: sprite,
@@ -504,6 +505,7 @@ export class GameScene extends Phaser.Scene {
 
   private createSignSprite(id: string, tileFrame: number, x: number, y: number): void {
     const sprite = this.add.sprite(x, y, 'tileset-sprites', tileFrame);
+    sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
     this.itemSprites.set(id, sprite);
   }

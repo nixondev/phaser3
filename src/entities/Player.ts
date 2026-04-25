@@ -1,6 +1,6 @@
 import { Entity } from './Entity';
 import { Direction } from './Direction';
-import { DEPTH, PLAYER_CONFIG } from '@utils/Constants';
+import { DEPTH, PLAYER_CONFIG, GAME_CONFIG } from '@utils/Constants';
 import { InputState } from '@/types';
 
 export class Player extends Entity {
@@ -9,8 +9,9 @@ export class Player extends Entity {
     this.setDepth(DEPTH.PLAYER);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(10, 8);
-    body.setOffset(3, 8);
+    const s = GAME_CONFIG.ASSET_SCALE;
+    body.setSize(10 * s, 8 * s);
+    body.setOffset(3 * s, 8 * s);
     body.setCollideWorldBounds(true);
 
     this.createAnimations();

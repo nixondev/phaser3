@@ -3,6 +3,7 @@ export const GAME_CONFIG = {
   HEIGHT: 240,
   ZOOM: 3,
   TILE_SIZE: 16,
+  ASSET_SCALE: 4, // 16 * 4 = 64px upscaled assets
   DEBUG: false,
 } as const;
 

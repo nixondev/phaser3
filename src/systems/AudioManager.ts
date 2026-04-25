@@ -7,7 +7,7 @@ export class AudioManager {
   private currentMusicKey: string | null = null;
   private currentMusic: Phaser.Sound.BaseSound | null = null;
   private volume: number = 1.0;
-  private readonly MAX_ACTUAL_VOLUME = 0.3;
+  private readonly DEFAULT_MUSIC_VOLUME = 0.3;
 
   private constructor() {}
 
@@ -20,35 +20,34 @@ export class AudioManager {
 
   setScene(scene: Phaser.Scene): void {
     this.scene = scene;
-    // Apply initial volume to the sound manager (scaled by MAX_ACTUAL_VOLUME)
-    this.scene.sound.volume = this.volume * this.MAX_ACTUAL_VOLUME;
+    // Apply initial volume to the sound manager
+    this.scene.sound.volume = this.volume;
   }
 
   setVolume(value: number): void {
     this.volume = Phaser.Math.Clamp(value, 0, 1);
     if (this.scene) {
-      this.scene.sound.volume = this.volume * this.MAX_ACTUAL_VOLUME;
+      this.scene.sound.volume = this.volume;
     }
-    debug('User volume set to:', this.volume, 'Actual volume:', this.volume * this.MAX_ACTUAL_VOLUME);
+    debug('User volume set to:', this.volume);
   }
 
   getVolume(): number {
     return this.volume;
   }
 
-  playMusic(key: string, loop: boolean = true): void {
+  playMusic(key: string, loop: boolean = true, volume: number = this.DEFAULT_MUSIC_VOLUME): void {
     if (!this.scene) return;
     if (this.currentMusicKey === key) return;
 
-    debug('Playing music:', key);
+    debug('Playing music:', key, 'at volume:', volume);
 
     // Stop current music
     this.stopMusic();
 
     try {
       if (this.scene.cache.audio.exists(key)) {
-        // We use 1.0 here because the global volume is handled by this.scene.sound.volume
-        this.currentMusic = this.scene.sound.add(key, { loop, volume: 1.0 });
+        this.currentMusic = this.scene.sound.add(key, { loop, volume });
         this.currentMusic.play();
         this.currentMusicKey = key;
       } else {

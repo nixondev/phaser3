@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Direction } from './Direction';
-import { DEPTH } from '@utils/Constants';
+import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 
 export class Entity extends Phaser.Physics.Arcade.Sprite {
   protected direction: Direction = Direction.DOWN;
@@ -10,6 +10,9 @@ export class Entity extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
     this.setDepth(DEPTH.ENTITIES);
+    
+    // Scale down from upscaled asset size to logical game size
+    this.setScale(1 / GAME_CONFIG.ASSET_SCALE);
   }
 
   getDirection(): Direction {
