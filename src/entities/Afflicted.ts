@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Entity } from './Entity';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import { AfflictedDef, AfflictedStatus, Position } from '@/types';
+import { MusicManager } from '@systems/MusicManager';
 
 const WANDER_SPEED      = 20;
 const WANDER_PAUSE_MIN  = 1500;
@@ -14,6 +15,8 @@ const CALM_RANGE        = 120;  // px — agitated gives up chasing beyond this
 
 const FRIGHTEN_SPEED    = 100;  // px/s — flee speed when panicked by flashlight
 const FRIGHTEN_CALM     = 150;  // px — frightened calms down once this far from player
+
+const SOUND_RADIUS      = 200;  // px — distance at which sound starts being audible
 
 export class Afflicted extends Entity {
   private afflictedId: string;
@@ -52,6 +55,8 @@ export class Afflicted extends Entity {
     } else if (this.status === 'cured' || this.status === 'recovered') {
       this.stopMovement();
     }
+
+    MusicManager.getInstance().playProximity(this.afflictedId, 'goblins');
   }
 
   private setupVisuals(): void {
@@ -131,6 +136,14 @@ export class Afflicted extends Entity {
     const dist = Phaser.Math.Distance.Between(this.x, this.y, playerX, playerY);
     const body = this.body as Phaser.Physics.Arcade.Body;
 
+    // ── Proximity Sound ─────────────────────────────────────────────────────
+    if (this.status !== 'cured' && this.status !== 'recovered') {
+      const vol = Math.max(0, 1 - dist / SOUND_RADIUS);
+      MusicManager.getInstance().updateProximityVolume(this.afflictedId, vol);
+    } else {
+      MusicManager.getInstance().updateProximityVolume(this.afflictedId, 0);
+    }
+
     // ── State transitions ────────────────────────────────────────────────────
     if (this.status === 'wandering' && dist < AGITATE_RANGE) {
       this.setStatus('agitated');
@@ -190,6 +203,11 @@ export class Afflicted extends Entity {
     if (newStatus === 'wandering') {
       this.startWandering();
     }
+  }
+
+  destroy(fromScene?: boolean): void {
+    MusicManager.getInstance().stopProximity(this.afflictedId);
+    super.destroy(fromScene);
   }
 
   getStatus():  AfflictedStatus { return this.status;       }

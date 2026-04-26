@@ -43,6 +43,8 @@ The player wakes alone in a sealed city, discovers the afflicted residents can b
 npm run dev          # Start Vite dev server with HMR at localhost:8080
 npm run build        # Build for production (outputs to /dist)
 npm run preview      # Serve the production build locally
+npm run drums        # Build custom drum patches
+npm run midi         # Generate custom MIDI files
 ```
 
 ## Architecture & Systems
@@ -53,6 +55,9 @@ npm run preview      # Serve the production build locally
 - **GameScene:** Handles the main game loop, movement, AI, room transitions, and interaction logic.
 - **UIScene:** Manages the HUD, inventory grid, dialog boxes, and interaction prompts.
 - **RoomStateManager:** A singleton managing all persistent game state (inventory, cured residents, unlocked doors, etc.).
+- **MusicManager:** Handles MIDI music and adaptive proximity-based audio layers.
+
+For details on customizing audio instruments and samples, see the **Customizing Audio Assets** section in `CLAUDE.md`.
 
 ### Key Controls
 
@@ -78,6 +83,7 @@ npm run preview      # Serve the production build locally
 
 The project is currently in active development.
 - **Completed:** Combat system removal, core data model for cured residents, city map expansion with functional interiors, and basic entity state machines.
+- **Audio:** Custom WebAssembly MIDI synthesis with proximity-based volume layers for entities and environmental hints.
 - **Current Focus:** Implementing the cure mechanic and expanding environmental storytelling.
 
 ---

@@ -75,6 +75,7 @@ export class Timidity extends SimpleEmitter {
 
   private _audioContext: AudioContext;
   private _node: ScriptProcessorNode;
+  private _gainNode: GainNode;
   private _audioHandler: (e: AudioProcessingEvent) => void;
 
   constructor(baseUrl = '/') {
@@ -85,11 +86,18 @@ export class Timidity extends SimpleEmitter {
     const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this._audioContext = new AudioCtx();
     this._node = this._audioContext.createScriptProcessor(BUFFER_SIZE, 0, NUM_CHANNELS);
+    this._gainNode = this._audioContext.createGain();
     this._audioHandler = this._onAudioProcess.bind(this);
     this._node.addEventListener('audioprocess', this._audioHandler as EventListener);
-    this._node.connect(this._audioContext.destination);
+    this._node.connect(this._gainNode);
+    this._gainNode.connect(this._audioContext.destination);
 
     this._init();
+  }
+
+  setVolume(volume: number): void {
+    if (this.destroyed) return;
+    this._gainNode.gain.setTargetAtTime(volume, this._audioContext.currentTime, 0.02);
   }
 
   private async _init(): Promise<void> {

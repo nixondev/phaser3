@@ -12,6 +12,11 @@ import { MusicManager } from '@systems/MusicManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus } from '@/types';
 import { debug } from '@utils/Debug';
 
+const CLINIC_DOOR_X     = 160;
+const CLINIC_DOOR_Y     = 304;
+const CLINIC_SOUND_DIST = 150;
+const CLINIC_SOUND_ID   = 'clinic-hint';
+
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private inputManager!: InputManager;
@@ -74,7 +79,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
-      if (USE_MIDI_MUSIC) MusicManager.getInstance().pause();
+      if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
     });
 
     const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
@@ -167,6 +172,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.checkInteractables(input);
+    this.updateClinicProximity();
 
     if (input.menu) {
       this.scene.pause();
@@ -177,6 +183,10 @@ export class GameScene extends Phaser.Scene {
   // ── Afflicted ───────────────────────────────────────────────────────────
 
   private spawnAfflicted(): void {
+    // Clear existing and stop their proximity sounds
+    this.afflictedGroup.getChildren().forEach((a) => {
+      (a as Afflicted).destroy();
+    });
     this.afflictedGroup.clear(true, true);
     if (this.afflictedCollider) this.afflictedCollider.destroy();
     if (this.playerAfflictedCollider) this.playerAfflictedCollider.destroy();
@@ -213,6 +223,7 @@ export class GameScene extends Phaser.Scene {
     // Brief delay then transition back to start
     this.time.delayedCall(400, () => {
       this.transitionManager.transition(() => {
+        MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
         const startRoomId = this.roomManager.getStartRoom();
         this.roomManager.loadRoom(startRoomId);
         this.rsm.visitRoom(startRoomId);
@@ -248,6 +259,24 @@ export class GameScene extends Phaser.Scene {
       }
     });
     return nearest;
+  }
+
+  private updateClinicProximity(): void {
+    if (!USE_MIDI_MUSIC) return;
+    const roomDef = this.roomManager.getCurrentRoomDef();
+    if (roomDef.id !== 'city-street' || this.rsm.hasVisited('clinic')) {
+      MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
+      return;
+    }
+
+    const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, CLINIC_DOOR_X, CLINIC_DOOR_Y);
+    if (dist < CLINIC_SOUND_DIST) {
+      MusicManager.getInstance().playProximity(CLINIC_SOUND_ID, 'miditheme-hint');
+      const vol = Math.max(0, 1 - dist / CLINIC_SOUND_DIST);
+      MusicManager.getInstance().updateProximityVolume(CLINIC_SOUND_ID, vol * 0.6); // Slightly quieter than main theme
+    } else {
+      MusicManager.getInstance().updateProximityVolume(CLINIC_SOUND_ID, 0);
+    }
   }
 
   // ── Inventory mode ──────────────────────────────────────────────────────
@@ -634,6 +663,7 @@ export class GameScene extends Phaser.Scene {
     (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
 
     this.transitionManager.transition(() => {
+      MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
       this.roomManager.loadRoom(doorDef.targetRoom);
       this.rsm.visitRoom(doorDef.targetRoom);
       const spawn = this.roomManager.getSpawnForDoor(doorDef.targetRoom, doorDef.targetDoor);

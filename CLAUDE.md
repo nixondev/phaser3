@@ -46,6 +46,8 @@ npm run dev          # Vite dev server with HMR at localhost:8080
 npm run build        # tsc + vite build (outputs to /dist)
 npm run preview      # Serve production build
 npm run setup        # Generate placeholder assets (scripts/generate-assets.cjs)
+npm run drums        # Build custom drum patches (scripts/build-drums.cjs)
+npm run midi         # Generate custom MIDI files (scripts/generate-goblins-midi.cjs)
 ```
 
 ---
@@ -91,6 +93,8 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zone setup |
 | `src/systems/InputManager.ts` | Keyboard input; `getState()` for continuous, `getTapState()` for menus |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
+| `src/systems/MusicManager.ts` | MIDI music player — singleton; supports parallel proximity layers |
+| `src/lib/Timidity.ts` | WebAssembly MIDI synthesizer wrapper with GainNode control |
 | `src/entities/Player.ts` | Player sprite, movement, animations |
 | `src/entities/Afflicted.ts` | Afflicted resident entity — state machine, wandering AI, agitation |
 | `src/entities/Entity.ts` | Base sprite class (Player extends this) |
@@ -98,6 +102,43 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/utils/Constants.ts` | All numeric constants |
 | `src/types/index.ts` | All TypeScript interfaces and types |
 | `src/data/rooms.json` | World definition — rooms, doors, items, afflicted, interactables |
+
+---
+
+### Audio & Proximity Systems
+
+The game uses a custom WebAssembly-based MIDI synthesis system via `libtimidity`.
+
+- **MusicManager:** Singleton that handles global background music and parallel "proximity" audio players.
+- **Proximity Layers:** Allows multiple MIDI tracks to play in sync, with volumes controlled by distance to game objects (e.g., Afflicted residents or specific landmarks like the Clinic door).
+- **Custom Assets:** MIDI files are often generated via scripts (e.g., `scripts/generate-goblins-midi.cjs`) to target specific FreePats instruments.
+
+---
+
+### Customizing Audio Assets
+
+The game uses GUS-compatible `.pat` files for instrument synthesis. You can override any MIDI instrument or drum sample.
+
+#### Overriding via freepats.cfg
+1.  **Locate `public/timidity/freepats.cfg`**: This file maps MIDI program numbers (bank) and drum notes (drumset) to `.pat` files.
+2.  **Edit mapping**:
+    - For instruments: `[program_number] [path_to_pat]` (e.g., `0 Tone_000/my_piano.pat`)
+    - For drums: Inside a `drumset 0` block, `[midi_note] [path_to_pat]` (e.g., `35 Custom_000/my_kick.pat`)
+3.  **Volume/Panning**: You can add optional parameters like `amp=120` or `pan=center` to the config line.
+
+#### Converting WAV to .pat
+The project includes a utility to convert 16-bit mono WAV files into GUS patches:
+```bash
+node scripts/wav2pat.cjs -n <midi_note> <input.wav> <output.pat>
+```
+- `-n`: Sets the root MIDI note (default 60/Middle C). For drums, this should match the GM drum note.
+- **Requirements**: WAV must be 16-bit PCM, mono.
+
+#### Batch Conversion (Drums)
+`scripts/build-drums.cjs` automates converting a folder of drum samples:
+1.  Uses `ffmpeg` to normalize/downsample (44100Hz mono).
+2.  Calls `wav2pat.cjs` for each sample.
+3.  Backs up and rewrites `freepats.cfg` with the new `Custom_000/` paths.
 
 ---
 
@@ -134,10 +175,10 @@ The long-term goal is that **world state is persistent, but player understanding
 
 State machine with 4 states:
 
-- **wandering** — drifts slowly near origin point, blue tint, gentle wobble
-- **agitated** — triggered at 40px player proximity, flees from player, red tint, fast wobble. Calms at 80px distance. Faster than wandering.
-- **cured** — stands still, green tint. Interactable (E prompt).
-- **recovered** — stands still, no tint. Interactable (repeat dialog / role delivery / character unlock logic).
+- **wandering** — drifts slowly near origin point, blue tint, gentle wobble. Emits proximity sound.
+- **agitated** — triggered at 40px player proximity, flees from player, red tint, fast wobble. Calms at 80px distance. Faster than wandering. Emits proximity sound.
+- **cured** — stands still, green tint. Interactable (E prompt). Proximity sound stops.
+- **recovered** — stands still, no tint. Interactable (repeat dialog / role delivery / character unlock logic). No proximity sound.
 
 **Current implementation behavior:** If the player overlaps with an agitated / wandering Afflicted, the screen shakes, fades out, and the player respawns at the `protag-house`.
 
