@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { SCENES, GAME_CONFIG } from '@utils/Constants';
+import { SCENES, GAME_CONFIG, USE_MIDI_MUSIC } from '@utils/Constants';
 import { AudioManager } from '@systems/AudioManager';
+import { MusicManager } from '@systems/MusicManager';
 
 export class MenuScene extends Phaser.Scene {
   private started = false;
@@ -10,8 +11,12 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    AudioManager.getInstance().setScene(this);
-    AudioManager.getInstance().playMusic('bgm-title', true, 0.5);
+    if (USE_MIDI_MUSIC) {
+      MusicManager.getInstance().play('main_theme');
+    } else {
+      AudioManager.getInstance().setScene(this);
+      AudioManager.getInstance().playMusic('bgm-title', true, 0.5);
+    }
     this.started = false;
     const w = GAME_CONFIG.WIDTH;
     const h = GAME_CONFIG.HEIGHT;

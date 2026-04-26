@@ -57,3 +57,5 @@ export const INVENTORY_CONFIG = {
   COLS: 6,
   SLOT_SIZE: 14,
 } as const;
+
+export const USE_MIDI_MUSIC = true;

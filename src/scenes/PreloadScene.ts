@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SCENES, GAME_CONFIG } from '@utils/Constants';
+import { SCENES, GAME_CONFIG, USE_MIDI_MUSIC } from '@utils/Constants';
 import { RoomManager } from '@systems/RoomManager';
 import { debug } from '@utils/Debug';
 
@@ -53,9 +53,10 @@ export class PreloadScene extends Phaser.Scene {
       this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath);
     }
 
-    // Audio Assets
-    this.load.audio('bgm-main', 'assets/audio/gamemusic-001.mp3');
-    this.load.audio('bgm-title', 'assets/audio/gametheme-003.mp3');
+    if (!USE_MIDI_MUSIC) {
+      this.load.audio('bgm-main', 'assets/audio/gamemusic-001.mp3');
+      this.load.audio('bgm-title', 'assets/audio/gametheme-003.mp3');
+    }
   }
 
   create(): void {
