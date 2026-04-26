@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "generate-assets": "node scripts/generate-assets.cjs",
-    "setup": "npm run generate-assets"
+    "setup": "npm run generate-assets",
+    "wav2pat": "node scripts/wav2pat.cjs",
+    "build-drums": "node scripts/build-drums.cjs"
   },
   "dependencies": {
     "freepats": "^1.0.3",

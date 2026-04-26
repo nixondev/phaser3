@@ -249,17 +249,16 @@ export class Timidity extends SimpleEmitter {
     let sampleCount = 0;
 
     if (lib && this._songPtr && this._playing) {
-      const byteCount = (lib._mid_song_read_wave as (p: number, buf: number, n: number) => number)(
-        this._songPtr, this._bufferPtr, BUFFER_SIZE * BYTES_PER_SAMPLE
-      );
-      sampleCount = byteCount / BYTES_PER_SAMPLE;
-      if (sampleCount > 0) {
-        this._array.set(
-          (lib.HEAP16 as unknown as Int16Array).subarray(
-            this._bufferPtr / 2,
-            (this._bufferPtr + byteCount) / 2
-          )
-        );
+      sampleCount = this._readWave();
+
+      if (sampleCount === 0) {
+        // Song finished. Restart immediately and read audio into this same buffer
+        // so the loop is seamless rather than producing one full buffer of silence.
+        (lib._mid_song_start as (p: number) => void)(this._songPtr);
+        this.emit('ended');
+        if (this._playing && this._songPtr) {
+          sampleCount = this._readWave();
+        }
       }
     }
 
@@ -276,16 +275,28 @@ export class Timidity extends SimpleEmitter {
       ch1[i] = this._array[i * 2 + 1] / 0x7FFF;
     }
     for (let i = sampleCount; i < BUFFER_SIZE; i++) { ch0[i] = 0; ch1[i] = 0; }
+  }
 
-    if (lib && this._songPtr && this._playing && sampleCount === 0) {
-      this.seek(0);
-      this.pause();
-      if (lib) (lib._mid_song_start as (p: number) => void)(this._songPtr);
-      this.emit('ended');
+  private _readWave(): number {
+    const lib = this._lib;
+    if (!lib || !this._songPtr) return 0;
+    const byteCount = (lib._mid_song_read_wave as (p: number, buf: number, n: number) => number)(
+      this._songPtr, this._bufferPtr, BUFFER_SIZE * BYTES_PER_SAMPLE
+    );
+    const sampleCount = byteCount / BYTES_PER_SAMPLE;
+    if (sampleCount > 0) {
+      this._array.set(
+        (lib.HEAP16 as unknown as Int16Array).subarray(
+          this._bufferPtr / 2,
+          (this._bufferPtr + byteCount) / 2
+        )
+      );
     }
+    return sampleCount;
   }
 
   private _startInterval(): void {
+    this._stopInterval(); // guard against duplicate intervals
     this._interval = setInterval(() => this.emit('timeupdate', this.currentTime), 1000);
   }
 

@@ -7,11 +7,11 @@ export default defineConfig({
   plugins: [
     viteStaticCopy({
       targets: [
-        { src: 'node_modules/timidity/libtimidity.js',  dest: 'timidity' },
+        { src: 'node_modules/timidity/libtimidity.js',   dest: 'timidity' },
         { src: 'node_modules/timidity/libtimidity.wasm', dest: 'timidity' },
-        { src: 'node_modules/timidity/freepats.cfg',    dest: 'timidity' },
         { src: 'node_modules/freepats/Tone_000',        dest: 'timidity' },
         { src: 'node_modules/freepats/Drum_000',        dest: 'timidity' },
+        // freepats.cfg is NOT copied from node_modules — public/timidity/freepats.cfg owns it
       ],
     }),
   ],

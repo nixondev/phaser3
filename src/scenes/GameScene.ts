@@ -56,9 +56,10 @@ export class GameScene extends Phaser.Scene {
     this.afflictedGroup = this.physics.add.group();
     this.flashlight = new Flashlight(this);
 
-    if (!USE_MIDI_MUSIC) {
-      AudioManager.getInstance().setScene(this);
-    }
+    // Always hand AudioManager the new scene (keeps volume control working).
+    // Stop title MP3 before starting in-game music.
+    AudioManager.getInstance().setScene(this);
+    AudioManager.getInstance().stopMusic();
 
     const startRoom = this.roomManager.getStartRoom();
     this.roomManager.loadRoom(startRoom);

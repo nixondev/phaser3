@@ -53,9 +53,10 @@ export class PreloadScene extends Phaser.Scene {
       this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath);
     }
 
+    // Title screen always uses MP3; in-game music uses MIDI when flag is on
+    this.load.audio('bgm-title', 'assets/audio/gametheme-003.mp3');
     if (!USE_MIDI_MUSIC) {
       this.load.audio('bgm-main', 'assets/audio/gamemusic-001.mp3');
-      this.load.audio('bgm-title', 'assets/audio/gametheme-003.mp3');
     }
   }
 

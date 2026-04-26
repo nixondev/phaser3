@@ -10,12 +10,9 @@ export class MusicManager {
 
   private constructor() {
     this.player = new Timidity(`${BASE}timidity/`);
-    this.player.on('ended', () => {
-      if (this.currentUrl) {
-        this.player.load(this.currentUrl);
-        this.player.play();
-      }
-    });
+    // Looping is handled gaplessly inside Timidity._onAudioProcess:
+    // when the song ends, _mid_song_start restarts and immediately re-reads into
+    // the same audio buffer — no silent frame needed between loops.
   }
 
   static getInstance(): MusicManager {
