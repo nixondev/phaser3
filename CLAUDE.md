@@ -89,6 +89,9 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 |------|---------|
 | `src/scenes/GameScene.ts` | Main loop: movement, afflicted AI, inventory, room transitions, dialog, interaction |
 | `src/scenes/UIScene.ts` | HUD: room name, interact prompt, dialog box, inventory grid |
+| `src/scenes/MenuScene.ts` | Title screen and main menu |
+| `src/scenes/BootScene.ts` | Minimal scene for initial engine setup |
+| `src/scenes/PreloadScene.ts` | Asset loading (sprites, tilemaps, MIDI files, instruments) |
 | `src/systems/RoomStateManager.ts` | Singleton — all persistent game state |
 | `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zone setup |
 | `src/systems/InputManager.ts` | Keyboard input; `getState()` for continuous, `getTapState()` for menus |
@@ -102,6 +105,35 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/utils/Constants.ts` | All numeric constants |
 | `src/types/index.ts` | All TypeScript interfaces and types |
 | `src/data/rooms.json` | World definition — rooms, doors, items, afflicted, interactables |
+
+---
+
+### Room Loading & Navigation
+
+Rooms are defined in `src/data/rooms.json`. `RoomManager` handles the instantiation of tilemaps and collision layers based on these definitions.
+
+1.  **Tilemap Layers**: Every room tilemap must have three layers: `Ground`, `Collision`, and `Above`.
+2.  **Door Zones**: Doors are defined with `targetRoom` and `targetDoor`. `RoomManager` creates invisible zones; when the player overlaps one, `TransitionManager` handles the visual fade and `RoomManager` swaps the map.
+3.  **Interactables**: Static objects defined in `rooms.json` that the player can interact with (E prompt).
+4.  **Parallel UI**: `UIScene` runs alongside `GameScene`. Communication is handled via the Phaser event bus (`this.events.emit` in `GameScene`, `this.gameScene.events.on` in `UIScene`).
+
+---
+
+### State Persistence
+
+`RoomStateManager` (singleton) tracks everything that survives a room transition:
+
+- **Inventory**: A fixed 12-slot array (`(ItemDef | null)[]`).
+- **World State**: Sets of IDs for `visitedRooms`, `collectedItems`, `unlockedDoors`, `curedResidents`, `recoveredResidents`, `poweredDevices`.
+- **Dropped Items**: A `Map<roomId, DroppedItemState[]>` that stores items dropped by the player in specific rooms.
+
+---
+
+### Input Management
+
+`InputManager` abstracts keyboard handling:
+- `getState()`: Used for continuous movement (isDown).
+- `getTapState()`: Used for menu navigation and one-shot actions (JustDown).
 
 ---
 
@@ -606,6 +638,28 @@ These are the major questions still in motion:
 
 - **Soft-doom states**
   - How clearly should the game communicate that a run is still informative but no longer optimal / winnable?
+
+---
+
+---
+
+## Workflow: Adding New Content
+
+### Adding a Room
+1.  **Create Tilemap**: Use Tiled to create a 16×16 tile JSON map. Include layers: `Ground`, `Collision`, `Above`. Export to `public/assets/tilemaps/`.
+2.  **Add to rooms.json**: Define the room in `src/data/rooms.json`.
+    - Set `id`, `name`, `mapKey`, `tilemapPath`, `width`, `height`.
+    - Add `doors`, `interactables`, and `afflicted` as needed.
+3.  **Register Asset**: In `src/scenes/PreloadScene.ts`, add the `this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath)` call.
+
+### Adding an Item
+1.  **Define Item**: In `rooms.json`, add the item to an interactable's `item` field or a dropped item list.
+2.  **Item Properties**: Set `name`, `tileFrame` (matching `spritesheet.png`), and `category`.
+3.  **Interaction**: If it's a key, set `keyId`. If it has a use target, set `useTarget`.
+
+### Adding/Modifying an Afflicted
+1.  **Define in rooms.json**: Add entry to the room's `afflicted` array.
+2.  **Entity Logic**: Modify `src/entities/Afflicted.ts` if a new behavior state is needed beyond the standard wander/agitate/cure/recover cycle.
 
 ---
 

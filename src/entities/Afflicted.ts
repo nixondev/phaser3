@@ -137,12 +137,8 @@ export class Afflicted extends Entity {
     const body = this.body as Phaser.Physics.Arcade.Body;
 
     // ── Proximity Sound ─────────────────────────────────────────────────────
-    if (this.status !== 'cured' && this.status !== 'recovered') {
-      const vol = Math.max(0, 1 - dist / SOUND_RADIUS);
-      MusicManager.getInstance().updateProximityVolume(this.afflictedId, vol);
-    } else {
-      MusicManager.getInstance().updateProximityVolume(this.afflictedId, 0);
-    }
+    const vol = Math.max(0, 1 - dist / SOUND_RADIUS);
+    MusicManager.getInstance().updateProximityVolume(this.afflictedId, vol);
 
     // ── State transitions ────────────────────────────────────────────────────
     if (this.status === 'wandering' && dist < AGITATE_RANGE) {
