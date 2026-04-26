@@ -1,4 +1,4 @@
-import Timidity from 'timidity';
+import { Timidity } from '@/lib/Timidity';
 
 const BASE = import.meta.env.BASE_URL; // '/' in dev, '/phaser3/' on GitHub Pages
 
