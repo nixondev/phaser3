@@ -13,7 +13,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: GAME_CONFIG.HEIGHT,
   zoom: GAME_CONFIG.ZOOM,
   parent: 'game-container',
-  pixelArt: true,
+  pixelArt: false,
   antialias: false,
   roundPixels: true,
   physics: {

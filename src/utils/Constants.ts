@@ -4,6 +4,7 @@ export const GAME_CONFIG = {
   ZOOM: 3,
   TILE_SIZE: 16,
   ASSET_SCALE: 4, // 16 * 4 = 64px upscaled assets
+  ENTITY_SCALE: 1.5, // Scale multiplier for characters
   DEBUG: false,
 } as const;
 

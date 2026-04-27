@@ -9,9 +9,9 @@ export class Player extends Entity {
     this.setDepth(DEPTH.PLAYER);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const s = GAME_CONFIG.ASSET_SCALE;
-    body.setSize(10 * s, 8 * s);
-    body.setOffset(3 * s, 8 * s);
+    const invScale = GAME_CONFIG.ASSET_SCALE / GAME_CONFIG.ENTITY_SCALE;
+    body.setSize(10 * invScale, 8 * invScale);
+    body.setOffset(3 * invScale, 8 * invScale);
     body.setCollideWorldBounds(true);
 
     this.createAnimations();
@@ -90,5 +90,29 @@ export class Player extends Entity {
       case Direction.LEFT:  return  Math.PI;
       case Direction.RIGHT: return  0;
     }
+  }
+
+  /** Gets the flashlight origin point. */
+  getFlashlightOrigin(): { x: number; y: number } {
+    let offsetX = 0;
+    let offsetY = 0;
+
+    switch (this.direction) {
+      case Direction.UP:
+        offsetX = 4;
+        break;
+      case Direction.DOWN:
+        offsetX = -4;
+        break;
+      case Direction.LEFT:
+      case Direction.RIGHT:
+        offsetX = 0;
+        break;
+    }
+
+    return {
+      x: this.x + offsetX,
+      y: this.y + offsetY,
+    };
   }
 }

@@ -32,7 +32,7 @@ export class Afflicted extends Entity {
   constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
     super(scene, def.x, def.y, 'tileset-sprites', 10);
     
-    this.baseScale = 1 / GAME_CONFIG.ASSET_SCALE;
+    this.baseScale = GAME_CONFIG.ENTITY_SCALE / GAME_CONFIG.ASSET_SCALE;
 
     this.afflictedId  = def.id;
     this.residentName = def.name;
@@ -43,9 +43,9 @@ export class Afflicted extends Entity {
 
     this.setDepth(DEPTH.ENTITIES);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const s = GAME_CONFIG.ASSET_SCALE;
-    body.setSize(12 * s, 12 * s);
-    body.setOffset(2 * s, 2 * s);
+    const invScale = GAME_CONFIG.ASSET_SCALE / GAME_CONFIG.ENTITY_SCALE;
+    body.setSize(12 * invScale, 12 * invScale);
+    body.setOffset(2 * invScale, 2 * invScale);
     body.setCollideWorldBounds(true);
 
     this.setupVisuals();

@@ -130,7 +130,8 @@ export class GameScene extends Phaser.Scene {
       const body = this.player.body as Phaser.Physics.Arcade.Body;
       body.setVelocity(0, 0);
       this.player.playIdle();
-      this.flashlight.update(this.player.x, this.player.y, this.player.getFacingAngle(), delta);
+      const origin = this.player.getFlashlightOrigin();
+      this.flashlight.update(origin.x, origin.y, this.player.getFacingAngle(), delta);
       if (input.action || input.menu) {
         this.dialogOpen = false;
         this.events.emit('dialog-close');
@@ -150,7 +151,8 @@ export class GameScene extends Phaser.Scene {
 
     // Update flashlight visual and check cone hits against afflicted
     const facingAngle = this.player.getFacingAngle();
-    this.flashlight.update(this.player.x, this.player.y, facingAngle, delta);
+    const origin = this.player.getFlashlightOrigin();
+    this.flashlight.update(origin.x, origin.y, facingAngle, delta);
 
     // Update afflicted AI
     this.afflictedGroup.getChildren().forEach((child) => {
@@ -285,7 +287,8 @@ export class GameScene extends Phaser.Scene {
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0);
     this.player.playIdle();
-    this.flashlight.update(this.player.x, this.player.y, this.player.getFacingAngle(), delta);
+    const origin = this.player.getFlashlightOrigin();
+    this.flashlight.update(origin.x, origin.y, this.player.getFacingAngle(), delta);
 
     const input = this.inputManager.getTapState();
     const cols = 6;

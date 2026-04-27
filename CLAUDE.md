@@ -147,6 +147,22 @@ The game uses a custom WebAssembly-based MIDI synthesis system via `libtimidity`
 
 ---
 
+### Asset & Tileset Workflow
+The project uses a hybrid workflow for environment tiles:
+- **Individual Source Tiles**: Source images for tiles are stored in `assets_src/tiles/` as individual PNGs (e.g., `00_pavement.png`, `01_brick_wall.png`).
+- **Composer Script**: `npm run build-tiles` (or `node scripts/build-tiles.cjs`) combines these individual files into the final `public/assets/tilemaps/tileset.png` used by Phaser. It places tiles based on the numeric prefix in their filename. It uses transparency ([0,0,0,0]) as the default background for empty areas.
+- **Tilemap Generation**: `npm run generate-assets` (or `node scripts/generate-assets.cjs`) creates the Tiled-compatible JSON files for rooms but DOES NOT overwrite the `tileset.png` (this behavior is protected to preserve custom/high-fidelity art).
+- **Migration**: To extract a single `tileset.png` back into individual files, use `npm run migrate-tiles`.
+- **Regeneration**: `npm run regenerate-tiles` creates procedural source tiles with transparency support.
+
+#### Adding a New Tile
+1. Add a 64x64 PNG to `assets_src/tiles/`.
+2. Name it starting with the desired index (e.g., `50_new_floor.png`).
+3. Run `npm run build-tiles`.
+4. Update `scripts/generate-assets.cjs` if the tile needs to be procedurally placed in rooms.
+
+---
+
 ### Customizing Audio Assets
 
 The game uses GUS-compatible `.pat` files for instrument synthesis. You can override any MIDI instrument or drum sample.

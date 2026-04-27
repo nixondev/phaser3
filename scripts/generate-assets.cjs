@@ -83,15 +83,20 @@ function fillRect(px, w, x1, y1, x2, y2, r, g, b, a = 255) {
   // ── Tileset (Upscaled) ─────────────────────────────────────────────────────
 
 function generateTileset() {
-  const W = 1024 * S, H = 16 * S;
+  const COLS = 8;
+  const ROWS = 8;
+  const W = COLS * TILE, H = ROWS * TILE;
   const px = new Uint8Array(W * H * 4);
 
   // Draw one TILExTILE tile at column col (0-indexed)
-  function tile(col, fn) {
+  function tile(index, fn) {
+    const col = index % COLS;
+    const row = Math.floor(index / COLS);
     const ox = col * TILE;
+    const oy = row * TILE;
     for (let py = 0; py < TILE; py++)
       for (let px = 0; px < TILE; px++)
-        fn(px / S, py / S, ox + px, py);
+        fn(px / S, py / S, ox + px, oy + py);
   }
   function sp(ax, ay, r, g, b, a = 255) { setPixel(px, W, ax, ay, r, g, b, a); }
   function tr(ax, ay) { setPixel(px, W, ax, ay, 0, 0, 0, 0); } // transparent
@@ -773,10 +778,10 @@ const TILESET_META = {
   tilewidth: BASE * S,
   tileheight: BASE * S,
   tilecount: 64,
-  columns: 64,
+  columns: 8,
   image: 'tileset.png',
-  imagewidth: 1024 * S,
-  imageheight: 16 * S,
+  imagewidth: 128 * S,
+  imageheight: 128 * S,
   margin: 0,
   spacing: 0,
 };
@@ -909,8 +914,8 @@ fs.mkdirSync(tilemapDir, { recursive: true });
 fs.mkdirSync(spriteDir, { recursive: true });
 
 // Tileset PNG (64 tiles)
-fs.writeFileSync(path.join(tilemapDir, 'tileset.png'), generateTileset());
-console.log(`  tileset.png  (${TILESET_META.imagewidth}x${TILESET_META.imageheight}, ${TILESET_META.tilecount} tiles)`);
+// fs.writeFileSync(path.join(tilemapDir, 'tileset.png'), generateTileset());
+// console.log(`  tileset.png  (${TILESET_META.imagewidth}x${TILESET_META.imageheight}, ${TILESET_META.tilecount} tiles)`);
 
 // Player spritesheet PNG
 fs.writeFileSync(path.join(spriteDir, 'player.png'), generatePlayer());

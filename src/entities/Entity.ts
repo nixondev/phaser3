@@ -11,8 +11,8 @@ export class Entity extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setDepth(DEPTH.ENTITIES);
     
-    // Scale down from upscaled asset size to logical game size
-    this.setScale(1 / GAME_CONFIG.ASSET_SCALE);
+    // Scale down from upscaled asset size to logical game size, then apply entity scale
+    this.setScale(GAME_CONFIG.ENTITY_SCALE / GAME_CONFIG.ASSET_SCALE);
   }
 
   getDirection(): Direction {
