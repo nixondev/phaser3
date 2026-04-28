@@ -1043,6 +1043,22 @@
           "spawnY": 144
         }
       ]
+    },
+    "basement": {
+      "id": "basement",
+      "name": "Basement",
+      "mapKey": "basement",
+      "tilemapPath": "assets/tilemaps/basement.json",
+      "width": 20,
+      "height": 15,
+      "reverb": "indoor",
+      "playerSpawn": {
+        "x": 168,
+        "y": 120
+      },
+      "doors": [],
+      "interactables": [],
+      "afflicted": []
     }
   },
   "startRoom": "protag-house"
