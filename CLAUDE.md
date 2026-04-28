@@ -94,10 +94,12 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/scenes/BootScene.ts` | Minimal scene for initial engine setup |
 | `src/scenes/PreloadScene.ts` | Asset loading (sprites, tilemaps, MIDI files, instruments) |
 | `src/systems/RoomStateManager.ts` | Singleton — all persistent game state |
-| `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zone setup |
+| `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zone setup, runtime `resizeMap()` |
 | `src/systems/InputManager.ts` | Keyboard input; `getState()` for continuous, `getTapState()` for menus |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
-| `src/systems/MusicManager.ts` | MIDI music player — singleton; supports parallel proximity layers |
+| `src/systems/MusicManager.ts` | MIDI music player — singleton; supports parallel proximity layers; reverb cycle |
+| `src/systems/DebugManager.ts` | F1 info HUD, F3 visual overlays, audio mixing & global debug shortcuts |
+| `src/systems/RoomEditorManager.ts` | F2 live tile/object editor: paint, layer isolation, drag, resize, save |
 | `src/lib/SpessaSynthPlayer.ts` | Wrapper for SpessaSynth MIDI/SF2 engine. |
 | `src/systems/AudioEffectsManager.ts`| Web Audio reverb and spatial processing. |
 | `src/entities/Player.ts` | Player sprite, movement, animations |
@@ -107,6 +109,7 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/utils/Constants.ts` | All numeric constants |
 | `src/types/index.ts` | All TypeScript interfaces and types |
 | `src/data/rooms.json` | World definition — rooms, doors, items, afflicted, interactables |
+| `vite.config.ts` | Build config + dev-only `editorSavePlugin` (POST /__editor/save-* endpoints) |
 
 ---
 
@@ -163,12 +166,11 @@ Audio assets are organized by `room-id` (from `rooms.json`) in the `public/music
 3.  **Fallback**: If a room folder is empty (except for `.gitkeep`), the engine uses `global.sf2` and `main_theme.mid`.
 
 #### Setting Room Reverb
-Reverb is currently assigned in `src/scenes/GameScene.ts` (in `create` and `handleDoorTransition`) based on `roomId` patterns. When enabled, it defaults to a **30% wet mix**:
-- `*sewer*` → `sewer`
-- `*apartment*`, `protag-house` → `indoor`
-- `clinic` → `hospital`
-- `utility-substation`, `energy-facility` → `substation`
-- *Default* → `city`
+Reverb is **data-driven from `src/data/rooms.json`**. Each room may declare:
+- `reverb`: one of `city`, `indoor`, `sewer`, `hospital`, `substation` (omit for the `city` fallback).
+- `reverbMix`: optional 0..1 wet mix (defaults to **0.3**).
+
+`MusicManager.playRoomMusic(roomId)` reads these on every door transition, so updating `rooms.json` is the only thing needed to change a room's acoustic. Live mixing (R / `[` / `]`) in debug mode overrides the data temporarily for the rest of the session.
 
 #### Composer Workflow
 1.  Use **Sforzando** (VST) with the `global.sf2` or your specific `.sf2` in your DAW to compose.
@@ -667,12 +669,62 @@ These are the major questions still in motion:
 
 ---
 
+## Debug & Editor Systems
+
+Three orthogonal toggles, all wired through `InputState` from `InputManager`:
+
+| Key | System | Purpose |
+|-----|--------|---------|
+| **F1** | `DebugManager` | Info HUD: FPS, room id/dims, music + reverb (live), volume, player + cursor coords, tile GIDs under cursor |
+| **F2** | `RoomEditorManager` | Live tile painter + object editor (see below) |
+| **F3** | `DebugManager` | Visual overlays: collision (red), door zones (cyan), interactables (yellow), afflicted radii (magenta) |
+
+When F1 or F2 is active, these global debug shortcuts apply:
+
+| Key | Action |
+|-----|--------|
+| **R** | Cycle reverb profile (`MusicManager.cycleReverb`) |
+| **[ / ]** | Decrease / increase reverb wet mix (5% steps) |
+| **- / +** | Decrease / increase master volume |
+| **L** | Hot-reload current room from disk |
+| **U** | Unlock all doors in current room |
+| **C** | Cure all afflicted in current room |
+| **Shift + Click** | Teleport player to cursor |
+
+### Live Room Editor (F2)
+
+| Key | Action |
+|-----|--------|
+| **1 / 2 / 3** | Switch active layer (Ground / Collision / Above); inactive layers dim to 20% |
+| **Q / E** | Cycle selected tile index |
+| **L-Click** | Paint selected tile |
+| **R-Click** | Erase tile |
+| **M-Click / Alt + L-Click** | Eyedropper (pick the tile under cursor) |
+| **Shift + ←/→/↑/↓** | Expand the map by one tile on that edge |
+| **Ctrl + Shift + ←/→/↑/↓** | Shrink the map by one tile on that edge |
+| **L-Click + drag** on afflicted | Reposition (release saves to `rooms.json` in dev) |
+| **X** | Save the current tilemap (writes `public/assets/tilemaps/<roomId>.json` in dev; downloads file in prod) |
+
+Resizing rebuilds the underlying Phaser tilemap (which is otherwise fixed-dimension) and shifts every coord-bearing field of the room — doors, interactables, afflicted spawns, player spawn, dropped items — by the equivalent pixel offset, so the room stays internally consistent. The player is shifted too.
+
+### Dev-only Save Endpoints
+
+`vite.config.ts` registers an `editorSavePlugin` (`apply: 'serve'`, so it does not ship in production) that handles two POST routes:
+
+- `POST /__editor/save-tilemap?roomId=<id>` — writes the JSON body to `public/assets/tilemaps/<id>.json` (atomic via tmp + rename).
+- `POST /__editor/save-object` — body `{roomId, kind: 'afflicted'|'interactable', id, x, y}`; patches the matching entry in `src/data/rooms.json`.
+
+`RoomEditorManager` calls these via `fetch()` when `import.meta.env.DEV` is true. With this in place, the editor flow is end-to-end: edit in-game → save → reload page → edits persist. `roomId` is regex-validated and writes are checked against the tilemaps directory to prevent path traversal.
+
+---
+
 ## Workflow: Adding New Content
 
 ### Adding a Room
-1.  **Create Tilemap**: Use Tiled to create a 16×16 tile JSON map. Include layers: `Ground`, `Collision`, `Above`. Export to `public/assets/tilemaps/`.
+1.  **Create Tilemap**: Use Tiled to create a 16×16 tile JSON map. Include layers: `Ground`, `Collision`, `Above`. Export to `public/assets/tilemaps/`. *Alternative:* clone an existing tilemap, then enter the room in dev and use F2 + Shift+Arrow to resize and paint in-engine — `X` saves to disk.
 2.  **Add to rooms.json**: Define the room in `src/data/rooms.json`.
     - Set `id`, `name`, `mapKey`, `tilemapPath`, `width`, `height`.
+    - Set `reverb` (`city`/`indoor`/`sewer`/`hospital`/`substation`) and optional `reverbMix`.
     - Add `doors`, `interactables`, and `afflicted` as needed.
 3.  **Register Asset**: In `src/scenes/PreloadScene.ts`, add the `this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath)` call.
 
@@ -682,7 +734,7 @@ These are the major questions still in motion:
 3.  **Interaction**: If it's a key, set `keyId`. If it has a use target, set `useTarget`.
 
 ### Adding/Modifying an Afflicted
-1.  **Define in rooms.json**: Add entry to the room's `afflicted` array.
+1.  **Define in rooms.json**: Add entry to the room's `afflicted` array, *or* drag an existing afflicted in F2 editor mode — release saves the new x/y back to `rooms.json` in dev.
 2.  **Entity Logic**: Modify `src/entities/Afflicted.ts` if a new behavior state is needed beyond the standard wander/agitate/cure/recover cycle.
 
 ---

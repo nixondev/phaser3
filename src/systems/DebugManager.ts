@@ -19,7 +19,6 @@ export class DebugManager {
   private showVisuals: boolean = false;
   private isEditorMode: boolean = false;
 
-  private currentReverbIndex: number = 0;
   private reverbMix: number = 0.3;
 
   private keys: {
@@ -123,11 +122,9 @@ export class DebugManager {
   private handleAudioControls(): void {
     // Cycle Reverb (R)
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) {
-      const music = MusicManager.getInstance();
-      const types = music.getReverbTypes();
-      this.currentReverbIndex = (this.currentReverbIndex + 1) % types.length;
-      music.setReverb(types[this.currentReverbIndex] as any);
-      console.log('Reverb changed to:', types[this.currentReverbIndex]);
+      MusicManager.getInstance().cycleReverb().then(next => {
+        console.log('Reverb changed to:', next);
+      });
     }
 
     // Reverb Mix ([ and ])
@@ -199,7 +196,7 @@ export class DebugManager {
       `Room: ${roomId}`,
       `Size: ${room.width}x${room.height}`,
       `Music: ${room.music || 'none'}`,
-      `Reverb: ${MusicManager.getInstance().getReverbTypes()[this.currentReverbIndex]} (${Math.round(this.reverbMix * 100)}%)`,
+      `Reverb: ${MusicManager.getInstance().getCurrentReverbType() ?? 'off'} (${Math.round(this.reverbMix * 100)}%)`,
       `Volume: ${Math.round(AudioManager.getInstance().getVolume() * 100)}%`,
       'Player:',
       `  World: ${Math.round(player?.x)}, ${Math.round(player?.y)}`,
@@ -256,8 +253,14 @@ export class DebugManager {
         const a = child as any;
         // Draw wander range (if we had it easily accessible)
         // For now just draw a circle around them
-        this.debugGraphics.strokeCircle(a.x, a.y, 32); 
+        this.debugGraphics.strokeCircle(a.x, a.y, 32);
       });
     }
+  }
+
+  destroy(): void {
+    this.debugGraphics?.destroy();
+    this.infoText?.destroy();
+    this.overlayContainer?.destroy();
   }
 }

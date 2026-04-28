@@ -13,6 +13,7 @@ export class MusicManager {
   private proximityPlayers: Map<string, SpessaSynthPlayer> = new Map();
   private currentRoom: string | null = null;
   private currentSf2Url: string | null = null;
+  private currentReverbType: 'city' | 'indoor' | 'sewer' | 'hospital' | 'substation' | null = null;
   private sf2Cache: Map<string, ArrayBuffer> = new Map();
   private midiCache: Map<string, ArrayBuffer> = new Map();
 
@@ -124,6 +125,7 @@ export class MusicManager {
   }
 
   async setReverb(type: 'city' | 'indoor' | 'sewer' | 'hospital' | 'substation' | null): Promise<void> {
+    this.currentReverbType = type;
     if (!type) {
       await this.effects.setReverb(null);
       return;
@@ -132,8 +134,24 @@ export class MusicManager {
     await this.effects.setReverb(irUrl);
   }
 
-  getReverbTypes(): string[] {
+  getReverbTypes(): Array<'city' | 'indoor' | 'sewer' | 'hospital' | 'substation'> {
     return ['city', 'indoor', 'sewer', 'hospital', 'substation'];
+  }
+
+  getCurrentReverbType(): 'city' | 'indoor' | 'sewer' | 'hospital' | 'substation' | null {
+    return this.currentReverbType;
+  }
+
+  /**
+   * Step to the next reverb profile in `getReverbTypes()` order. Returns the
+   * profile that is now active so callers can display it.
+   */
+  async cycleReverb(): Promise<'city' | 'indoor' | 'sewer' | 'hospital' | 'substation'> {
+    const types = this.getReverbTypes();
+    const i = this.currentReverbType ? types.indexOf(this.currentReverbType) : -1;
+    const next = types[(i + 1) % types.length];
+    await this.setReverb(next);
+    return next;
   }
 
   playProximity(id: string, trackName: string, roomId: string = 'city-street'): void {

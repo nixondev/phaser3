@@ -88,6 +88,8 @@ export class GameScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
+      this.debugManager?.destroy();
+      this.editorManager?.destroy();
     });
 
     const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
@@ -201,10 +203,28 @@ export class GameScene extends Phaser.Scene {
       this.setupCamera();
       this.createWorldItemSprites();
       this.spawnAfflicted();
-      
+
       const roomDef = this.roomManager.getCurrentRoomDef();
       this.events.emit('room-changed', roomDef.name);
     });
+  }
+
+  /**
+   * Editor hook: after RoomManager.resizeMap mutates the tilemap and
+   * room metadata, this re-binds physics, camera, sprites, and entities
+   * to the new geometry. Player is shifted by the same pixel offset so
+   * they stay over the same logical tile.
+   */
+  public refreshAfterResize(pixelOffsetX: number, pixelOffsetY: number): void {
+    if (this.player && (pixelOffsetX !== 0 || pixelOffsetY !== 0)) {
+      this.player.setPosition(this.player.x + pixelOffsetX, this.player.y + pixelOffsetY);
+    }
+    this.setupCollisions();
+    this.setupCamera();
+    this.setupLighting();
+    this.createWorldItemSprites();
+    this.spawnAfflicted();
+    this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
   }
 
   // ── Afflicted ───────────────────────────────────────────────────────────
@@ -703,21 +723,7 @@ export class GameScene extends Phaser.Scene {
       this.spawnAfflicted();
 
       if (USE_MIDI_MUSIC) {
-        const music = MusicManager.getInstance();
-        const currentRoomId = doorDef.targetRoom;
-        music.playRoomMusic(currentRoomId);
-        // Set reverb based on room type
-        if (currentRoomId.includes('sewer')) {
-          music.setReverb('sewer');
-        } else if (currentRoomId.includes('apartment') || currentRoomId === 'protag-house') {
-          music.setReverb('indoor');
-        } else if (currentRoomId === 'clinic') {
-          music.setReverb('hospital');
-        } else if (currentRoomId === 'utility-substation' || currentRoomId === 'energy-facility') {
-          music.setReverb('substation');
-        } else {
-          music.setReverb('city');
-        }
+        MusicManager.getInstance().playRoomMusic(doorDef.targetRoom);
       } else {
         const roomDef = this.roomManager.getCurrentRoomDef();
         if (roomDef.music) {

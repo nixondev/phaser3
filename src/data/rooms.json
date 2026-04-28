@@ -8,6 +8,7 @@
       "width": 96,
       "height": 72,
       "music": "bgm-main",
+      "reverb": "city",
       "playerSpawn": {
         "x": 768,
         "y": 944
@@ -435,6 +436,7 @@
       "tilemapPath": "assets/tilemaps/house-b.json",
       "width": 18,
       "height": 13,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 144,
         "y": 104
@@ -483,6 +485,7 @@
       "tilemapPath": "assets/tilemaps/house-c.json",
       "width": 26,
       "height": 18,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 208,
         "y": 248
@@ -594,6 +597,7 @@
       "tilemapPath": "assets/tilemaps/records-office.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -702,6 +706,7 @@
       "tilemapPath": "assets/tilemaps/market.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -728,6 +733,7 @@
       "tilemapPath": "assets/tilemaps/ration-office.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -754,6 +760,7 @@
       "tilemapPath": "assets/tilemaps/east-block.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -792,6 +799,7 @@
       "tilemapPath": "assets/tilemaps/laundromat.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -870,6 +878,7 @@
       "tilemapPath": "assets/tilemaps/depot.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -896,6 +905,7 @@
       "tilemapPath": "assets/tilemaps/apt-4a.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -933,6 +943,8 @@
       "tilemapPath": "assets/tilemaps/room-vault.json",
       "width": 15,
       "height": 10,
+      "reverb": "indoor",
+      "reverbMix": 0.45,
       "playerSpawn": {
         "x": 112,
         "y": 80
@@ -959,6 +971,7 @@
       "tilemapPath": "assets/tilemaps/room-library.json",
       "width": 30,
       "height": 20,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 240,
         "y": 80
@@ -985,6 +998,7 @@
       "tilemapPath": "assets/tilemaps/room-garden.json",
       "width": 25,
       "height": 12,
+      "reverb": "city",
       "playerSpawn": {
         "x": 192,
         "y": 80
@@ -1011,6 +1025,7 @@
       "tilemapPath": "assets/tilemaps/room-entrance.json",
       "width": 20,
       "height": 15,
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 160,
         "y": 80

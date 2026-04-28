@@ -73,6 +73,19 @@ For details on the audio directory structure and how to override assets, see the
 | **ESC** | Pause menu |
 | **- / +** | Adjust Volume (in Pause menu) |
 
+### Debug & Editor
+
+| Key | Action |
+|-----|--------|
+| **F1** | Toggle info HUD (FPS, room/player/cursor coords, tile GIDs, audio state) |
+| **F2** | Toggle live room editor (paint, layer isolation, drag, resize) |
+| **F3** | Toggle visual debug overlays (collision, doors, interactables, afflicted radii) |
+| **L / U / C** | Reload room / unlock all doors / cure all afflicted (when F1 or F2 is on) |
+| **R**, **&#91; / &#93;**, **- / +** | Cycle reverb / wet mix / master volume (when F1 or F2 is on) |
+| **Shift + Click** | Teleport player to cursor (when F1 or F2 is on) |
+
+In editor mode (F2): `1/2/3` switch active layer, `Q/E` cycle tile, left-click paints, right-click erases, middle-click eyedrops, **Shift+Arrow** expands the map by one tile on that edge (Ctrl+Shift+Arrow shrinks), drag-and-drop on an afflicted repositions them, and `X` saves the tilemap. See `CLAUDE.md` § Debug & Editor Systems for the full list.
+
 ## Project Structure
 
 - `src/scenes/`: Phaser scenes for different game states.
@@ -85,7 +98,8 @@ For details on the audio directory structure and how to override assets, see the
 
 The project is currently in active development.
 - **Completed:** Combat system removal, core data model for cured residents, city map expansion with functional interiors, and basic entity state machines.
-- **Audio:** Modern SoundFont-based synthesis (SpessaSynth) with atmospheric convolution reverb and dynamic vertical layering, allowing 1:1 parity with the composer's DAW environment.
+- **Audio:** Modern SoundFont-based synthesis (SpessaSynth) with atmospheric convolution reverb (data-driven per room from `rooms.json`) and dynamic vertical layering.
+- **Tooling:** In-engine debug HUD, visual overlays, and a live room editor (F1/F2/F3) with disk-backed save endpoints in dev (see `CLAUDE.md` § Debug & Editor Systems).
 - **Current Focus:** Implementing the cure mechanic and expanding environmental storytelling.
 
 ---

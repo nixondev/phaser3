@@ -29,6 +29,12 @@ export class RoomEditorManager {
     E: Phaser.Input.Keyboard.Key;
     ESC: Phaser.Input.Keyboard.Key;
     ALT: Phaser.Input.Keyboard.Key;
+    SHIFT: Phaser.Input.Keyboard.Key;
+    CTRL: Phaser.Input.Keyboard.Key;
+    LEFT: Phaser.Input.Keyboard.Key;
+    RIGHT: Phaser.Input.Keyboard.Key;
+    UP: Phaser.Input.Keyboard.Key;
+    DOWN: Phaser.Input.Keyboard.Key;
   };
   
   constructor(scene: Phaser.Scene, roomManager: RoomManager, stateManager: RoomStateManager) {
@@ -45,7 +51,13 @@ export class RoomEditorManager {
       Q: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
       E: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
       ESC: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
-      ALT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ALT)
+      ALT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ALT),
+      SHIFT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+      CTRL: kb.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL),
+      LEFT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
+      RIGHT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
+      UP: kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
+      DOWN: kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN)
     };
 
     this.editorText = this.scene.add.text(10, GAME_CONFIG.HEIGHT - 45, '', {
@@ -86,19 +98,72 @@ export class RoomEditorManager {
     }
     
     if (!this.isActive) return;
-    
+
     this.handleLayerSwitching(input);
+    this.handleResize();
     this.updateHUD();
     this.handleSelection(justDown);
     this.handleDragging(justUp);
     this.handleTilePainting();
   }
 
+  /**
+   * Shift+Arrow expands the map by one tile on that edge.
+   * Ctrl+Shift+Arrow shrinks the map by one tile on that edge.
+   * Right/Down keep existing data anchored top-left; Left/Up shift existing
+   * data right/down to make room (or drop the leftmost/topmost edge on shrink).
+   */
+  private handleResize(): void {
+    const shift = this.keys.SHIFT.isDown;
+    if (!shift) return;
+    const ctrl = this.keys.CTRL.isDown;
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    let newW = map.width;
+    let newH = map.height;
+    let offX = 0;
+    let offY = 0;
+
+    if (Phaser.Input.Keyboard.JustDown(this.keys.RIGHT)) {
+      if (ctrl) { newW = map.width - 1; }
+      else      { newW = map.width + 1; }
+    } else if (Phaser.Input.Keyboard.JustDown(this.keys.LEFT)) {
+      if (ctrl) { newW = map.width - 1; offX = -1; }
+      else      { newW = map.width + 1; offX = 1; }
+    } else if (Phaser.Input.Keyboard.JustDown(this.keys.DOWN)) {
+      if (ctrl) { newH = map.height - 1; }
+      else      { newH = map.height + 1; }
+    } else if (Phaser.Input.Keyboard.JustDown(this.keys.UP)) {
+      if (ctrl) { newH = map.height - 1; offY = -1; }
+      else      { newH = map.height + 1; offY = 1; }
+    } else {
+      return;
+    }
+
+    if (newW < 1 || newH < 1) {
+      console.warn('[Editor] Cannot shrink map below 1 tile');
+      return;
+    }
+
+    const result = this.roomManager.resizeMap(newW, newH, offX, offY);
+    if (!result) return;
+
+    const scene = this.scene as any;
+    if (typeof scene.refreshAfterResize === 'function') {
+      scene.refreshAfterResize(result.pixelOffsetX, result.pixelOffsetY);
+    }
+    console.log(`[Editor] Resized map to ${newW}x${newH} (offset ${offX},${offY})`);
+  }
+
   private updateHUD(): void {
+    const map = this.roomManager.getMap();
+    const dims = map ? `${map.width}x${map.height}` : '?';
     this.editorText.setText([
-      `Editor: ON | Layer: ${this.currentLayerName} | Tile: ${this.selectedTileIndex}`,
+      `Editor: ON | Layer: ${this.currentLayerName} | Tile: ${this.selectedTileIndex} | Map: ${dims}`,
       `[1-3] Switch Layer | [Q/E] Tile | [M-Click/Alt] Eyedropper`,
-      `[L-Click] Paint | [R-Click] Erase | [X] Export JSON`
+      `[L-Click] Paint | [R-Click] Erase | [X] Export JSON`,
+      `[Shift+Arrow] Expand edge | [Ctrl+Shift+Arrow] Shrink edge`
     ]);
     this.updatePreview();
   }
@@ -200,11 +265,10 @@ export class RoomEditorManager {
     }
   }
 
-  private exportTilemap(): void {
+  private buildExportData(): any {
     const map = this.roomManager.getMap();
-    if (!map) return;
-
-    const exportData: any = {
+    if (!map) return null;
+    return {
       compressionlevel: -1,
       height: map.height,
       infinite: false,
@@ -229,7 +293,7 @@ export class RoomEditorManager {
       tilesets: map.tilesets.map(ts => ({
         columns: ts.columns,
         firstgid: ts.firstgid,
-        image: ts.name + ".png", 
+        image: ts.name + ".png",
         imageheight: ts.image ? (ts.image.getSourceImage() as any).height : 512,
         imagewidth: ts.image ? (ts.image.getSourceImage() as any).width : 512,
         margin: ts.tileMargin,
@@ -244,15 +308,35 @@ export class RoomEditorManager {
       version: '1.10',
       width: map.width
     };
+  }
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${this.roomManager.getCurrentRoomId()}_edited.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    console.log('Tilemap exported to', a.download);
+  private exportTilemap(): void {
+    const exportData = this.buildExportData();
+    if (!exportData) return;
+    const roomId = this.roomManager.getCurrentRoomId();
+
+    if (import.meta.env.DEV) {
+      fetch(`/__editor/save-tilemap?roomId=${encodeURIComponent(roomId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(exportData)
+      })
+        .then(async r => {
+          const body = await r.json().catch(() => ({}));
+          if (r.ok) console.log(`[Editor] Saved tilemap → ${body.path ?? roomId + '.json'}`);
+          else console.warn(`[Editor] save-tilemap failed (${r.status}):`, body);
+        })
+        .catch(err => console.warn('[Editor] save-tilemap error, falling back to download:', err));
+    } else {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${roomId}_edited.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      console.log('Tilemap exported to', a.download);
+    }
   }
 
   private handleTilePainting(): void {
@@ -327,14 +411,35 @@ export class RoomEditorManager {
   private logObjectSnippet(): void {
     if (!this.selectedObject) return;
     const s = this.selectedObject.sprite;
-    const data = this.selectedObject.originalData || {};
-    
-    console.log('Updated Object Position:');
-    console.log(JSON.stringify({
-      ...data,
-      x: Math.round(s.x),
-      y: Math.round(s.y)
-    }, null, 2));
+    const type = this.selectedObject.type as 'afflicted' | 'interactable';
+    const id: string | undefined =
+      typeof s.getId === 'function' ? s.getId() :
+      (this.selectedObject.originalData?.id);
+    const x = Math.round(s.x);
+    const y = Math.round(s.y);
+    const roomId = this.roomManager.getCurrentRoomId();
+
+    if (!id) {
+      console.warn('[Editor] Cannot persist drag — selected object has no id');
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      fetch('/__editor/save-object', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, kind: type, id, x, y })
+      })
+        .then(async r => {
+          const body = await r.json().catch(() => ({}));
+          if (r.ok) console.log(`[Editor] Saved ${type} ${id} → (${x}, ${y})`);
+          else console.warn(`[Editor] save-object failed (${r.status}):`, body);
+        })
+        .catch(err => console.warn('[Editor] save-object error:', err));
+    } else {
+      console.log('Updated Object Position:');
+      console.log(JSON.stringify({ id, x, y }, null, 2));
+    }
   }
 
   private updateLayerOpacities(): void {
@@ -385,5 +490,12 @@ export class RoomEditorManager {
     // Position preview next to the "Tile: X" part of the text
     // The first line is roughly 140px wide at 8px font
     this.tilePreview.setPosition(this.editorText.x + 145, this.editorText.y + 6);
+  }
+
+  destroy(): void {
+    this.deselect();
+    this.editorText?.destroy();
+    this.tileCursor?.destroy();
+    this.tilePreview?.destroy();
   }
 }
