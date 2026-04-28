@@ -227,6 +227,11 @@ export class GameScene extends Phaser.Scene {
     this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
   }
 
+  /** Lighter editor hook: re-applies camera bounds/follow without rebuilding entities. */
+  public refreshCamera(): void {
+    this.setupCamera();
+  }
+
   // ── Afflicted ───────────────────────────────────────────────────────────
 
   private spawnAfflicted(): void {
