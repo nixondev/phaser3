@@ -130,13 +130,15 @@ export class GameScene extends Phaser.Scene {
     const input = this.inputManager.getState();
     this.updateLighting();
 
-    // While the debug warp picker is open, suspend gameplay input so
-    // arrow keys are consumed by the picker, not by the player.
-    if (this.debugManager?.isModalOpen()) {
+    // While a modal overlay is open (warp picker, pair-target picker, etc.),
+    // suspend gameplay input so arrow keys are consumed by the modal,
+    // not by the player.
+    if (this.debugManager?.isModalOpen() || this.editorManager?.isModalOpen()) {
       const body = this.player.body as Phaser.Physics.Arcade.Body;
       body.setVelocity(0, 0);
       this.player.playIdle();
       this.debugManager.update(input, delta);
+      this.editorManager.update(input);
       return;
     }
 

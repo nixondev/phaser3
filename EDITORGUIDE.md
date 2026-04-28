@@ -155,8 +155,18 @@ npm run new-room <id> [width] [height]
 - `id` — lowercase, alphanumeric, dashes (e.g. `attic-3b`).
 - `width` / `height` — tiles, default 20×15.
 
-Creates a stub entry in `rooms.json` and a default tilemap with
-perimeter walls and a floor. Refresh the browser. The room exists.
+Creates three things in one shot:
+
+1. A stub entry in `src/data/rooms.json`.
+2. A default tilemap at `public/assets/tilemaps/<id>.json` (perimeter
+   walls, floor inside).
+3. A music directory at `public/music/<id>/` with a `.gitkeep` so it's
+   tracked in git. Drop `track.mid` and/or `instruments.sf2` in there
+   later to override the global audio for this room. If the dir stays
+   empty, the room uses `public/music/global.sf2` and
+   `public/music/main_theme.mid` as fallbacks.
+
+Refresh the browser. The room exists.
 
 To get into a brand-new room before any door connects to it:
 - Wire a door from an existing room (next section), **or**
@@ -169,33 +179,41 @@ The maze is built from doors that point at each other. The editor
 handles both ends in one flow:
 
 1. Warp to the *source* room (F4, pick, Enter).
-2. Press **O** to start door-pairing. The HUD shows
-   `PAIR: pick target [, .] <roomId> [Enter] [Esc]`.
-3. Use **`,`** and **`.`** to cycle through every other room. Press
-   **Enter** when the right target is selected.
+2. Press **O** to start door-pairing. A centered yellow-bordered
+   picker appears listing every other room.
+3. Use **Up** / **Down** to highlight the target room. Press
+   **Enter** to confirm. The picker closes; the HUD's status line
+   says `pair: click source door (target=<id>)`.
 4. **Click** the tile where the door should sit in the *source*
-   room. The editor auto-warps you to the target room.
+   room. The editor auto-warps you to the target room. The status
+   line now reads `pair: click target door in <id>`.
 5. **Click** the tile where the *matching* door should sit in the
    target room.
-6. Both door snippets are now on your clipboard, joined with labels:
 
-   ```
-   // Paste into rooms.<source>.doors:
-   { ...source door... }
+Each click delivers a self-contained paste: the **full updated
+room JSON entry** for the room you just clicked in.
 
-   // Paste into rooms.<target>.doors:
-   { ...target door... }
-   ```
+- After the source click: clipboard holds
+  `"<source-room-id>": { ...full room... }` with the new door already
+  appended to its `doors[]`. Toast: *"Source room JSON copied.
+  Replace `"<source-room-id>"` entry in rooms.json."*
+- After the target click: clipboard holds the same shape for the
+  target room.
 
-7. Open `src/data/rooms.json` and paste each block into the matching
-   room's `doors` array.
-8. Refresh. Walk through.
+Both clicks also dump the same JSON to the browser console, so you
+can scroll back and grab the source-room JSON later if you've
+already overwritten the clipboard with something else.
 
-Both doors already have:
-- matching `targetRoom` / `targetDoor` ids
+The doors already have:
+- matching `targetRoom` / `targetDoor` ids cross-referenced
 - `direction` inferred from which edge of the room you clicked nearest
 - sensible `spawnX` / `spawnY` (one tile inside each room, in front of
   the door)
+
+**Workflow:** open `src/data/rooms.json`. After each click, find that
+room's `"<id>": {...}` entry, select from `"<id>":` through the
+matching `}`, and paste over with the clipboard contents. Save. After
+both pastes, refresh the browser and walk through the new portal.
 
 Press **Esc** at any phase to abandon the pair without writing
 anything.
@@ -241,11 +259,9 @@ update in `rooms.json`. Apply manually.
 
 These shortcuts work whenever F1 or F2 is on:
 
-| Key | Effect |
-|-----|--------|
-| **R** | Cycle reverb profile (city / indoor / sewer / hospital / substation) |
-| **`[`** / **`]`** | Decrease / increase reverb wet mix (5% steps) |
-| **`-`** / **`+`** | Decrease / increase master volume |
+- **R** — cycle reverb profile (city / indoor / sewer / hospital / substation).
+- **`[`** / **`]`** — decrease / increase reverb wet mix (5% steps).
+- **`-`** / **`+`** — decrease / increase master volume.
 
 When you find a setting you like, copy it back into the room's
 `reverb` / `reverbMix` fields in `rooms.json`. Live changes don't
@@ -257,12 +273,10 @@ persist on reload.
 
 These work when F1 or F2 is on:
 
-| Key | Effect |
-|-----|--------|
-| **L** | Hot-reload the current room from disk |
-| **U** | Unlock every door in the current room (skip lock checks) |
-| **C** | Cure every afflicted in the current room |
-| **Shift + Click** | Teleport the protag to the cursor |
+- **L** — hot-reload the current room from disk.
+- **U** — unlock every door in the current room (skip lock checks).
+- **C** — cure every afflicted in the current room.
+- **Shift + Click** — teleport the protag to the cursor.
 
 Use these to skip ahead while testing. They never persist.
 

@@ -43,11 +43,14 @@ npm run new-room <id> [width] [height]
 - `id` — lowercase, alphanumeric, dashes (e.g. `attic-3b`)
 - `width` / `height` — tiles, default 20×15
 
-This appends a stub to `src/data/rooms.json` and writes a default
+This appends a stub to `src/data/rooms.json`, writes a default
 tilemap at `public/assets/tilemaps/<id>.json` (perimeter walls + floor,
-empty Above layer). PreloadScene auto-registers every room in
-`rooms.json`, so no source-code edit is needed. Reload the dev server
-or refresh the page and the room is live.
+empty Above layer), and creates `public/music/<id>/` with a `.gitkeep`
+so the room's audio override slot is ready (drop `track.mid` /
+`instruments.sf2` in later, or leave it empty to use the global
+fallbacks). PreloadScene auto-registers every room in `rooms.json`,
+so no source-code edit is needed. Reload the dev server or refresh
+the page and the room is live.
 
 To get into a brand-new room before any door is wired: F1 to open the
 debug HUD, then Shift+Click teleports the player to the cursor — but
@@ -179,35 +182,32 @@ Doors come in pairs — one in each room, pointing at each other. The
 editor handles the cross-references for you. Three keystrokes plus
 two clicks:
 
-1. Press **`O`** while in the source room. HUD shows the pair status:
-   `PAIR: pick target [, .] <roomId> [Enter] [Esc]`.
-2. Press **`,`** / **`.`** to cycle through every other room. **Enter**
-   confirms the target room. The HUD updates to
-   `PAIR: click this room's door (target=<roomId>) [Esc]`.
+1. Press **`O`** while in the source room. A centered picker appears
+   listing every other room.
+2. Use **Up** / **Down** to highlight the target room. Press **Enter**
+   to confirm. The picker closes; the editor HUD now shows
+   `pair: click source door (target=<id>)`.
 3. Click the tile where the door should sit in the *source* room.
-   The editor warps you to the target room.
-4. Click the tile where the matching door should sit in the *target*
+   The clipboard now holds the source room's **full updated JSON
+   entry** (`"<source-id>": { ... }`) with the new door appended to
+   its `doors[]`. Toast confirms. Editor warps you to the target
    room.
-5. Both snippets are copied to your clipboard, joined together with
-   labels:
-
-   ```
-   // Paste into rooms.<source>.doors:
-   { ...source door... }
-
-   // Paste into rooms.<target>.doors:
-   { ...target door... }
-   ```
+4. Click the tile where the matching door should sit in the *target*
+   room. Clipboard now holds the target room's full updated entry
+   in the same shape. Both fragments are also logged to the console
+   so you can scroll back and grab the source one if you've moved
+   on from the clipboard.
 
    Both doors already have:
-   - matching `targetRoom` / `targetDoor` ids
+   - matching `targetRoom` / `targetDoor` ids cross-referenced
    - `direction` inferred from which edge of the room you clicked
      nearest (top→up, bottom→down, left→left, right→right)
    - sensible `spawnX/Y` (one tile inside each room, in front of the
      door)
 
-You paste each block into its room's `doors` array in `rooms.json`.
-Reload, and the portal is live.
+5. In `src/data/rooms.json`, find each room's `"<id>": {...}` entry
+   and replace it with the matching clipboard fragment. Save. Reload
+   the browser, and the portal is live.
 
 Direction was guessed from the click — if you placed a door in the
 middle of the room, its direction may be off. Edit it in the JSON.

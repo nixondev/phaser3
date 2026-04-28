@@ -146,7 +146,9 @@ blockout* at speed without touching the interaction engine.
 **Shipped:**
 
 - `npm run new-room <id> [w] [h]` CLI script — creates the rooms.json
-  stub + default tilemap (perimeter walls + floor) atomically.
+  stub, default tilemap (perimeter walls + floor), and the
+  `public/music/<id>/` directory (with a `.gitkeep`, ready for
+  `track.mid` / `instruments.sf2` overrides). Atomic.
 - F4 warp picker — Up/Down to select a room, Enter to teleport (full
   transition), Esc to cancel. Player movement is suspended while the
   picker is open.

@@ -24,6 +24,7 @@ const TILE_PX = 16;      // display tile size, used for spawn coords
 const ROOT = path.resolve(__dirname, '..');
 const ROOMS_JSON = path.join(ROOT, 'src/data/rooms.json');
 const TILEMAPS_DIR = path.join(ROOT, 'public/assets/tilemaps');
+const MUSIC_DIR = path.join(ROOT, 'public/music');
 
 function fail(msg) {
   console.error(`new-room: ${msg}`);
@@ -76,6 +77,16 @@ if (fs.existsSync(tilemapPath)) {
 }
 if (!fs.existsSync(TILEMAPS_DIR)) {
   fail(`tilemaps directory missing: ${path.relative(ROOT, TILEMAPS_DIR)}`);
+}
+
+// ── prepare music dir ──
+const musicRoomDir = path.join(MUSIC_DIR, roomId);
+const musicGitkeep = path.join(musicRoomDir, '.gitkeep');
+if (fs.existsSync(musicRoomDir)) {
+  fail(`music dir already exists at ${path.relative(ROOT, musicRoomDir)}`);
+}
+if (!fs.existsSync(MUSIC_DIR)) {
+  fail(`music directory missing: ${path.relative(ROOT, MUSIC_DIR)}`);
 }
 
 // ── build default tilemap ──
@@ -184,9 +195,21 @@ try {
   fail(`could not write rooms.json: ${e.message}`);
 }
 
+// Create the per-room music directory with a .gitkeep so it's tracked in git
+// even though no audio is in it yet. Drop track.mid / instruments.sf2 in here
+// later to override the global fallbacks. If this step fails, leave a warning
+// rather than rolling back the rest — the room still works with global audio.
+try {
+  fs.mkdirSync(musicRoomDir, { recursive: true });
+  fs.writeFileSync(musicGitkeep, '');
+} catch (e) {
+  console.warn(`warning: could not create music dir ${path.relative(ROOT, musicRoomDir)}: ${e.message}`);
+}
+
 console.log(`Created room "${roomId}" (${width}x${height})`);
 console.log(`  - ${path.relative(ROOT, ROOMS_JSON)}  [appended]`);
 console.log(`  - ${path.relative(ROOT, tilemapPath)}  [new]`);
+console.log(`  - ${path.relative(ROOT, musicRoomDir)}/  [new, with .gitkeep]`);
 console.log('');
 console.log('Next steps:');
 console.log('  1. Reload the dev server (or just refresh the page).');
@@ -194,3 +217,5 @@ console.log(`  2. Get into the room by wiring a door from an existing room,`);
 console.log(`     or by using F1 + Shift+Click to teleport into the new tilemap.`);
 console.log('  3. F2 to enter editor, paint your room, X to copy tilemap JSON,');
 console.log(`     paste over public/assets/tilemaps/${roomId}.json.`);
+console.log(`  4. (Optional) Drop track.mid and/or instruments.sf2 into`);
+console.log(`     public/music/${roomId}/ to override the global audio.`);

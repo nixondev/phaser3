@@ -55,8 +55,6 @@ export class RoomEditorManager {
     N: Phaser.Input.Keyboard.Key;
     P: Phaser.Input.Keyboard.Key;
     T: Phaser.Input.Keyboard.Key;
-    COMMA: Phaser.Input.Keyboard.Key;
-    PERIOD: Phaser.Input.Keyboard.Key;
     ENTER: Phaser.Input.Keyboard.Key;
   };
 
@@ -67,13 +65,12 @@ export class RoomEditorManager {
   private pairRoomList: string[] = [];
   private pairTargetIndex: number = 0;
   private pairTargetRoomId: string | null = null;
+  private pairPickerContainer!: Phaser.GameObjects.Container;
+  private pairPickerListText!: Phaser.GameObjects.Text;
   private pairSource: {
-    roomId: string;
-    doorId: string;
-    x: number; y: number;
-    width: number; height: number;
-    direction: string;
-    spawnX: number; spawnY: number;
+    sourceRoomId: string;
+    sourceDoorId: string;
+    targetDoorId: string;
   } | null = null;
   
   constructor(scene: Phaser.Scene, roomManager: RoomManager, stateManager: RoomStateManager) {
@@ -102,16 +99,15 @@ export class RoomEditorManager {
       N: kb.addKey(Phaser.Input.Keyboard.KeyCodes.N),
       P: kb.addKey(Phaser.Input.Keyboard.KeyCodes.P),
       T: kb.addKey(Phaser.Input.Keyboard.KeyCodes.T),
-      COMMA: kb.addKey(Phaser.Input.Keyboard.KeyCodes.COMMA),
-      PERIOD: kb.addKey(Phaser.Input.Keyboard.KeyCodes.PERIOD),
       ENTER: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     };
 
-    this.editorText = this.scene.add.text(10, GAME_CONFIG.HEIGHT - 45, '', {
+    this.editorText = this.scene.add.text(4, GAME_CONFIG.HEIGHT - 50, '', {
       fontSize: '8px',
       color: '#ffff00',
-      backgroundColor: '#000000aa',
-      padding: { x: 4, y: 4 }
+      backgroundColor: '#000000cc',
+      padding: { x: 4, y: 3 },
+      fontFamily: 'monospace'
     }).setScrollFactor(0).setDepth(DEPTH.UI + 200).setVisible(false);
 
     this.tileCursor = this.scene.add.graphics();
@@ -141,6 +137,29 @@ export class RoomEditorManager {
     this.paletteContainer = this.scene.add.container(this.palettePosX, this.palettePosY);
     this.paletteContainer.setScrollFactor(0).setDepth(DEPTH.UI + 210).setVisible(false);
     this.paletteHighlight = this.scene.add.graphics();
+
+    // Door-pair target-room picker (shown during pairPhase === 'pick-target').
+    this.pairPickerContainer = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 30);
+    this.pairPickerContainer.setScrollFactor(0).setDepth(DEPTH.UI + 250).setVisible(false);
+    const pickerBg = this.scene.add.graphics();
+    pickerBg.fillStyle(0x000000, 0.92);
+    pickerBg.fillRect(-95, -8, 190, 200);
+    pickerBg.lineStyle(1, 0xffff00, 1);
+    pickerBg.strokeRect(-95, -8, 190, 200);
+    this.pairPickerContainer.add(pickerBg);
+    const hint = this.scene.add.text(0, 0, 'Pair door target  Up/Down  Enter  Esc', {
+      fontSize: '8px', color: '#ffff00', fontFamily: 'monospace'
+    }).setOrigin(0.5, 0);
+    this.pairPickerContainer.add(hint);
+    this.pairPickerListText = this.scene.add.text(-90, 14, '', {
+      fontSize: '8px', color: '#ffffff', fontFamily: 'monospace'
+    });
+    this.pairPickerContainer.add(this.pairPickerListText);
+  }
+
+  /** GameScene reads this to suspend gameplay input while a modal is open. */
+  isModalOpen(): boolean {
+    return this.pairPhase === 'pick-target';
   }
   
   update(input: InputState): void {
@@ -236,23 +255,44 @@ export class RoomEditorManager {
       this.pairTargetRoomId = this.pairRoomList[0];
       this.placementMode = null; // mutually exclusive with placement
       this.deselect();
+      this.pairPickerContainer.setVisible(true);
+      this.renderPairPickerList();
       return;
     }
 
-    // Picker phase: cycle target room, Enter to confirm
+    // Picker phase: Up/Down to navigate, Enter to confirm
     if (this.pairPhase === 'pick-target') {
-      if (Phaser.Input.Keyboard.JustDown(this.keys.COMMA)) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.UP)) {
         this.pairTargetIndex = (this.pairTargetIndex - 1 + this.pairRoomList.length) % this.pairRoomList.length;
         this.pairTargetRoomId = this.pairRoomList[this.pairTargetIndex];
+        this.renderPairPickerList();
       }
-      if (Phaser.Input.Keyboard.JustDown(this.keys.PERIOD)) {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.DOWN)) {
         this.pairTargetIndex = (this.pairTargetIndex + 1) % this.pairRoomList.length;
         this.pairTargetRoomId = this.pairRoomList[this.pairTargetIndex];
+        this.renderPairPickerList();
       }
       if (Phaser.Input.Keyboard.JustDown(this.keys.ENTER)) {
         this.pairPhase = 'place-source';
+        this.pairPickerContainer.setVisible(false);
       }
     }
+  }
+
+  private renderPairPickerList(): void {
+    const total = this.pairRoomList.length;
+    const window = 18;
+    const half = Math.floor(window / 2);
+    let start = Math.max(0, this.pairTargetIndex - half);
+    const end = Math.min(total, start + window);
+    if (end - start < window) start = Math.max(0, end - window);
+    const lines: string[] = [];
+    for (let i = start; i < end; i++) {
+      const id = this.pairRoomList[i];
+      const marker = i === this.pairTargetIndex ? '>' : ' ';
+      lines.push(`${marker} ${id}`);
+    }
+    this.pairPickerListText.setText(lines.join('\n'));
   }
 
   private cancelPair(): void {
@@ -260,6 +300,7 @@ export class RoomEditorManager {
     this.pairTargetRoomId = null;
     this.pairSource = null;
     this.pairRoomList = [];
+    this.pairPickerContainer.setVisible(false);
   }
 
   private executePairClick(): void {
@@ -274,24 +315,30 @@ export class RoomEditorManager {
     const mapW = map.width;
     const mapH = map.height;
 
-    // Place-source: capture this room's door, warp to target room
+    // Place-source: build source door, emit the source room's full updated
+    // entry, then warp to the target room.
     if (this.pairPhase === 'place-source') {
       if (!this.pairTargetRoomId) { this.cancelPair(); return; }
       const sourceRoomId = this.roomManager.getCurrentRoomId();
       const sourceDoorId = `door-${Math.random().toString(36).slice(2, 7)}`;
+      const targetDoorId = `door-${Math.random().toString(36).slice(2, 7)}`;
       const dir = this.inferEdgeDirection(tileX, tileY, mapW, mapH);
       const door = this.buildDoorRect(tileX, tileY, dir, T);
 
-      this.pairSource = {
-        roomId: sourceRoomId,
-        doorId: sourceDoorId,
+      const sourceDoor = {
+        id: sourceDoorId,
         x: door.x, y: door.y,
         width: door.width, height: door.height,
+        targetRoom: this.pairTargetRoomId,
+        targetDoor: targetDoorId,
         direction: dir,
-        spawnX: door.spawnX,
-        spawnY: door.spawnY
+        spawnX: door.spawnX, spawnY: door.spawnY,
+        requires: []
       };
 
+      this.emitRoomWithNewDoor(sourceRoomId, sourceDoor, 'source');
+
+      this.pairSource = { sourceRoomId, sourceDoorId, targetDoorId };
       this.pairPhase = 'place-target';
       const targetRoom = this.pairTargetRoomId;
       const scene = this.scene as any;
@@ -301,51 +348,58 @@ export class RoomEditorManager {
       return;
     }
 
-    // Place-target: capture target room's door, emit both snippets
+    // Place-target: build target door using the pre-generated cross-ref ids,
+    // emit the target room's full updated entry.
     if (this.pairPhase === 'place-target') {
       const src = this.pairSource;
       const targetRoomId = this.roomManager.getCurrentRoomId();
       if (!src || targetRoomId !== this.pairTargetRoomId) {
-        // Got warped somewhere unexpected; bail safely.
         this.showToast('Pairing aborted (unexpected room).');
         this.cancelPair();
         return;
       }
-      const targetDoorId = `door-${Math.random().toString(36).slice(2, 7)}`;
       const dir = this.inferEdgeDirection(tileX, tileY, mapW, mapH);
       const door = this.buildDoorRect(tileX, tileY, dir, T);
 
-      const sourceSnippet = {
-        id: src.doorId,
-        x: src.x, y: src.y,
-        width: src.width, height: src.height,
-        targetRoom: targetRoomId,
-        targetDoor: targetDoorId,
-        direction: src.direction,
-        spawnX: src.spawnX, spawnY: src.spawnY,
-        requires: []
-      };
-      const targetSnippet = {
-        id: targetDoorId,
+      const targetDoor = {
+        id: src.targetDoorId,
         x: door.x, y: door.y,
         width: door.width, height: door.height,
-        targetRoom: src.roomId,
-        targetDoor: src.doorId,
+        targetRoom: src.sourceRoomId,
+        targetDoor: src.sourceDoorId,
         direction: dir,
         spawnX: door.spawnX, spawnY: door.spawnY,
         requires: []
       };
 
-      const combined =
-        `// Paste into rooms.${src.roomId}.doors:\n` +
-        JSON.stringify(sourceSnippet, null, 2) +
-        `\n\n// Paste into rooms.${targetRoomId}.doors:\n` +
-        JSON.stringify(targetSnippet, null, 2);
-
-      console.log(`[Editor] Door pair:\n${combined}`);
-      this.copyAndToast(combined, `Door pair copied.\nAppend each block to its room's doors[].`);
+      this.emitRoomWithNewDoor(targetRoomId, targetDoor, 'target');
       this.cancelPair();
     }
+  }
+
+  /**
+   * Build the full updated `"<roomId>": { ... }` JSON fragment for a room
+   * with one new door appended to its `doors` array. Copies it to the
+   * clipboard, logs it to the console, and toasts. The user pastes the
+   * entire fragment over the matching entry in `src/data/rooms.json`.
+   */
+  private emitRoomWithNewDoor(roomId: string, newDoor: object, label: 'source' | 'target'): void {
+    const data = RoomManager.getRoomsData();
+    const room = data.rooms[roomId];
+    if (!room) {
+      console.warn(`[Editor] emitRoomWithNewDoor: room "${roomId}" not found`);
+      return;
+    }
+    // Deep clone so we never mutate the live in-memory data.
+    const updated: any = JSON.parse(JSON.stringify(room));
+    updated.doors = [...(updated.doors || []), newDoor];
+    const fragment = `"${roomId}": ${JSON.stringify(updated, null, 2)}`;
+    const human = label === 'source' ? 'Source' : 'Target';
+    console.log(`[Editor] (${label}) Updated room "${roomId}". Replace its entry in src/data/rooms.json:\n${fragment}`);
+    this.copyAndToast(
+      fragment,
+      `${human} room JSON copied.\nReplace "${roomId}" entry in rooms.json.`
+    );
   }
 
   private inferEdgeDirection(tileX: number, tileY: number, mapW: number, mapH: number): string {
@@ -612,22 +666,24 @@ export class RoomEditorManager {
   private updateHUD(): void {
     const map = this.roomManager.getMap();
     const dims = map ? `${map.width}x${map.height}` : '?';
-    let status = '';
+    let statusLine = '';
     if (this.placementMode) {
-      status = `  ARMED: ${this.placementMode.toUpperCase()} (Esc)`;
+      statusLine = `armed ${this.placementMode} (Esc cancel)`;
     } else if (this.pairPhase === 'pick-target') {
-      status = `  PAIR: pick target [, .] ${this.pairTargetRoomId} [Enter] [Esc]`;
+      statusLine = 'pair: pick target room (Up/Down, Enter, Esc)';
     } else if (this.pairPhase === 'place-source') {
-      status = `  PAIR: click this room's door (target=${this.pairTargetRoomId}) [Esc]`;
+      statusLine = `pair: click source door (target=${this.pairTargetRoomId})`;
     } else if (this.pairPhase === 'place-target') {
-      status = `  PAIR: click target's door [Esc]`;
+      statusLine = `pair: click target door in ${this.pairTargetRoomId}`;
     }
-    this.editorText.setText([
-      `Editor: ON | Layer: ${this.currentLayerName} | Tile: ${this.selectedTileIndex} | Map: ${dims}${status}`,
-      `[1-3] Layer | [Q/E] Tile | [P] Palette | [M-Click/Alt] Eyedrop | [L]Paint [R]Erase`,
-      `[X] Export tilemap | [I] place Interact | [O] pair dOor | [N] place Npc | [T] sTamp default`,
-      `[Shift+Arrow] Expand | [Ctrl+Shift+Arrow] Shrink`
-    ]);
+    const lines = [
+      `${this.currentLayerName} layer | tile ${this.selectedTileIndex} | ${dims}`,
+      `1/2/3 layer  Q/E tile  P palette  L-clk paint  R-clk erase`,
+      `X save  I sign  O door-pair  N npc  T stamp`,
+      `Sh+Arrow grow  Ctrl+Sh+Arrow shrink`
+    ];
+    if (statusLine) lines.unshift(`* ${statusLine}`);
+    this.editorText.setText(lines);
     this.updatePreview();
   }
   
@@ -999,5 +1055,6 @@ export class RoomEditorManager {
     this.toastText?.destroy();
     this.paletteContainer?.destroy();
     this.paletteHighlight?.destroy();
+    this.pairPickerContainer?.destroy();
   }
 }
