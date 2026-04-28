@@ -19,6 +19,7 @@ export class RoomEditorManager {
   private editorText: Phaser.GameObjects.Text;
   private tileCursor: Phaser.GameObjects.Graphics;
   private tilePreview: Phaser.GameObjects.Image;
+  private mapOutline: Phaser.GameObjects.Graphics;
 
   private keys: {
     ONE: Phaser.Input.Keyboard.Key;
@@ -75,6 +76,9 @@ export class RoomEditorManager {
       .setDepth(DEPTH.UI + 201)
       .setVisible(false)
       .setScale(1.5 / GAME_CONFIG.ASSET_SCALE); // 1.5x tile size for better visibility
+
+    this.mapOutline = this.scene.add.graphics();
+    this.mapOutline.setDepth(DEPTH.UI + 198).setVisible(false);
   }
   
   update(input: InputState): void {
@@ -88,23 +92,42 @@ export class RoomEditorManager {
       this.editorText.setVisible(this.isActive);
       this.tileCursor.setVisible(this.isActive);
       this.tilePreview.setVisible(this.isActive);
-      
+      this.mapOutline.setVisible(this.isActive);
+
       this.updateLayerOpacities();
       this.updatePreview();
+      this.redrawMapOutline();
 
       if (!this.isActive && this.selectedObject) {
         this.deselect();
       }
     }
-    
+
     if (!this.isActive) return;
 
     this.handleLayerSwitching(input);
     this.handleResize();
+    this.redrawMapOutline();
     this.updateHUD();
     this.handleSelection(justDown);
     this.handleDragging(justUp);
     this.handleTilePainting();
+  }
+
+  private redrawMapOutline(): void {
+    if (!this.isActive) return;
+    const map = this.roomManager.getMap();
+    if (!map) return;
+    const w = map.width * GAME_CONFIG.TILE_SIZE;
+    const h = map.height * GAME_CONFIG.TILE_SIZE;
+    this.mapOutline.clear();
+    // Solid yellow outline at the room boundary
+    this.mapOutline.lineStyle(1, 0xffff00, 0.9);
+    this.mapOutline.strokeRect(0, 0, w, h);
+    // Faint inner border one tile in, to reinforce the bound
+    const inset = GAME_CONFIG.TILE_SIZE;
+    this.mapOutline.lineStyle(1, 0xffff00, 0.25);
+    this.mapOutline.strokeRect(inset, inset, Math.max(0, w - inset * 2), Math.max(0, h - inset * 2));
   }
 
   /**
@@ -146,6 +169,8 @@ export class RoomEditorManager {
       return;
     }
 
+    const oldW = map.width;
+    const oldH = map.height;
     const result = this.roomManager.resizeMap(newW, newH, offX, offY);
     if (!result) return;
 
@@ -153,7 +178,39 @@ export class RoomEditorManager {
     if (typeof scene.refreshAfterResize === 'function') {
       scene.refreshAfterResize(result.pixelOffsetX, result.pixelOffsetY);
     }
-    console.log(`[Editor] Resized map to ${newW}x${newH} (offset ${offX},${offY})`);
+    this.peekAtChangedEdge(oldW, oldH, newW, newH, offX, offY);
+    console.log(`[Editor] Resized map ${oldW}x${oldH} -> ${newW}x${newH} (offset ${offX},${offY})`);
+  }
+
+  /**
+   * Briefly pan the camera so the user can SEE the edge that just changed,
+   * then re-engage normal player-follow. Without this, expansion looks like
+   * a no-op because the new edge is outside the current viewport and the
+   * existing collision wall blocks the player from walking there.
+   */
+  private peekAtChangedEdge(oldW: number, oldH: number, newW: number, newH: number, offX: number, offY: number): void {
+    const cam = this.scene.cameras.main;
+    const T = GAME_CONFIG.TILE_SIZE;
+    let targetX = cam.midPoint.x;
+    let targetY = cam.midPoint.y;
+    if (newW !== oldW) {
+      targetX = offX > 0 ? T : (newW * T) - T;
+    }
+    if (newH !== oldH) {
+      targetY = offY > 0 ? T : (newH * T) - T;
+    }
+
+    const player = (this.scene as any).player;
+    cam.stopFollow();
+    cam.pan(targetX, targetY, 350, 'Sine.easeOut', true);
+    this.scene.time.delayedCall(900, () => {
+      if (!player) return;
+      cam.pan(player.x, player.y, 250, 'Sine.easeInOut', true, (_c, p) => {
+        if (p < 1) return;
+        const scene = this.scene as any;
+        if (typeof scene.refreshCamera === 'function') scene.refreshCamera();
+      });
+    });
   }
 
   private updateHUD(): void {
@@ -497,5 +554,6 @@ export class RoomEditorManager {
     this.editorText?.destroy();
     this.tileCursor?.destroy();
     this.tilePreview?.destroy();
+    this.mapOutline?.destroy();
   }
 }
