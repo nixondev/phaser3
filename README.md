@@ -96,6 +96,7 @@ In editor mode (F2): `1/2/3` switch active layer, `Q/E` cycle tile, left-click p
 
 ## Working on the game
 
+- `EDITORGUIDE.md` — short how-tos for using the in-game editor (start here if you're new).
 - `CLAUDE.md` — design intent and architecture reference.
 - `PARADIGM.md` — design grammar; what puzzle patterns the engine supports.
 - `ROADMAP.md` — build sequence; what's shipped, what to build next.

@@ -1,0 +1,333 @@
+# WARDEN — Editor Guide
+
+Short how-tos for the in-game editor. If you've never used the editor
+before, work through this top-to-bottom; otherwise jump to whichever
+task you want.
+
+Companion docs:
+- `AUTHORING.md` — the same workflow described as a connected recipe.
+- `PARADIGM.md` — the design grammar (what kinds of puzzles you can
+  compose with these tools).
+- `ROADMAP.md` — what's shipped, what's next.
+
+---
+
+## Getting started
+
+### Start the game
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:8080` in a browser. The protagonist spawns in
+their apartment.
+
+### Three modes (toggle with F-keys)
+
+| Key | Mode |
+|-----|------|
+| **F1** | Debug HUD — FPS, room id, player coords, cursor coords, tile GIDs under cursor |
+| **F2** | Editor — paint tiles, place interactables, drag NPCs, resize the room |
+| **F3** | Visual overlays — collision (red walls), doors (cyan if wired, red if unwired/broken), interactable radii (yellow), NPC radii (magenta) |
+
+All three can be on at once.
+
+### Move the protagonist
+
+WASD or arrow keys. The protag is your cursor for everything you'll
+do in the editor — walk anywhere collision allows.
+
+---
+
+## Navigating the city
+
+### Teleport to any room
+
+Press **F4**. Use **Up/Down** to choose a room from the list, **Enter**
+to teleport, **Esc** to cancel. Player movement is paused while the
+picker is open.
+
+### Audit the maze
+
+Press **F5**. Copies a full graph report of every room and every door
+to your clipboard, dumps the same to the browser console, and shows a
+summary toast on screen with door counts:
+`[OK]` / `[TODO]` / `[BROKEN]` / `[ONEWAY]` plus unreachable and orphan
+rooms. The full text is paste-able into a notes file.
+
+### Teleport within a room
+
+Hold **Shift** and click anywhere in the visible viewport (works when
+F1 or F2 is on). The protag teleports to the cursor.
+
+---
+
+## Painting a room
+
+### Enter editor mode
+
+Press **F2**. The yellow map-outline appears, and a HUD strip shows
+at the bottom of the screen.
+
+### Switch the active layer
+
+| Key | Layer |
+|-----|-------|
+| **1** | Ground — floor tiles |
+| **2** | Collision — walls and obstacles |
+| **3** | Above — things that render over the player (lamps, ceiling, signage) |
+
+Inactive layers dim to 20% so the active one stands out.
+
+### Pick a tile
+
+Three ways:
+
+- **P** — toggle the tile palette. A grid of every tileset frame
+  appears in the upper-right. Click any thumbnail to select it. The
+  selected tile gets a yellow outline. Press **P** again to hide.
+- **Q / E** — cycle the selected tile index down / up. Useful for
+  quick small steps without opening the palette.
+- **Middle-click** or **Alt + Left-click** — eyedropper. Picks the
+  tile under the cursor on the active layer. Useful when you see a
+  tile in the room and want to paint more like it.
+
+All three update the same selection. The HUD shows the current tile
+index and a preview.
+
+### Paint and erase
+
+- **Left-click** — paint the selected tile.
+- **Left-click + drag** — paint many tiles.
+- **Right-click** — erase.
+
+### Resize the room
+
+| Key | Action |
+|-----|--------|
+| **Shift + Arrow** | Expand by one tile on that edge |
+| **Ctrl + Shift + Arrow** | Shrink by one tile on that edge |
+
+Right/Down expand keeps existing data anchored top-left. Left/Up
+shifts existing data inward to make room for the new edge. The
+camera briefly pans to the changed edge so you can see the room
+got bigger / smaller.
+
+### Stamp the room with a baseline
+
+Press **T** to overwrite the current room with the default content
+the `npm run new-room` script produces:
+
+- Ground filled entirely with floor.
+- Collision: walls around the perimeter, interior empty.
+- Above cleared.
+
+Useful for re-baselining a room mid-edit when you want to start over
+without losing the room's existence in `rooms.json` or its door
+connections. Git is the undo (`git checkout public/assets/tilemaps/<roomId>.json`).
+
+### Save the tilemap
+
+Press **X**. A yellow toast appears at the top: *"Tilemap copied.
+Paste into: `public/assets/tilemaps/<roomId>.json`"*
+
+Workflow:
+1. Open that file in your IDE.
+2. `Cmd+A` (select all), `Cmd+V` (paste), `Cmd+S` (save).
+3. Refresh the browser to confirm.
+
+If something looks wrong, `git checkout public/assets/tilemaps/<roomId>.json`
+to revert.
+
+---
+
+## Building the maze
+
+### Spawn a brand-new room
+
+In the terminal:
+
+```bash
+npm run new-room <id> [width] [height]
+```
+
+- `id` — lowercase, alphanumeric, dashes (e.g. `attic-3b`).
+- `width` / `height` — tiles, default 20×15.
+
+Creates a stub entry in `rooms.json` and a default tilemap with
+perimeter walls and a floor. Refresh the browser. The room exists.
+
+To get into a brand-new room before any door connects to it:
+- Wire a door from an existing room (next section), **or**
+- Temporarily set `"startRoom": "<your-id>"` in `rooms.json` and
+  refresh.
+
+### Connect two rooms (paired doors)
+
+The maze is built from doors that point at each other. The editor
+handles both ends in one flow:
+
+1. Warp to the *source* room (F4, pick, Enter).
+2. Press **O** to start door-pairing. The HUD shows
+   `PAIR: pick target [, .] <roomId> [Enter] [Esc]`.
+3. Use **`,`** and **`.`** to cycle through every other room. Press
+   **Enter** when the right target is selected.
+4. **Click** the tile where the door should sit in the *source*
+   room. The editor auto-warps you to the target room.
+5. **Click** the tile where the *matching* door should sit in the
+   target room.
+6. Both door snippets are now on your clipboard, joined with labels:
+
+   ```
+   // Paste into rooms.<source>.doors:
+   { ...source door... }
+
+   // Paste into rooms.<target>.doors:
+   { ...target door... }
+   ```
+
+7. Open `src/data/rooms.json` and paste each block into the matching
+   room's `doors` array.
+8. Refresh. Walk through.
+
+Both doors already have:
+- matching `targetRoom` / `targetDoor` ids
+- `direction` inferred from which edge of the room you clicked nearest
+- sensible `spawnX` / `spawnY` (one tile inside each room, in front of
+  the door)
+
+Press **Esc** at any phase to abandon the pair without writing
+anything.
+
+---
+
+## Adding things to a room
+
+### Place an interactable
+
+Anything the player presses **E** on — sign, lock, container, planter,
+recharger, etc.
+
+1. In editor mode, pick the tileset frame you want as the visible
+   sprite using **Q/E**.
+2. Press **I** to arm. HUD shows `ARMED: INTERACTABLE`.
+3. Click the tile where it should sit.
+4. Snippet copies to clipboard. Paste under
+   `rooms.<roomId>.interactables`.
+5. Edit the snippet:
+   - `text` — the dialog string shown when E succeeds.
+   - `type` — `sign`, `item`, `recharge`, etc.
+   - `tileFrame` — the tileset frame for the visible sprite.
+   - `requires` — `[]` for always-works; otherwise items / characters
+     / world flags needed.
+
+### Place an afflicted / NPC
+
+1. Press **N** to arm. HUD shows `ARMED: AFFLICTED`.
+2. Click a tile.
+3. Snippet copies. Paste under `rooms.<roomId>.afflicted`.
+4. Edit `name` and `role`. Reload.
+
+### Move an existing afflicted
+
+In editor mode, **left-click and drag** them. On release, a small
+snippet with the new `x` / `y` copies to clipboard with the path to
+update in `rooms.json`. Apply manually.
+
+---
+
+## Audio tweaks (live mixing)
+
+These shortcuts work whenever F1 or F2 is on:
+
+| Key | Effect |
+|-----|--------|
+| **R** | Cycle reverb profile (city / indoor / sewer / hospital / substation) |
+| **`[`** / **`]`** | Decrease / increase reverb wet mix (5% steps) |
+| **`-`** / **`+`** | Decrease / increase master volume |
+
+When you find a setting you like, copy it back into the room's
+`reverb` / `reverbMix` fields in `rooms.json`. Live changes don't
+persist on reload.
+
+---
+
+## Cheats / debug shortcuts
+
+These work when F1 or F2 is on:
+
+| Key | Effect |
+|-----|--------|
+| **L** | Hot-reload the current room from disk |
+| **U** | Unlock every door in the current room (skip lock checks) |
+| **C** | Cure every afflicted in the current room |
+| **Shift + Click** | Teleport the protag to the cursor |
+
+Use these to skip ahead while testing. They never persist.
+
+---
+
+## The full new-room loop
+
+Putting it all together:
+
+1. `npm run new-room basement` → terminal creates the stub.
+2. Refresh the browser. F4 → arrow to `basement` → Enter. You're in.
+3. F2 to enter editor. Paint Ground (1, then L-click). Paint
+   Collision walls (2). Optionally paint Above-layer details (3).
+4. **X** to copy the tilemap. Paste into
+   `public/assets/tilemaps/basement.json`. Save. Refresh.
+5. **O** to wire a door from an existing room into `basement`.
+   Cycle to `basement`, Enter, click here, click there.
+   Paste both blocks into `rooms.json`. Refresh. Walk through.
+6. **I**, **N** for any signs / locks / NPCs you want. Each pastes
+   into `rooms.json`.
+7. F5 to audit. Look for `[TODO]` or `[BROKEN]` flags on the room's
+   doors. Fix them.
+8. `git diff` to review. `git commit -m "basement"`.
+
+Total time for a basic room with two doors: about 5 minutes.
+
+---
+
+## Recovering from mistakes
+
+The editor never writes to disk — *you* do, by pasting. So git is
+the safety net. Useful commands:
+
+```bash
+git status            # what's changed since the last commit
+git diff              # review the actual changes
+git checkout <file>   # revert one file to its last committed state
+git commit -m "..."   # save the current state
+```
+
+Common rescues:
+
+- **Pasted broken JSON, page won't load** → open browser devtools,
+  look at the error, fix the JSON. Or `git checkout <file>` and try
+  again.
+- **Painted a tile by mistake** → press **Q/E** to find the original
+  tile, or **Alt+Click** an adjacent good tile to eyedropper, then
+  paint over.
+- **Resized the wrong direction** → resize back the other way (no
+  data is permanently lost as long as you didn't save and reload yet).
+- **Locked yourself out of a room** → temporarily set
+  `"startRoom": "<id>"` in `rooms.json`, refresh, walk in.
+
+Commit small, commit often, with short messages. Past you only has
+to be a clear waypoint for future you.
+
+---
+
+## What this guide does NOT cover
+
+- Item state machines, world flags, character switching — these are
+  engine features still being built. See `ROADMAP.md` for what's next.
+- Story content, character names, puzzle paths — those decisions live
+  in your head until you're standing in the room. See `PARADIGM.md`
+  for the design grammar that shapes them.
+- Audio composition (MIDI / SF2 authoring) — see `CLAUDE.md`
+  § Audio Workflow. The audio engine is finished; you compose in any
+  DAW you like.

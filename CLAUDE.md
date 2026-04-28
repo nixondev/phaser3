@@ -2,12 +2,14 @@
 
 Companion docs (read in the right context):
 - This file (`CLAUDE.md`) — design intent and architecture reference.
+- `EDITORGUIDE.md` — short how-tos for the in-game editor (start here
+  if you're new to the tools).
 - `PARADIGM.md` — design grammar: what puzzle patterns the engine
   supports and how to compose paths from them. Reach for this when
   designing a specific puzzle.
 - `ROADMAP.md` — build sequence: what's shipped, what to build next.
-- `AUTHORING.md` — practical recipes for using the in-game editor and
-  authoring rooms.
+- `AUTHORING.md` — practical recipes for the in-game editor and
+  rooms.json authoring loop.
 
 ## Project Overview
 

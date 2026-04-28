@@ -23,6 +23,18 @@ export class RoomEditorManager {
   private toastText!: Phaser.GameObjects.Text;
   private toastTween?: Phaser.Tweens.Tween;
 
+  // Tile palette (P key)
+  private paletteContainer!: Phaser.GameObjects.Container;
+  private paletteHighlight!: Phaser.GameObjects.Graphics;
+  private paletteVisible: boolean = false;
+  private paletteBuilt: boolean = false;
+  private readonly paletteThumb = 14;
+  private readonly paletteCols = 8;
+  private readonly palettePosX = GAME_CONFIG.WIDTH - 116;
+  private readonly palettePosY = 4;
+  private paletteWidth: number = 0;
+  private paletteHeight: number = 0;
+
   private keys: {
     ONE: Phaser.Input.Keyboard.Key;
     TWO: Phaser.Input.Keyboard.Key;
@@ -41,6 +53,8 @@ export class RoomEditorManager {
     I: Phaser.Input.Keyboard.Key;
     O: Phaser.Input.Keyboard.Key;
     N: Phaser.Input.Keyboard.Key;
+    P: Phaser.Input.Keyboard.Key;
+    T: Phaser.Input.Keyboard.Key;
     COMMA: Phaser.Input.Keyboard.Key;
     PERIOD: Phaser.Input.Keyboard.Key;
     ENTER: Phaser.Input.Keyboard.Key;
@@ -86,6 +100,8 @@ export class RoomEditorManager {
       I: kb.addKey(Phaser.Input.Keyboard.KeyCodes.I),
       O: kb.addKey(Phaser.Input.Keyboard.KeyCodes.O),
       N: kb.addKey(Phaser.Input.Keyboard.KeyCodes.N),
+      P: kb.addKey(Phaser.Input.Keyboard.KeyCodes.P),
+      T: kb.addKey(Phaser.Input.Keyboard.KeyCodes.T),
       COMMA: kb.addKey(Phaser.Input.Keyboard.KeyCodes.COMMA),
       PERIOD: kb.addKey(Phaser.Input.Keyboard.KeyCodes.PERIOD),
       ENTER: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
@@ -121,6 +137,10 @@ export class RoomEditorManager {
       .setScrollFactor(0)
       .setDepth(DEPTH.UI + 220)
       .setAlpha(0);
+
+    this.paletteContainer = this.scene.add.container(this.palettePosX, this.palettePosY);
+    this.paletteContainer.setScrollFactor(0).setDepth(DEPTH.UI + 210).setVisible(false);
+    this.paletteHighlight = this.scene.add.graphics();
   }
   
   update(input: InputState): void {
@@ -135,6 +155,12 @@ export class RoomEditorManager {
       this.tileCursor.setVisible(this.isActive);
       this.tilePreview.setVisible(this.isActive);
       this.mapOutline.setVisible(this.isActive);
+      // Palette also hides when the editor closes; reopens on next P press.
+      if (!this.isActive) {
+        this.paletteVisible = false;
+        this.paletteContainer.setVisible(false);
+        this.paletteHighlight.clear();
+      }
 
       this.updateLayerOpacities();
       this.updatePreview();
@@ -151,6 +177,7 @@ export class RoomEditorManager {
     this.handleResize();
     this.handlePlacementToggle();
     this.handlePairing();
+    this.handlePaletteToggle();
     this.redrawMapOutline();
     this.updateHUD();
 
@@ -401,6 +428,88 @@ export class RoomEditorManager {
     this.placementMode = null; // Disarm after one placement
   }
 
+  // ── Tile palette (P key) ───────────────────────────────────────────────
+
+  private handlePaletteToggle(): void {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.P)) {
+      this.paletteVisible = !this.paletteVisible;
+      if (this.paletteVisible && !this.paletteBuilt) this.buildPalette();
+      this.paletteContainer.setVisible(this.paletteVisible);
+      this.paletteHighlight.setVisible(this.paletteVisible);
+      this.updatePaletteHighlight();
+    }
+  }
+
+  /** Build the thumbnail grid lazily on first reveal so the tilemap is loaded. */
+  private buildPalette(): void {
+    const map = this.roomManager.getMap();
+    const tileset = map?.tilesets?.[0];
+    const tileCount = tileset?.total ?? 64;
+    const T = this.paletteThumb;
+    const cols = this.paletteCols;
+    const rows = Math.ceil(tileCount / cols);
+    this.paletteWidth = cols * T + 2;   // +2 for border padding
+    this.paletteHeight = rows * T + 2;
+
+    const bg = this.scene.add.graphics();
+    bg.fillStyle(0x000000, 0.85);
+    bg.fillRect(0, 0, this.paletteWidth, this.paletteHeight);
+    bg.lineStyle(1, 0xffff00, 1);
+    bg.strokeRect(0, 0, this.paletteWidth, this.paletteHeight);
+    this.paletteContainer.add(bg);
+
+    // Native frame size from the spritesheet config: TILE_SIZE * ASSET_SCALE = 64.
+    const frameSize = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
+    const scale = T / frameSize;
+
+    for (let i = 0; i < tileCount; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = 1 + col * T + Math.floor(T / 2);
+      const y = 1 + row * T + Math.floor(T / 2);
+      const thumb = this.scene.add.sprite(x, y, 'tileset-sprites', i);
+      thumb.setScale(scale).setScrollFactor(0);
+      thumb.setInteractive({ useHandCursor: true });
+      thumb.on('pointerdown', () => {
+        this.selectedTileIndex = i + 1; // tilemap GIDs are 1-indexed
+        this.updatePreview();
+        this.updatePaletteHighlight();
+      });
+      this.paletteContainer.add(thumb);
+    }
+
+    this.paletteHighlight.setScrollFactor(0).setDepth(DEPTH.UI + 211);
+    this.paletteBuilt = true;
+  }
+
+  private updatePaletteHighlight(): void {
+    if (!this.paletteVisible || !this.paletteBuilt) {
+      this.paletteHighlight.clear();
+      return;
+    }
+    this.paletteHighlight.clear();
+    if (this.selectedTileIndex < 1) return;
+    const i = this.selectedTileIndex - 1;
+    const T = this.paletteThumb;
+    const col = i % this.paletteCols;
+    const row = Math.floor(i / this.paletteCols);
+    const x = this.palettePosX + 1 + col * T;
+    const y = this.palettePosY + 1 + row * T;
+    this.paletteHighlight.lineStyle(2, 0xffff00, 1);
+    this.paletteHighlight.strokeRect(x, y, T, T);
+  }
+
+  private isPointerOverPalette(): boolean {
+    if (!this.paletteVisible) return false;
+    const p = this.scene.input.activePointer;
+    return (
+      p.x >= this.palettePosX &&
+      p.x < this.palettePosX + this.paletteWidth &&
+      p.y >= this.palettePosY &&
+      p.y < this.palettePosY + this.paletteHeight
+    );
+  }
+
   private redrawMapOutline(): void {
     if (!this.isActive) return;
     const map = this.roomManager.getMap();
@@ -515,8 +624,8 @@ export class RoomEditorManager {
     }
     this.editorText.setText([
       `Editor: ON | Layer: ${this.currentLayerName} | Tile: ${this.selectedTileIndex} | Map: ${dims}${status}`,
-      `[1-3] Layer | [Q/E] Tile | [M-Click/Alt] Eyedrop | [L]Paint [R]Erase`,
-      `[X] Export tilemap | [I] place Interact | [O] pair dOor | [N] place Npc`,
+      `[1-3] Layer | [Q/E] Tile | [P] Palette | [M-Click/Alt] Eyedrop | [L]Paint [R]Erase`,
+      `[X] Export tilemap | [I] place Interact | [O] pair dOor | [N] place Npc | [T] sTamp default`,
       `[Shift+Arrow] Expand | [Ctrl+Shift+Arrow] Shrink`
     ]);
     this.updatePreview();
@@ -608,15 +717,45 @@ export class RoomEditorManager {
     if (input.drop) { // Q
       this.selectedTileIndex = Math.max(0, this.selectedTileIndex - 1);
       this.updatePreview();
+      this.updatePaletteHighlight();
     }
     if (input.action) { // E
       this.selectedTileIndex++;
       this.updatePreview();
+      this.updatePaletteHighlight();
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.X)) {
       this.exportTilemap();
     }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.T)) {
+      this.stampDefaultRoom();
+    }
+  }
+
+  /**
+   * Reset the active room to a baseline: floor everywhere on Ground,
+   * walls around the perimeter on Collision (interior cleared), and
+   * Above cleared. Same content the `npm run new-room` script writes
+   * for fresh rooms — useful for re-baselining a room mid-edit. Git
+   * is the undo button.
+   */
+  private stampDefaultRoom(): void {
+    const map = this.roomManager.getMap();
+    if (!map) return;
+    const w = map.width;
+    const h = map.height;
+    const FLOOR = 3;
+    const WALL = 2;
+
+    map.fill(FLOOR, 0, 0, w, h, false, 'Ground');
+    map.fill(-1, 0, 0, w, h, false, 'Above');
+    map.fill(WALL, 0, 0, w, h, false, 'Collision');
+    if (w > 2 && h > 2) {
+      map.fill(-1, 1, 1, w - 2, h - 2, false, 'Collision');
+    }
+    this.refreshCollision();
+    this.showToast('Room stamped: floor + perimeter walls. Git to undo.');
   }
 
   private buildExportData(): any {
@@ -681,6 +820,12 @@ export class RoomEditorManager {
       this.tileCursor.setVisible(false);
       return;
     }
+    // If the cursor is over the palette overlay, swallow the click so we don't
+    // paint a tile in the world while picking a thumbnail.
+    if (this.isPointerOverPalette()) {
+      this.tileCursor.setVisible(false);
+      return;
+    }
 
     const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
     const tileX = map.worldToTileX(worldPoint.x);
@@ -710,6 +855,7 @@ export class RoomEditorManager {
       if (tile && tile.index !== -1) {
         this.selectedTileIndex = tile.index;
         this.updatePreview();
+        this.updatePaletteHighlight();
       }
     } 
     // Left Click: Paint (only if NOT alt)
@@ -851,5 +997,7 @@ export class RoomEditorManager {
     this.tilePreview?.destroy();
     this.mapOutline?.destroy();
     this.toastText?.destroy();
+    this.paletteContainer?.destroy();
+    this.paletteHighlight?.destroy();
   }
 }

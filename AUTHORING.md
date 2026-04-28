@@ -6,6 +6,8 @@ Every save is manual: editor copies JSON to your clipboard, you paste
 into the named file.
 
 Companion docs:
+- `EDITORGUIDE.md` — short how-tos for someone learning the editor.
+  If you're new, start there.
 - `CLAUDE.md` — design intent (the "why").
 - `PARADIGM.md` — the design grammar; what kinds of puzzles the engine
   supports and how to compose them. Read this before designing a

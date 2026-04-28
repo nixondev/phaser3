@@ -2,9 +2,9 @@
 
 A reference for designing puzzle paths through the city. CLAUDE.md says
 *what the game is*. ROADMAP.md says *what to build next*. AUTHORING.md
-says *how to use the tools*. This file says *what sentences you can write
-with the words the engine gives you* — so you can design specific paths
-without reaching for new mechanics.
+and EDITORGUIDE.md say *how to use the tools*. This file says *what
+sentences you can write with the words the engine gives you* — so you
+can design specific paths without reaching for new mechanics.
 
 If a path you imagine can't be built from the patterns below, it's
 either:

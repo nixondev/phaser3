@@ -138,35 +138,12 @@ both reference it.
 
 ---
 
-## Phase 0 — Town-building tools (current focus)
+## Phase 0 — Town-building tools (DONE)
 
-The immediate goal: lay out the enclosed city as a maze of connected
-rooms, fast. You should be able to add a room and wire it into the
-maze with no file-system surgery and no manual asset registration.
-Puzzles come later; the geography comes first.
+The town-building tools are complete. You can author the *entire town
+blockout* at speed without touching the interaction engine.
 
-Tools, ordered by leverage. Build down this list until laying out a
-room takes ~1 minute and wiring two doors takes one click each.
-
-1. **Tile palette UI.** Replace `Q/E` cycling with a clickable
-   thumbnail grid of all tileset frames. Once the tileset grows, the
-   single biggest UX win for painting.
-
-2. **Default-room stamp.** A `T` key that fills the active room with
-   a baseline (perimeter walls + floor). The `npm run new-room`
-   script already produces this for new rooms; the in-editor stamp
-   is for re-baselining an existing one mid-edit.
-
-3. **Visual flag for unwired doors.** In F3 overlay, draw a door
-   whose `targetRoom` is `TODO` (or whose target doesn't exist) in
-   red instead of cyan. So you can see at a glance what's unfinished
-   as the maze grows.
-
-After Phase 0 you can author the *entire town blockout* at speed,
-without touching the interaction engine. The world becomes the
-sandbox — puzzles fill it later.
-
-**Shipped so far in Phase 0:**
+**Shipped:**
 
 - `npm run new-room <id> [w] [h]` CLI script — creates the rooms.json
   stub + default tilemap (perimeter walls + floor) atomically.
@@ -181,6 +158,19 @@ sandbox — puzzles fill it later.
 - F5 map overview — dumps the full room graph to clipboard + console,
   shows summary stats on screen ([OK]/[TODO]/[BROKEN]/[ONEWAY] door
   counts, unreachable rooms, orphan rooms). Audits the maze.
+- Unwired-door visual flag — in the F3 overlay, doors with TODO or
+  missing targetRoom/targetDoor now render in red instead of cyan.
+  Spot the unfinished portals at a glance as you walk the city.
+- Tile palette UI (`P`) — clickable thumbnail grid of every tileset
+  frame, top-right of the viewport. Select with a click; selection
+  highlights with a yellow outline; Q/E and eyedropper still work
+  and the highlight tracks all selection sources.
+- Default-room stamp (`T`) — re-baselines the active room with the
+  `npm run new-room` content (floor everywhere on Ground, walls on
+  the Collision perimeter, Above cleared). Useful for starting over
+  on a room without losing its `rooms.json` entry or door wiring.
+
+**Next:** Phase 1 — tighten and unify the interaction primitive.
 
 ---
 

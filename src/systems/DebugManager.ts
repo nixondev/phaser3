@@ -301,10 +301,18 @@ export class DebugManager {
       });
     }
     
-    // Draw door zones
-    this.debugGraphics.lineStyle(2, 0x00ffff, 0.8);
+    // Draw door zones — cyan if wired, red if unwired or broken.
+    const allRooms = RoomManager.getRoomsData().rooms;
     this.roomManager.getDoorZones().forEach(zone => {
       const body = zone.body as Phaser.Physics.Arcade.StaticBody;
+      const door: any = zone.getData('doorDef') || {};
+      const targetRoom = door.targetRoom;
+      const targetDoor = door.targetDoor;
+      const broken =
+        targetRoom === 'TODO' || targetDoor === 'TODO' ||
+        !allRooms[targetRoom] ||
+        !(allRooms[targetRoom].doors || []).some((d: any) => d.id === targetDoor);
+      this.debugGraphics.lineStyle(2, broken ? 0xff3333 : 0x00ffff, 0.9);
       this.debugGraphics.strokeRect(body.x, body.y, body.width, body.height);
     });
 
