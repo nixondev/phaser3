@@ -5,7 +5,10 @@ import { debug } from '@utils/Debug';
 import roomsDataRaw from '@/data/rooms.json';
 import { RoomStateManager } from './RoomStateManager';
 
-const roomsData = roomsDataRaw as unknown as RoomsData;
+// Deep clone so runtime mutations (e.g., RoomEditorManager resizes) always
+// take effect — Vite / esbuild may export the imported JSON as a frozen
+// object, which would silently drop our `room.width = newWidth` writes.
+const roomsData = JSON.parse(JSON.stringify(roomsDataRaw)) as RoomsData;
 
 export interface ResizeResult {
   pixelOffsetX: number;
