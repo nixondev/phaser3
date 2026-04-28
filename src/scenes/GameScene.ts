@@ -130,6 +130,16 @@ export class GameScene extends Phaser.Scene {
     const input = this.inputManager.getState();
     this.updateLighting();
 
+    // While the debug warp picker is open, suspend gameplay input so
+    // arrow keys are consumed by the picker, not by the player.
+    if (this.debugManager?.isModalOpen()) {
+      const body = this.player.body as Phaser.Physics.Arcade.Body;
+      body.setVelocity(0, 0);
+      this.player.playIdle();
+      this.debugManager.update(input, delta);
+      return;
+    }
+
     // Flashlight toggle — available in all non-transition states
     if (input.flashlight) {
       this.flashlight.toggle();
@@ -230,6 +240,37 @@ export class GameScene extends Phaser.Scene {
   /** Lighter editor hook: re-applies camera bounds/follow without rebuilding entities. */
   public refreshCamera(): void {
     this.setupCamera();
+  }
+
+  /**
+   * Debug warp: jump to any room's playerSpawn with a transition,
+   * mirroring the door-transition setup path. No-op if already in
+   * the target room or mid-transition.
+   */
+  public warpToRoom(roomId: string): void {
+    if (this.isTransitioning || this.dialogOpen) return;
+    if (this.roomManager.getCurrentRoomId() === roomId) return;
+    if (!this.roomManager.getRoomDef(roomId)) {
+      console.warn(`[Warp] Unknown room id: ${roomId}`);
+      return;
+    }
+    this.isTransitioning = true;
+    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+    this.transitionManager.transition(() => {
+      MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
+      this.roomManager.loadRoom(roomId);
+      this.rsm.visitRoom(roomId);
+      const room = this.roomManager.getCurrentRoomDef();
+      const spawn = room.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
+      this.player.setPosition(spawn.x, spawn.y);
+      this.setupCollisions();
+      this.setupCamera();
+      this.setupLighting();
+      this.createWorldItemSprites();
+      this.spawnAfflicted();
+      if (USE_MIDI_MUSIC) MusicManager.getInstance().playRoomMusic(roomId);
+      this.events.emit('room-changed', room.name);
+    }).then(() => { this.isTransitioning = false; });
   }
 
   // ── Afflicted ───────────────────────────────────────────────────────────

@@ -1,5 +1,14 @@
 # WARDEN — CLAUDE.md
 
+Companion docs (read in the right context):
+- This file (`CLAUDE.md`) — design intent and architecture reference.
+- `PARADIGM.md` — design grammar: what puzzle patterns the engine
+  supports and how to compose paths from them. Reach for this when
+  designing a specific puzzle.
+- `ROADMAP.md` — build sequence: what's shipped, what to build next.
+- `AUTHORING.md` — practical recipes for using the in-game editor and
+  authoring rooms.
+
 ## Project Overview
 
 A 2D top-down exploration / puzzle-box game built with TypeScript + Phaser 3.
@@ -636,34 +645,43 @@ Only after that should the design grow outward.
 
 ## Open Design Decisions
 
-These are the major questions still in motion:
+For the canonical, current list of locked-in mechanics, see
+`ROADMAP.md` § "Locked-in mechanics" — that's the source of truth.
+This section captures only what's still genuinely undecided.
 
-- **Cure mechanic**
-  - Is curing item-based, environmental, contextual, or hybrid?
+### Resolved (see ROADMAP.md for full text)
 
-- **Character switching**
-  - Can switching happen anywhere, or only at safe points / linked bodies / specific stations?
+- Cure mechanic — **item-based**. Stand next to an afflicted, press E
+  with the right cure item, they transition to cured.
+- Character switching — **switching exists between recovered residents**;
+  trigger pattern (anywhere vs. station-locked) settles during play.
+- Inventory model — **per-character 12-slot grid**, drop-and-pickup is
+  the only hand-off mechanism.
+- Dropped item persistence — **globally persistent within a run**,
+  per-room. Items can be deliberately cached.
+- Run reset severity — **respawn-at-house** on death. No full-run-reset
+  for now; harsher mode is a maybe-later.
+- Time semantics — **event-tick is universal**; exactly one bespoke
+  session-active wall-clock deadline allowed.
+- Save/load — **full state snapshot** to localStorage, every save.
+- Feedback when E does nothing — **a generic hint-shaped string**
+  confirming the target is real but never identifying the right item.
+- Visible-target rule — **every published interactable must render
+  with a tileset frame**.
 
-- **Inventory model**
-  - Are all items one-slot?
-  - Are there large items?
-  - Do key items compete with utility items in the same grid?
+### Still open
 
-- **Dropped item persistence**
-  - Are dropped items globally persistent within the run?
-  - Can items be deliberately cached to create route planning?
-
-- **Run reset severity**
-  - Respawn to house vs full-run reset on death
-  - At what point does the game become fair enough for harsher failure?
-
-- **Final exit logic**
-  - Code fragments?
-  - Code derivation from multiple truths?
-  - One gate with many outcomes, or one gate with branching consequences?
-
-- **Soft-doom states**
-  - How clearly should the game communicate that a run is still informative but no longer optimal / winnable?
+- **Final exit logic.** Code fragments? Derivation from multiple
+  truths? One gate with branching consequences? Will be answered by
+  the late-game design when it arrives.
+- **Soft-doom states.** How clearly should the game signal that a run
+  is still informative but no longer winning? Not blocking anything.
+- **Run-reset escalation.** Whether/when the game ever becomes
+  fair enough to support a harsher death model. Re-evaluate after the
+  first full solve loop exists.
+- **Final canonical solve route.** Specific story / characters /
+  items / room geography. Will be authored when the tools support it
+  end-to-end (Phase 8 in `ROADMAP.md`).
 
 ---
 

@@ -11,6 +11,7 @@
     "build-tiles": "node scripts/build-tiles.cjs",
     "regenerate-tiles": "node scripts/regenerate-tiles.cjs",
     "migrate-tiles": "node scripts/migrate-tiles.cjs",
+    "new-room": "node scripts/new-room.cjs",
     "setup": "npm run generate-assets && npm run build-tiles"
   },
   "dependencies": {

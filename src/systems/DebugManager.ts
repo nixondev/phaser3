@@ -31,7 +31,23 @@ export class DebugManager {
     U: Phaser.Input.Keyboard.Key;
     C: Phaser.Input.Keyboard.Key;
     SHIFT: Phaser.Input.Keyboard.Key;
+    F4: Phaser.Input.Keyboard.Key;
+    F5: Phaser.Input.Keyboard.Key;
+    UP: Phaser.Input.Keyboard.Key;
+    DOWN: Phaser.Input.Keyboard.Key;
+    ENTER: Phaser.Input.Keyboard.Key;
+    ESC: Phaser.Input.Keyboard.Key;
   };
+
+  private toastText!: Phaser.GameObjects.Text;
+  private toastTween?: Phaser.Tweens.Tween;
+
+  private warpOverlay!: Phaser.GameObjects.Container;
+  private warpListText!: Phaser.GameObjects.Text;
+  private warpHint!: Phaser.GameObjects.Text;
+  private warpOpen: boolean = false;
+  private warpIndex: number = 0;
+  private warpRoomIds: string[] = [];
   
   constructor(scene: Phaser.Scene, roomManager: RoomManager, stateManager: RoomStateManager) {
     this.scene = scene;
@@ -48,7 +64,13 @@ export class DebugManager {
       L: kb.addKey(Phaser.Input.Keyboard.KeyCodes.L),
       U: kb.addKey(Phaser.Input.Keyboard.KeyCodes.U),
       C: kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
-      SHIFT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT)
+      SHIFT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+      F4: kb.addKey(Phaser.Input.Keyboard.KeyCodes.F4),
+      F5: kb.addKey(Phaser.Input.Keyboard.KeyCodes.F5),
+      UP: kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
+      DOWN: kb.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
+      ENTER: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
+      ESC: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ESC)
     };
     
     // Graphics for visual debug (collision, triggers, etc)
@@ -73,14 +95,48 @@ export class DebugManager {
       fontFamily: 'Verdana, Arial, sans-serif'
     });
     this.overlayContainer.add(this.infoText);
+
+    // Warp picker overlay (centered, hidden by default)
+    this.warpOverlay = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 30);
+    this.warpOverlay.setScrollFactor(0).setDepth(DEPTH.UI + 250).setVisible(false);
+    const warpBg = this.scene.add.graphics();
+    warpBg.fillStyle(0x000000, 0.92);
+    warpBg.fillRect(-95, -8, 190, 200);
+    warpBg.lineStyle(1, 0xffff00, 1);
+    warpBg.strokeRect(-95, -8, 190, 200);
+    this.warpOverlay.add(warpBg);
+    this.warpHint = this.scene.add.text(0, 0, 'Warp to room  [Up/Down] [Enter] [Esc]', {
+      fontSize: '8px', color: '#ffff00', fontFamily: 'Verdana, Arial, sans-serif'
+    }).setOrigin(0.5, 0);
+    this.warpOverlay.add(this.warpHint);
+    this.warpListText = this.scene.add.text(-90, 14, '', {
+      fontSize: '8px', color: '#ffffff', fontFamily: 'Verdana, Arial, sans-serif'
+    });
+    this.warpOverlay.add(this.warpListText);
+
+    this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 6, '', {
+      fontSize: '8px',
+      color: '#000000',
+      backgroundColor: '#ffff66',
+      padding: { x: 5, y: 3 },
+      align: 'center',
+      fontFamily: 'Verdana, Arial, sans-serif'
+    })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(DEPTH.UI + 220)
+      .setAlpha(0);
   }
+
+  /** GameScene reads this to suspend player movement / AI when warp picker is open. */
+  isModalOpen(): boolean { return this.warpOpen; }
   
   update(input: InputState, delta: number): void {
     if (input.debug) {
       this.isVisible = !this.isVisible;
       this.overlayContainer.setVisible(this.isVisible);
     }
-    
+
     if (input.visuals) {
       this.showVisuals = !this.showVisuals;
       this.debugGraphics.setVisible(this.showVisuals);
@@ -93,6 +149,23 @@ export class DebugManager {
       this.isEditorMode = !this.isEditorMode;
       // In a real implementation, this might enable dragging or other tools
       console.log('Editor Mode:', this.isEditorMode ? 'ON' : 'OFF');
+    }
+
+    // Warp picker (F4 toggles; while open, swallow nav keys for selection)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.F4)) {
+      this.toggleWarpPicker();
+    }
+    if (this.warpOpen) {
+      this.handleWarpInput();
+      // Skip the rest of the debug update path so audio shortcuts don't fire while picking.
+      if (this.isVisible) this.updateHUD(delta);
+      if (this.showVisuals) this.drawVisualDebug();
+      return;
+    }
+
+    // Map overview (F5): dump room graph to clipboard + console, summary on screen.
+    if (Phaser.Input.Keyboard.JustDown(this.keys.F5)) {
+      this.dumpMapGraph();
     }
 
     // Shift + Click Teleport (only in debug or editor mode)
@@ -258,9 +331,170 @@ export class DebugManager {
     }
   }
 
+  // ── Map overview (F5) ──────────────────────────────────────────────────
+
+  /**
+   * Build a textual report of the room graph, copy it to the clipboard,
+   * log it to the console, and show an on-screen summary toast. Flags:
+   *   [OK]      target exists and points back to the matching door
+   *   [TODO]    targetRoom or targetDoor is the literal "TODO"
+   *   [MISS]    targetRoom or targetDoor doesn't exist
+   *   [ONEWAY]  target exists but doesn't point back at this door
+   */
+  private dumpMapGraph(): void {
+    const data = RoomManager.getRoomsData();
+    const rooms = data.rooms;
+    const ids = Object.keys(rooms).sort();
+    const lines: string[] = [];
+    let totalDoors = 0;
+    let broken = 0, todo = 0, oneway = 0, ok = 0;
+    const orphans: string[] = []; // rooms with no doors (or no doors leading TO them)
+    const incoming: Record<string, number> = {};
+    for (const id of ids) incoming[id] = 0;
+
+    lines.push(`# Room graph (${ids.length} rooms, startRoom=${data.startRoom})`);
+    lines.push('');
+
+    for (const id of ids) {
+      const r = rooms[id];
+      const doors = r.doors || [];
+      const tag = id === this.roomManager.getCurrentRoomId() ? ' (current)' : '';
+      lines.push(`${id}${tag}  ${r.width}x${r.height}  doors=${doors.length}`);
+      if (!doors.length) orphans.push(id);
+      for (const d of doors) {
+        totalDoors++;
+        let status = '[OK]';
+        const tRoom = (d as any).targetRoom;
+        const tDoor = (d as any).targetDoor;
+        if (tRoom === 'TODO' || tDoor === 'TODO') {
+          status = '[TODO]'; todo++;
+        } else if (!rooms[tRoom]) {
+          status = '[MISS room]'; broken++;
+        } else {
+          incoming[tRoom] = (incoming[tRoom] || 0) + 1;
+          const targetDoors = rooms[tRoom].doors || [];
+          const matching = targetDoors.find((t: any) => t.id === tDoor);
+          if (!matching) {
+            status = '[MISS door]'; broken++;
+          } else if ((matching as any).targetDoor !== d.id || (matching as any).targetRoom !== id) {
+            status = '[ONEWAY]'; oneway++;
+          } else {
+            ok++;
+          }
+        }
+        lines.push(`    ${d.id} -> ${tRoom}:${tDoor}  ${status}`);
+      }
+    }
+
+    // Identify rooms with zero incoming doors (unreachable from elsewhere).
+    const unreachable = ids.filter(id => incoming[id] === 0 && id !== data.startRoom);
+    if (unreachable.length) {
+      lines.push('');
+      lines.push(`# Unreachable rooms (no incoming doors, not startRoom):`);
+      for (const id of unreachable) lines.push(`  ${id}`);
+    }
+    if (orphans.length) {
+      lines.push('');
+      lines.push(`# Rooms with zero doors:`);
+      for (const id of orphans) lines.push(`  ${id}`);
+    }
+
+    const text = lines.join('\n');
+    console.log(text);
+
+    const summary =
+      `Map: ${ids.length}r ${totalDoors}d  ` +
+      `[OK ${ok}] [TODO ${todo}] [BROKEN ${broken}] [ONEWAY ${oneway}]\n` +
+      (unreachable.length ? `${unreachable.length} unreachable  ` : '') +
+      (orphans.length ? `${orphans.length} orphan  ` : '') +
+      `(full report copied + console)`;
+
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch { /* ignore */ }
+    this.showToast(copied ? summary : `${summary}\n(clipboard blocked)`);
+  }
+
+  private showToast(message: string): void {
+    if (!this.toastText) return;
+    this.toastTween?.stop();
+    this.toastText.setText(message);
+    this.toastText.setAlpha(1);
+    this.toastTween = this.scene.tweens.add({
+      targets: this.toastText,
+      alpha: 0,
+      duration: 600,
+      delay: 4500,
+      ease: 'Sine.easeIn'
+    });
+  }
+
+  // ── Warp picker ────────────────────────────────────────────────────────
+
+  private toggleWarpPicker(): void {
+    this.warpOpen = !this.warpOpen;
+    this.warpOverlay.setVisible(this.warpOpen);
+    if (!this.warpOpen) return;
+
+    const rooms = RoomManager.getRoomsData().rooms;
+    this.warpRoomIds = Object.keys(rooms).sort();
+    const currentId = this.roomManager.getCurrentRoomId();
+    const i = this.warpRoomIds.indexOf(currentId);
+    this.warpIndex = i >= 0 ? i : 0;
+    this.renderWarpList();
+  }
+
+  private handleWarpInput(): void {
+    if (!this.warpRoomIds.length) return;
+    if (Phaser.Input.Keyboard.JustDown(this.keys.UP)) {
+      this.warpIndex = (this.warpIndex - 1 + this.warpRoomIds.length) % this.warpRoomIds.length;
+      this.renderWarpList();
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.DOWN)) {
+      this.warpIndex = (this.warpIndex + 1) % this.warpRoomIds.length;
+      this.renderWarpList();
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.ESC)) {
+      this.toggleWarpPicker();
+      return;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.ENTER)) {
+      const target = this.warpRoomIds[this.warpIndex];
+      this.toggleWarpPicker();
+      const scene = this.scene as any;
+      if (typeof scene.warpToRoom === 'function') {
+        scene.warpToRoom(target);
+      }
+    }
+  }
+
+  private renderWarpList(): void {
+    // Show a window of ~18 rooms around the selection so the list scrolls.
+    const total = this.warpRoomIds.length;
+    const window = 18;
+    const half = Math.floor(window / 2);
+    let start = Math.max(0, this.warpIndex - half);
+    const end = Math.min(total, start + window);
+    if (end - start < window) start = Math.max(0, end - window);
+    const lines: string[] = [];
+    for (let i = start; i < end; i++) {
+      const id = this.warpRoomIds[i];
+      const marker = i === this.warpIndex ? '>' : ' ';
+      lines.push(`${marker} ${id}`);
+    }
+    this.warpListText.setText(lines.join('\n'));
+  }
+
   destroy(): void {
+    this.toastTween?.stop();
     this.debugGraphics?.destroy();
     this.infoText?.destroy();
     this.overlayContainer?.destroy();
+    this.warpOverlay?.destroy();
+    this.toastText?.destroy();
   }
 }

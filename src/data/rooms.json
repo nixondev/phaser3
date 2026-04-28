@@ -934,8 +934,7 @@
           "tileFrame": 10
         }
       ]
-    }
-  ,
+    },
     "room-vault": {
       "id": "room-vault",
       "name": "Records Vault",

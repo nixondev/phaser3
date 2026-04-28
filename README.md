@@ -94,6 +94,13 @@ In editor mode (F2): `1/2/3` switch active layer, `Q/E` cycle tile, left-click p
 - `src/data/`: Game data including `rooms.json` which defines the world.
 - `public/assets/`: Tilemaps and sprites.
 
+## Working on the game
+
+- `CLAUDE.md` — design intent and architecture reference.
+- `PARADIGM.md` — design grammar; what puzzle patterns the engine supports.
+- `ROADMAP.md` — build sequence; what's shipped, what to build next.
+- `AUTHORING.md` — practical recipes for the in-game editor.
+
 ## Development Status
 
 The project is currently in active development.
