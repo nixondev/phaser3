@@ -43,8 +43,8 @@ The player wakes alone in a sealed city, discovers the afflicted residents can b
 npm run dev          # Start Vite dev server with HMR at localhost:8080
 npm run build        # Build for production (outputs to /dist)
 npm run preview      # Serve the production build locally
-npm run drums        # Build custom drum patches
-npm run midi         # Generate custom MIDI files
+npm run setup        # Full asset setup (generate maps + build tileset)
+npm run build-tiles  # Compose individual PNGs into tileset.png
 ```
 
 ## Architecture & Systems
@@ -55,9 +55,11 @@ npm run midi         # Generate custom MIDI files
 - **GameScene:** Handles the main game loop, movement, AI, room transitions, and interaction logic.
 - **UIScene:** Manages the HUD, inventory grid, dialog boxes, and interaction prompts.
 - **RoomStateManager:** A singleton managing all persistent game state (inventory, cured residents, unlocked doors, etc.).
-- **MusicManager:** Handles MIDI music and adaptive proximity-based audio layers.
+- **MusicManager:** Singleton managing on-demand loading of MIDI tracks and SoundFonts, supporting parallel proximity layers and spatial effects.
+- **SpessaSynthPlayer:** Modern MIDI synthesis engine wrapper using AudioWorklets for high-fidelity, low-latency audio.
+- **AudioEffectsManager:** Handles environmental reverb (City, Indoor, Sewer, Hospital, Substation) using Web Audio ConvolverNodes.
 
-For details on customizing audio instruments and samples, see the **Customizing Audio Assets** section in `CLAUDE.md`.
+For details on the audio directory structure and how to override assets, see the **Audio Workflow & Asset Structure** section in `CLAUDE.md`.
 
 ### Key Controls
 
@@ -83,7 +85,7 @@ For details on customizing audio instruments and samples, see the **Customizing 
 
 The project is currently in active development.
 - **Completed:** Combat system removal, core data model for cured residents, city map expansion with functional interiors, and basic entity state machines.
-- **Audio:** Custom WebAssembly MIDI synthesis with proximity-based volume layers for entities and environmental hints.
+- **Audio:** Modern SoundFont-based synthesis (SpessaSynth) with atmospheric convolution reverb and dynamic vertical layering, allowing 1:1 parity with the composer's DAW environment.
 - **Current Focus:** Implementing the cure mechanic and expanding environmental storytelling.
 
 ---

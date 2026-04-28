@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
 import { AudioManager } from '@systems/AudioManager';
+import { MusicManager } from '@systems/MusicManager';
 
 export class PauseScene extends Phaser.Scene {
   private volumeText!: Phaser.GameObjects.Text;
@@ -99,6 +100,10 @@ export class PauseScene extends Phaser.Scene {
     const audio = AudioManager.getInstance();
     const newVol = audio.getVolume() + delta;
     audio.setVolume(newVol);
+    // Also update MusicManager/SpessaSynth master volume if needed
+    // MusicManager currently manages its own GainNodes but they are independent of Phaser's volume.
+    // However, if we resume the context on interaction, it helps with autoplay issues.
+    MusicManager.getInstance().resume(); 
     this.updateVolumeUI();
   }
 

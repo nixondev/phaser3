@@ -45,9 +45,10 @@ Retro pixel-art aesthetic at 320×240 resolution with 3× zoom.
 npm run dev          # Vite dev server with HMR at localhost:8080
 npm run build        # tsc + vite build (outputs to /dist)
 npm run preview      # Serve production build
-npm run setup        # Generate placeholder assets (scripts/generate-assets.cjs)
-npm run drums        # Build custom drum patches (scripts/build-drums.cjs)
-npm run midi         # Generate custom MIDI files (scripts/generate-goblins-midi.cjs)
+npm run setup        # Full asset setup (generate maps + build tileset)
+npm run build-tiles  # Compose individual PNGs into tileset.png
+npm run regenerate-tiles # Procedurally recreate base tile source images
+npm run migrate-tiles # Extract combined tileset into individual files
 ```
 
 ---
@@ -97,7 +98,8 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/InputManager.ts` | Keyboard input; `getState()` for continuous, `getTapState()` for menus |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
 | `src/systems/MusicManager.ts` | MIDI music player — singleton; supports parallel proximity layers |
-| `src/lib/Timidity.ts` | WebAssembly MIDI synthesizer wrapper with GainNode control |
+| `src/lib/SpessaSynthPlayer.ts` | Wrapper for SpessaSynth MIDI/SF2 engine. |
+| `src/systems/AudioEffectsManager.ts`| Web Audio reverb and spatial processing. |
 | `src/entities/Player.ts` | Player sprite, movement, animations |
 | `src/entities/Afflicted.ts` | Afflicted resident entity — state machine, wandering AI, agitation |
 | `src/entities/Entity.ts` | Base sprite class (Player extends this) |
@@ -138,12 +140,41 @@ Rooms are defined in `src/data/rooms.json`. `RoomManager` handles the instantiat
 ---
 
 ### Audio & Proximity Systems
+The game uses a modern SoundFont-based MIDI synthesis system via `SpessaSynth`.
 
-The game uses a custom WebAssembly-based MIDI synthesis system via `libtimidity`.
+- **Engine**: SpessaSynth (SoundFont-native, low-latency AudioWorklet).
+- **MusicManager**: Singleton managing background music, room-specific assets, and parallel proximity layers.
+- **AudioEffectsManager**: Manages Web Audio effects like room-specific Reverb using `ConvolverNode`.
+- **Proximity Implementation**: Logic for distance-based volume is in `MusicManager.updateProximityVolume` and called from `Afflicted.ts` or `GameScene.updateClinicProximity`. Note: Proximity players currently use the `global.sf2` SoundFont.
 
-- **MusicManager:** Singleton that handles global background music and parallel "proximity" audio players.
-- **Proximity Layers:** Allows multiple MIDI tracks to play in sync, with volumes controlled by distance to game objects (e.g., Afflicted residents or specific landmarks like the Clinic door).
-- **Custom Assets:** MIDI files are often generated via scripts (e.g., `scripts/generate-goblins-midi.cjs`) to target specific FreePats instruments.
+### Audio Workflow & Asset Structure
+
+#### Directory Structure
+Audio assets are organized by `room-id` (from `rooms.json`) in the `public/music/` directory:
+- `public/music/global.sf2`: The master fallback SoundFont.
+- `public/music/main_theme.mid`: The master fallback MIDI track (also used for the City).
+- `public/music/[room-id]/track.mid`: Room-specific musical theme.
+- `public/music/[room-id]/instruments.sf2`: Room-specific SoundFont override.
+- `public/music/reverb/[type].wav`: Impulse Response files for environmental reverb.
+
+#### Overriding Assets
+1.  **Music**: To change a room's music, place a MIDI file named `track.mid` in `public/music/[room-id]/`.
+2.  **Instruments**: To use specific sounds for a room, place an SF2 file named `instruments.sf2` in `public/music/[room-id]/`.
+3.  **Fallback**: If a room folder is empty (except for `.gitkeep`), the engine uses `global.sf2` and `main_theme.mid`.
+
+#### Setting Room Reverb
+Reverb is currently assigned in `src/scenes/GameScene.ts` (in `create` and `handleDoorTransition`) based on `roomId` patterns. When enabled, it defaults to a **30% wet mix**:
+- `*sewer*` → `sewer`
+- `*apartment*`, `protag-house` → `indoor`
+- `clinic` → `hospital`
+- `utility-substation`, `energy-facility` → `substation`
+- *Default* → `city`
+
+#### Composer Workflow
+1.  Use **Sforzando** (VST) with the `global.sf2` or your specific `.sf2` in your DAW to compose.
+2.  Export the MIDI as `track.mid`.
+3.  (Optional) Use **Polyphone** to strip unused instruments from your `.sf2` to create a lightweight `instruments.sf2` for that specific room.
+4.  Drop files into the corresponding `public/music/[room-id]/` folder.
 
 ---
 
@@ -155,38 +186,15 @@ The project uses a hybrid workflow for environment tiles:
 - **Migration**: To extract a single `tileset.png` back into individual files, use `npm run migrate-tiles`.
 - **Regeneration**: `npm run regenerate-tiles` creates procedural source tiles with transparency support.
 
+#### Visual Notes
+- **Maintenance Tunnel**: The "black rectangle" often seen in narrow rooms like the `substation-tunnel` is the `Exterior Wall` (GID 2). Because the room is narrow and the camera centers on the player, these dark boundary walls are prominent. To change their look, edit `assets_src/tiles/01_exterior_wall.png`.
+
 #### Adding a New Tile
 1. Add a 64x64 PNG to `assets_src/tiles/`.
 2. Name it starting with the desired index (e.g., `50_new_floor.png`).
 3. Run `npm run build-tiles`.
 4. Update `scripts/generate-assets.cjs` if the tile needs to be procedurally placed in rooms.
 
----
-
-### Customizing Audio Assets
-
-The game uses GUS-compatible `.pat` files for instrument synthesis. You can override any MIDI instrument or drum sample.
-
-#### Overriding via freepats.cfg
-1.  **Locate `public/timidity/freepats.cfg`**: This file maps MIDI program numbers (bank) and drum notes (drumset) to `.pat` files.
-2.  **Edit mapping**:
-    - For instruments: `[program_number] [path_to_pat]` (e.g., `0 Tone_000/my_piano.pat`)
-    - For drums: Inside a `drumset 0` block, `[midi_note] [path_to_pat]` (e.g., `35 Custom_000/my_kick.pat`)
-3.  **Volume/Panning**: You can add optional parameters like `amp=120` or `pan=center` to the config line.
-
-#### Converting WAV to .pat
-The project includes a utility to convert 16-bit mono WAV files into GUS patches:
-```bash
-node scripts/wav2pat.cjs -n <midi_note> <input.wav> <output.pat>
-```
-- `-n`: Sets the root MIDI note (default 60/Middle C). For drums, this should match the GM drum note.
-- **Requirements**: WAV must be 16-bit PCM, mono.
-
-#### Batch Conversion (Drums)
-`scripts/build-drums.cjs` automates converting a folder of drum samples:
-1.  Uses `ffmpeg` to normalize/downsample (44100Hz mono).
-2.  Calls `wav2pat.cjs` for each sample.
-3.  Backs up and rewrites `freepats.cfg` with the new `Custom_000/` paths.
 
 ---
 

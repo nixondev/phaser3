@@ -69,6 +69,8 @@ export interface RoomDefinition {
   interactables?: InteractableDef[];
   afflicted?: AfflictedDef[];
   music?: string;
+  reverb?: string;
+  reverbMix?: number;
   dark?: boolean;
 }
 
@@ -87,4 +89,8 @@ export interface InputState {
   inventory: boolean;
   drop: boolean;
   flashlight: boolean;
+  debug: boolean;
+  editor: boolean;
+  visuals: boolean;
 }
+

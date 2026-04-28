@@ -23,6 +23,14 @@ export class RoomStateManager {
 
   // ── Rooms ───────────────────────────────────────────────────────────────
 
+  getVisitedCount(): number { return this.visitedRooms.size; }
+
+  getUnlockedCount(): number { return this.unlockedDoors.size; }
+
+  getCuredCount(): number { return this.curedResidents.size; }
+
+  getPoweredCount(): number { return this.poweredDevices.size; }
+
   visitRoom(roomId: string): void {
     this.visitedRooms.add(roomId);
     this.currentRoom = roomId;
@@ -178,3 +186,4 @@ export class RoomStateManager {
     this.tutorialShown = false;
   }
 }
+

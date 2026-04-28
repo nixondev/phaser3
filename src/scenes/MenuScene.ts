@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
 import { AudioManager } from '@systems/AudioManager';
+import { MusicManager } from '@systems/MusicManager';
 
 export class MenuScene extends Phaser.Scene {
   private started = false;
@@ -52,12 +53,16 @@ export class MenuScene extends Phaser.Scene {
 
     this.input.keyboard!.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
-    
+    this.input.on('pointerdown', () => this.resumeAudio());
   }
 
+  private resumeAudio(): void {
+    MusicManager.getInstance().resume();
+  }
 
   private startGame(): void {
     if (this.started) return;
+    this.resumeAudio();
     this.started = true;
     this.scene.start(SCENES.GAME);
     this.scene.launch(SCENES.UI);

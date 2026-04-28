@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { debug } from '@utils/Debug';
+import { MusicManager } from './MusicManager';
+import { USE_MIDI_MUSIC } from '@utils/Constants';
 
 export class AudioManager {
   private static instance: AudioManager;
@@ -28,6 +30,9 @@ export class AudioManager {
     this.volume = Phaser.Math.Clamp(value, 0, 1);
     if (this.scene) {
       this.scene.sound.volume = this.volume;
+    }
+    if (USE_MIDI_MUSIC) {
+      MusicManager.getInstance().setVolume(this.volume);
     }
     debug('User volume set to:', this.volume);
   }

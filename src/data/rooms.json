@@ -378,6 +378,7 @@
       "width": 20,
       "height": 15,
       "music": "bgm-main",
+      "reverb": "indoor",
       "playerSpawn": {
         "x": 248,
         "y": 184
@@ -498,6 +499,18 @@
           "direction": "up",
           "spawnX": 208,
           "spawnY": 48
+        },
+        {
+          "id": "house-c-garden-door",
+          "x": 272,
+          "y": 256,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "room-garden",
+          "targetDoor": "garden-house-c-exit",
+          "direction": "down",
+          "spawnX": 288,
+          "spawnY": 240
         }
       ],
       "interactables": [
@@ -530,6 +543,8 @@
       "tilemapPath": "assets/tilemaps/clinic.json",
       "width": 20,
       "height": 15,
+      "reverb": "hospital",
+      "reverbMix": 0.4,
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -595,6 +610,30 @@
           "direction": "up",
           "spawnX": 160,
           "spawnY": 48
+        },
+        {
+          "id": "records-vault-door",
+          "x": 240,
+          "y": 160,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "room-vault",
+          "targetDoor": "vault-records-exit",
+          "direction": "down",
+          "spawnX": 248,
+          "spawnY": 144
+        },
+        {
+          "id": "records-library-door",
+          "x": 48,
+          "y": 160,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "room-library",
+          "targetDoor": "library-records-exit",
+          "direction": "down",
+          "spawnX": 64,
+          "spawnY": 144
         }
       ]
     },
@@ -606,6 +645,7 @@
       "width": 20,
       "height": 15,
       "music": "bgm-main",
+      "reverb": "substation",
       "playerSpawn": {
         "x": 160,
         "y": 64
@@ -730,6 +770,18 @@
           "direction": "up",
           "spawnX": 160,
           "spawnY": 48
+        },
+        {
+          "id": "east-block-lobby-door",
+          "x": 144,
+          "y": 160,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "room-entrance",
+          "targetDoor": "entrance-east-block-exit",
+          "direction": "down",
+          "spawnX": 160,
+          "spawnY": 144
         }
       ]
     },
@@ -778,6 +830,7 @@
       "tilemapPath": "assets/tilemaps/substation-tunnel.json",
       "width": 40,
       "height": 10,
+      "reverb": "sewer",
       "dark": true,
       "playerSpawn": {
         "x": 40,
@@ -869,6 +922,111 @@
           "type": "sign",
           "text": "The skeletal remains of someone who didn't make it out. They're clutching a faded photograph.",
           "tileFrame": 10
+        }
+      ]
+    }
+  ,
+    "room-vault": {
+      "id": "room-vault",
+      "name": "Records Vault",
+      "mapKey": "room-vault",
+      "tilemapPath": "assets/tilemaps/room-vault.json",
+      "width": 15,
+      "height": 10,
+      "playerSpawn": {
+        "x": 112,
+        "y": 80
+      },
+      "doors": [
+        {
+          "id": "vault-records-exit",
+          "x": 96,
+          "y": 0,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "records-office",
+          "targetDoor": "records-vault-door",
+          "direction": "up",
+          "spawnX": 248,
+          "spawnY": 144
+        }
+      ]
+    },
+    "room-library": {
+      "id": "room-library",
+      "name": "Archive Library",
+      "mapKey": "room-library",
+      "tilemapPath": "assets/tilemaps/room-library.json",
+      "width": 30,
+      "height": 20,
+      "playerSpawn": {
+        "x": 240,
+        "y": 80
+      },
+      "doors": [
+        {
+          "id": "library-records-exit",
+          "x": 224,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "records-office",
+          "targetDoor": "records-library-door",
+          "direction": "up",
+          "spawnX": 64,
+          "spawnY": 144
+        }
+      ]
+    },
+    "room-garden": {
+      "id": "room-garden",
+      "name": "Community Garden",
+      "mapKey": "room-garden",
+      "tilemapPath": "assets/tilemaps/room-garden.json",
+      "width": 25,
+      "height": 12,
+      "playerSpawn": {
+        "x": 192,
+        "y": 80
+      },
+      "doors": [
+        {
+          "id": "garden-house-c-exit",
+          "x": 192,
+          "y": 176,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "house-c",
+          "targetDoor": "house-c-garden-door",
+          "direction": "down",
+          "spawnX": 288,
+          "spawnY": 240
+        }
+      ]
+    },
+    "room-entrance": {
+      "id": "room-entrance",
+      "name": "East Block Lobby",
+      "mapKey": "room-entrance",
+      "tilemapPath": "assets/tilemaps/room-entrance.json",
+      "width": 20,
+      "height": 15,
+      "playerSpawn": {
+        "x": 160,
+        "y": 80
+      },
+      "doors": [
+        {
+          "id": "entrance-east-block-exit",
+          "x": 144,
+          "y": 0,
+          "width": 32,
+          "height": 16,
+          "targetRoom": "east-block",
+          "targetDoor": "east-block-lobby-door",
+          "direction": "up",
+          "spawnX": 160,
+          "spawnY": 144
         }
       ]
     }

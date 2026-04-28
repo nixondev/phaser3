@@ -111,6 +111,16 @@ export class RoomManager {
     return roomsData.rooms[this.currentRoomId];
   }
 
+  getMap(): Phaser.Tilemaps.Tilemap | null { return this.currentMap; }
+
+  getGroundLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.ground || null; }
+
+  getAboveLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.above || null; }
+
+  getCurrentRoomId(): string {
+    return this.currentRoomId;
+  }
+
   getRoomDef(roomId: string): RoomDefinition {
     return roomsData.rooms[roomId];
   }
@@ -128,3 +138,4 @@ export class RoomManager {
     return room.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
   }
 }
+

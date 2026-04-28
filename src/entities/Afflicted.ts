@@ -56,7 +56,7 @@ export class Afflicted extends Entity {
       this.stopMovement();
     }
 
-    MusicManager.getInstance().playProximity(this.afflictedId, 'goblins');
+    MusicManager.getInstance().playProximity(this.afflictedId, 'goblins', 'city-street');
   }
 
   private setupVisuals(): void {
@@ -138,7 +138,11 @@ export class Afflicted extends Entity {
 
     // ── Proximity Sound ─────────────────────────────────────────────────────
     const vol = Math.max(0, 1 - dist / SOUND_RADIUS);
-    MusicManager.getInstance().updateProximityVolume(this.afflictedId, vol);
+    if (vol > 0) {
+      MusicManager.getInstance().updateProximityVolume(this.afflictedId, vol);
+    } else {
+      MusicManager.getInstance().updateProximityVolume(this.afflictedId, 0);
+    }
 
     // ── State transitions ────────────────────────────────────────────────────
     if (this.status === 'wandering' && dist < AGITATE_RANGE) {

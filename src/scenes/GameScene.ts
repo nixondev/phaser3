@@ -7,6 +7,8 @@ import { InputManager } from '@systems/InputManager';
 import { RoomManager } from '@systems/RoomManager';
 import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
+import { DebugManager } from '@systems/DebugManager';
+import { RoomEditorManager } from '@systems/RoomEditorManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus } from '@/types';
@@ -38,6 +40,8 @@ export class GameScene extends Phaser.Scene {
 
   // Flashlight (persistent across rooms — always available)
   private flashlight!: Flashlight;
+  private debugManager!: DebugManager;
+  private editorManager!: RoomEditorManager;
 
   // Inventory
   private inventoryMode = false;
@@ -60,6 +64,8 @@ export class GameScene extends Phaser.Scene {
     this.rsm = RoomStateManager.getInstance();
     this.afflictedGroup = this.physics.add.group();
     this.flashlight = new Flashlight(this);
+    this.debugManager = new DebugManager(this, this.roomManager, this.rsm);
+    this.editorManager = new RoomEditorManager(this, this.roomManager, this.rsm);
 
     // Always hand AudioManager the new scene (keeps volume control working).
     // Stop title MP3 before starting in-game music.
@@ -73,7 +79,9 @@ export class GameScene extends Phaser.Scene {
     const roomDef = this.roomManager.getCurrentRoomDef();
 
     if (USE_MIDI_MUSIC) {
-      MusicManager.getInstance().play('main_theme');
+      const music = MusicManager.getInstance();
+      const roomId = this.roomManager.getCurrentRoomId();
+      music.playRoomMusic(roomId);
     } else if (roomDef.music) {
       AudioManager.getInstance().playMusic(roomDef.music);
     }
@@ -176,10 +184,27 @@ export class GameScene extends Phaser.Scene {
     this.checkInteractables(input);
     this.updateClinicProximity();
 
+    this.debugManager.update(input, delta);
+    this.editorManager.update(input);
+
     if (input.menu) {
       this.scene.pause();
       this.scene.launch(SCENES.PAUSE);
     }
+  }
+
+  public reloadRoom(): void {
+    const roomId = this.roomManager.getCurrentRoomId();
+    this.transitionManager.transition(() => {
+      this.roomManager.loadRoom(roomId);
+      this.setupCollisions();
+      this.setupCamera();
+      this.createWorldItemSprites();
+      this.spawnAfflicted();
+      
+      const roomDef = this.roomManager.getCurrentRoomDef();
+      this.events.emit('room-changed', roomDef.name);
+    });
   }
 
   // ── Afflicted ───────────────────────────────────────────────────────────
@@ -273,7 +298,7 @@ export class GameScene extends Phaser.Scene {
 
     const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, CLINIC_DOOR_X, CLINIC_DOOR_Y);
     if (dist < CLINIC_SOUND_DIST) {
-      MusicManager.getInstance().playProximity(CLINIC_SOUND_ID, 'miditheme-hint');
+      MusicManager.getInstance().playProximity(CLINIC_SOUND_ID, 'miditheme-hint', 'city-street');
       const vol = Math.max(0, 1 - dist / CLINIC_SOUND_DIST);
       MusicManager.getInstance().updateProximityVolume(CLINIC_SOUND_ID, vol * 0.6); // Slightly quieter than main theme
     } else {
@@ -677,7 +702,23 @@ export class GameScene extends Phaser.Scene {
       this.createWorldItemSprites();
       this.spawnAfflicted();
 
-      if (!USE_MIDI_MUSIC) {
+      if (USE_MIDI_MUSIC) {
+        const music = MusicManager.getInstance();
+        const currentRoomId = doorDef.targetRoom;
+        music.playRoomMusic(currentRoomId);
+        // Set reverb based on room type
+        if (currentRoomId.includes('sewer')) {
+          music.setReverb('sewer');
+        } else if (currentRoomId.includes('apartment') || currentRoomId === 'protag-house') {
+          music.setReverb('indoor');
+        } else if (currentRoomId === 'clinic') {
+          music.setReverb('hospital');
+        } else if (currentRoomId === 'utility-substation' || currentRoomId === 'energy-facility') {
+          music.setReverb('substation');
+        } else {
+          music.setReverb('city');
+        }
+      } else {
         const roomDef = this.roomManager.getCurrentRoomDef();
         if (roomDef.music) {
           AudioManager.getInstance().playMusic(roomDef.music);
