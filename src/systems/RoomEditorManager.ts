@@ -138,6 +138,8 @@ export class RoomEditorManager {
     this.paletteContainer.setScrollFactor(0).setDepth(DEPTH.UI + 210).setVisible(false);
     this.paletteHighlight = this.scene.add.graphics();
 
+    this.scene.input.on('wheel', this.onWheel, this);
+
     // Door-pair target-room picker (shown during pairPhase === 'pick-target').
     this.pairPickerContainer = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 30);
     this.pairPickerContainer.setScrollFactor(0).setDepth(DEPTH.UI + 250).setVisible(false);
@@ -414,21 +416,22 @@ export class RoomEditorManager {
     return 'right';
   }
 
+  /** Always emit a single 16x16 door zone — one tile. Place two side-by-side
+   *  in `rooms.json` if you want a 2-tile-wide opening. Direction only
+   *  affects which side of the door the player lands on (`spawnX/Y`). */
   private buildDoorRect(tileX: number, tileY: number, direction: string, T: number)
     : { x: number; y: number; width: number; height: number; spawnX: number; spawnY: number } {
-    if (direction === 'up' || direction === 'down') {
-      const x = tileX * T;
-      const y = tileY * T;
-      const width = 32, height = 16;
-      const spawnX = x + Math.floor(width / 2);
-      const spawnY = direction === 'up' ? y + height + T : y - T;
-      return { x, y, width, height, spawnX, spawnY };
-    }
     const x = tileX * T;
     const y = tileY * T;
-    const width = 16, height = 32;
-    const spawnX = direction === 'left' ? x + width + T : x - T;
-    const spawnY = y + Math.floor(height / 2);
+    const width = T;
+    const height = T;
+    const cx = x + Math.floor(T / 2);
+    const cy = y + Math.floor(T / 2);
+    let spawnX = cx, spawnY = cy;
+    if (direction === 'up')    { spawnY = y + T + T; spawnX = cx; }
+    if (direction === 'down')  { spawnY = y - T;     spawnX = cx; }
+    if (direction === 'left')  { spawnX = x + T + T; spawnY = cy; }
+    if (direction === 'right') { spawnX = x - T;     spawnY = cy; }
     return { x, y, width, height, spawnX, spawnY };
   }
 
@@ -551,6 +554,18 @@ export class RoomEditorManager {
     const y = this.palettePosY + 1 + row * T;
     this.paletteHighlight.lineStyle(2, 0xffff00, 1);
     this.paletteHighlight.strokeRect(x, y, T, T);
+  }
+
+  /** Total valid GID across all tilesets in the current map. Phaser's
+   * PutTileAt does `tiles[index][2]` and crashes on out-of-range indices,
+   * so any code that touches `selectedTileIndex` should clamp through here.
+   */
+  private maxTileIndex(): number {
+    const map = this.roomManager.getMap();
+    if (!map) return 0;
+    let total = 0;
+    for (const ts of map.tilesets) total += ts.total;
+    return total;
   }
 
   private isPointerOverPalette(): boolean {
@@ -776,7 +791,7 @@ export class RoomEditorManager {
       this.updatePaletteHighlight();
     }
     if (input.action) { // E
-      this.selectedTileIndex++;
+      this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
       this.updatePreview();
       this.updatePaletteHighlight();
     }
@@ -916,10 +931,26 @@ export class RoomEditorManager {
     } 
     // Left Click: Paint (only if NOT alt)
     else if (pointer.leftButtonDown()) {
+      const max = this.maxTileIndex();
+      const safeIndex = this.selectedTileIndex > max ? max : this.selectedTileIndex;
+      if (safeIndex !== this.selectedTileIndex) this.selectedTileIndex = safeIndex;
       const currentTile = map.getTileAt(tileX, tileY, true, this.currentLayerName);
-      if (currentTile && currentTile.index !== this.selectedTileIndex) {
-        map.putTileAt(this.selectedTileIndex, tileX, tileY, true, this.currentLayerName);
-        changed = true;
+      if (currentTile && currentTile.index !== safeIndex) {
+        // Phaser's PutTileAt crashes when index === 0 (it tries
+        // tilemap.tiles[0][2] which is undefined). Route 0 to removeTileAt.
+        if (safeIndex <= 0) {
+          if (currentTile.index !== -1) {
+            map.removeTileAt(tileX, tileY, true, true, this.currentLayerName);
+            changed = true;
+          }
+        } else {
+          try {
+            map.putTileAt(safeIndex, tileX, tileY, true, this.currentLayerName);
+            changed = true;
+          } catch (e) {
+            console.warn('[Editor] putTileAt failed', { safeIndex, tileX, tileY, layer: this.currentLayerName, err: e });
+          }
+        }
       }
     }
 
@@ -1045,7 +1076,19 @@ export class RoomEditorManager {
     this.tilePreview.setPosition(this.editorText.x + 145, this.editorText.y + 6);
   }
 
+  private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown[], _dx: number, dy: number): void {
+    if (!this.isActive) return;
+    if (dy > 0) {
+      this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
+    } else if (dy < 0) {
+      this.selectedTileIndex = Math.max(0, this.selectedTileIndex - 1);
+    }
+    this.updatePreview();
+    this.updatePaletteHighlight();
+  }
+
   destroy(): void {
+    this.scene.input.off('wheel', this.onWheel, this);
     this.deselect();
     this.toastTween?.stop();
     this.editorText?.destroy();

@@ -142,10 +142,10 @@ const tilemap = {
     firstgid: 1,
     name: 'tileset',
     tilewidth: 64, tileheight: 64,
-    tilecount: 64,
+    tilecount: 128,
     columns: 8,
     image: 'tileset.png',
-    imagewidth: 512, imageheight: 512,
+    imagewidth: 512, imageheight: 1024,
     margin: 0, spacing: 0
   }]
 };

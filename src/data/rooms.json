@@ -16,9 +16,9 @@
       "doors": [
         {
           "id": "city-house-b-door",
-          "x": 368,
+          "x": 376,
           "y": 960,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "house-b",
           "targetDoor": "house-b-exit",
@@ -32,9 +32,9 @@
         },
         {
           "id": "city-house-door",
-          "x": 752,
+          "x": 760,
           "y": 960,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "protag-house",
           "targetDoor": "house-exit",
@@ -44,9 +44,9 @@
         },
         {
           "id": "city-house-c-door",
-          "x": 1136,
+          "x": 1144,
           "y": 960,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "house-c",
           "targetDoor": "house-c-exit",
@@ -60,9 +60,9 @@
         },
         {
           "id": "city-clinic-door",
-          "x": 160,
+          "x": 168,
           "y": 304,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "clinic",
           "targetDoor": "clinic-exit",
@@ -72,9 +72,9 @@
         },
         {
           "id": "city-records-door",
-          "x": 160,
+          "x": 168,
           "y": 528,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "records-office",
           "targetDoor": "records-exit",
@@ -88,9 +88,9 @@
         },
         {
           "id": "city-utility-door",
-          "x": 160,
+          "x": 168,
           "y": 848,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "utility-substation",
           "targetDoor": "utility-exit",
@@ -104,9 +104,9 @@
         },
         {
           "id": "city-market-door",
-          "x": 1280,
+          "x": 1288,
           "y": 304,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "market",
           "targetDoor": "market-exit",
@@ -120,9 +120,9 @@
         },
         {
           "id": "city-ration-door",
-          "x": 1312,
+          "x": 1320,
           "y": 528,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "ration-office",
           "targetDoor": "ration-exit",
@@ -136,9 +136,9 @@
         },
         {
           "id": "city-east-block-door",
-          "x": 1312,
+          "x": 1320,
           "y": 848,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "east-block",
           "targetDoor": "east-block-exit",
@@ -152,9 +152,9 @@
         },
         {
           "id": "city-laundromat-door",
-          "x": 928,
+          "x": 936,
           "y": 960,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "laundromat",
           "targetDoor": "laundromat-exit",
@@ -168,9 +168,9 @@
         },
         {
           "id": "city-depot-door",
-          "x": 1312,
+          "x": 1320,
           "y": 960,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "depot",
           "targetDoor": "depot-exit",
@@ -184,9 +184,9 @@
         },
         {
           "id": "city-apt-4a-door",
-          "x": 128,
+          "x": 136,
           "y": 960,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "apt-4a",
           "targetDoor": "apt-4a-exit",
@@ -387,9 +387,9 @@
       "doors": [
         {
           "id": "house-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
@@ -444,9 +444,9 @@
       "doors": [
         {
           "id": "house-b-exit",
-          "x": 128,
+          "x": 136,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-house-b-door",
@@ -493,9 +493,9 @@
       "doors": [
         {
           "id": "house-c-exit",
-          "x": 192,
+          "x": 200,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-house-c-door",
@@ -505,9 +505,9 @@
         },
         {
           "id": "house-c-garden-door",
-          "x": 272,
+          "x": 280,
           "y": 256,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "room-garden",
           "targetDoor": "garden-house-c-exit",
@@ -555,9 +555,9 @@
       "doors": [
         {
           "id": "clinic-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-clinic-door",
@@ -605,9 +605,9 @@
       "doors": [
         {
           "id": "records-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-records-door",
@@ -629,9 +629,9 @@
         },
         {
           "id": "records-library-door",
-          "x": 48,
+          "x": 56,
           "y": 160,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "room-library",
           "targetDoor": "library-records-exit",
@@ -657,9 +657,9 @@
       "doors": [
         {
           "id": "utility-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-utility-door",
@@ -714,9 +714,9 @@
       "doors": [
         {
           "id": "market-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-market-door",
@@ -741,15 +741,28 @@
       "doors": [
         {
           "id": "ration-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-ration-door",
           "direction": "up",
           "spawnX": 160,
           "spawnY": 48
+        },
+        {
+          "id": "door-zlei6",
+          "x": 48,
+          "y": 72,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "basement",
+          "targetDoor": "door-ndhrz",
+          "direction": "left",
+          "spawnX": 80,
+          "spawnY": 80,
+          "requires": []
         }
       ]
     },
@@ -768,9 +781,9 @@
       "doors": [
         {
           "id": "east-block-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-east-block-door",
@@ -780,9 +793,9 @@
         },
         {
           "id": "east-block-lobby-door",
-          "x": 144,
+          "x": 152,
           "y": 160,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "room-entrance",
           "targetDoor": "entrance-east-block-exit",
@@ -807,9 +820,9 @@
       "doors": [
         {
           "id": "laundromat-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-laundromat-door",
@@ -886,9 +899,9 @@
       "doors": [
         {
           "id": "depot-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-depot-door",
@@ -913,9 +926,9 @@
       "doors": [
         {
           "id": "apt-4a-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "city-street",
           "targetDoor": "city-apt-4a-door",
@@ -978,9 +991,9 @@
       "doors": [
         {
           "id": "library-records-exit",
-          "x": 224,
+          "x": 232,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "records-office",
           "targetDoor": "records-library-door",
@@ -1005,9 +1018,9 @@
       "doors": [
         {
           "id": "garden-house-c-exit",
-          "x": 192,
+          "x": 200,
           "y": 176,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "house-c",
           "targetDoor": "house-c-garden-door",
@@ -1032,9 +1045,9 @@
       "doors": [
         {
           "id": "entrance-east-block-exit",
-          "x": 144,
+          "x": 152,
           "y": 0,
-          "width": 32,
+          "width": 16,
           "height": 16,
           "targetRoom": "east-block",
           "targetDoor": "east-block-lobby-door",
@@ -1056,7 +1069,21 @@
         "x": 168,
         "y": 120
       },
-      "doors": [],
+      "doors": [
+        {
+          "id": "door-ndhrz",
+          "x": 88,
+          "y": 64,
+          "width": 16,
+          "height": 16,
+          "targetRoom": "ration-office",
+          "targetDoor": "door-zlei6",
+          "direction": "up",
+          "spawnX": 96,
+          "spawnY": 96,
+          "requires": []
+        }
+      ],
       "interactables": [],
       "afflicted": []
     }

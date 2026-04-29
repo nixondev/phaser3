@@ -209,6 +209,11 @@ The doors already have:
 - `direction` inferred from which edge of the room you clicked nearest
 - sensible `spawnX` / `spawnY` (one tile inside each room, in front of
   the door)
+- size **16×16** — a single tile. If you want a 2-tile-wide opening,
+  run the pair flow once, paste, then run it again with a click on the
+  adjacent tile to create a second door right next to the first.
+  Direction only affects which side of the doorway the player lands on
+  when they pass through; size stays one tile per door.
 
 **Workflow:** open `src/data/rooms.json`. After each click, find that
 room's `"<id>": {...}` entry, select from `"<id>":` through the

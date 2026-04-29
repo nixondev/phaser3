@@ -777,11 +777,11 @@ const TILESET_META = {
   name: 'tileset',
   tilewidth: BASE * S,
   tileheight: BASE * S,
-  tilecount: 64,
+  tilecount: 128,
   columns: 8,
   image: 'tileset.png',
-  imagewidth: 128 * S,
-  imageheight: 128 * S,
+  imagewidth: 128 * S,   // 512px — 8 cols unchanged
+  imageheight: 256 * S,  // 1024px — 16 rows (was 8)
   margin: 0,
   spacing: 0,
 };

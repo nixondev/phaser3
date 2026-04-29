@@ -108,9 +108,9 @@ function decodePNG(buffer) {
   return { width, height, pixels };
 }
 
-const TILE_SIZE = 64; 
+const TILE_SIZE = 64;
 const COLS = 8;
-const ROWS = 8;
+const ROWS = 16; // 8×16 = 128 tiles
 const W = COLS * TILE_SIZE;
 const H = ROWS * TILE_SIZE;
 

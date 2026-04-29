@@ -204,6 +204,9 @@ two clicks:
      nearest (top→up, bottom→down, left→left, right→right)
    - sensible `spawnX/Y` (one tile inside each room, in front of the
      door)
+   - size **16×16** (single tile). For a 2-tile-wide opening, run the
+     pair flow twice with adjacent clicks; you'll get two square doors
+     side-by-side.
 
 5. In `src/data/rooms.json`, find each room's `"<id>": {...}` entry
    and replace it with the matching clipboard fragment. Save. Reload
@@ -271,15 +274,13 @@ with **R** in editor mode (cycles through profiles live) and **`[`** /
 
 These are active when F1 (debug) or F2 (editor) is on:
 
-| Key | Does |
-|-----|------|
-| **L** | Hot-reload current room from disk |
-| **U** | Unlock all doors in this room |
-| **C** | Cure all afflicted in this room |
-| **R** | Cycle reverb profile |
-| **`[`** / **`]`** | Decrease / increase reverb wet mix |
-| **`-`** / **`+`** | Decrease / increase master volume |
-| **Shift + Click** | Teleport player to cursor |
+- **L** — hot-reload the current room from disk.
+- **U** — unlock all doors in this room.
+- **C** — cure all afflicted in this room.
+- **R** — cycle reverb profile.
+- **`[`** / **`]`** — decrease / increase reverb wet mix.
+- **`-`** / **`+`** — decrease / increase master volume.
+- **Shift + Click** — teleport player to cursor.
 
 ---
 
