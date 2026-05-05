@@ -1310,7 +1310,7 @@ export class RoomEditorManager {
     // Capture current layer state
     const layer = this.currentLayerName;
     const data: number[][] = [];
-    const tilemapLayer = map.getLayer(layer).tilemapLayer;
+    const tilemapLayer = map.getLayer(layer)?.tilemapLayer;
     if (!tilemapLayer) return;
 
     for (let y = 0; y < map.height; y++) {
