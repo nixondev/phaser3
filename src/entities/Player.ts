@@ -7,14 +7,21 @@ export class Player extends Entity {
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player', 0);
     this.setDepth(DEPTH.PLAYER);
+    this.setScale(1.0);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const invScale = GAME_CONFIG.ASSET_SCALE / GAME_CONFIG.ENTITY_SCALE;
-    body.setSize(10 * invScale, 8 * invScale);
-    body.setOffset(3 * invScale, 8 * invScale);
+    // The player's asset is now 24x24 (exactly the desired render size).
+    // We use a 10x8 collision box at the feet.
+    body.setSize(7, 6);
+    body.setOffset(5, 10);
     body.setCollideWorldBounds(true);
 
     this.createAnimations();
+    
+    // Fix scaling distortion by using integer-friendly scale if possible
+    // this.setScale is already called in Entity.ts constructor.
+    // However, if the user sees distortion, we might want to ensure it's not anti-aliased.
+    //this.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
   }
 
   private createAnimations(): void {
@@ -95,18 +102,22 @@ export class Player extends Entity {
   /** Gets the flashlight origin point. */
   getFlashlightOrigin(): { x: number; y: number } {
     let offsetX = 0;
-    let offsetY = 0;
+    let offsetY = 1;
 
     switch (this.direction) {
       case Direction.UP:
-        offsetX = 4;
+        offsetX = 3;
+        offsetY = -1;
         break;
       case Direction.DOWN:
-        offsetX = -4;
+        offsetX = -3;
+        offsetY = 3;
         break;
       case Direction.LEFT:
+        offsetX = -2;
+        break;
       case Direction.RIGHT:
-        offsetX = 0;
+        offsetX = 2;
         break;
     }
 

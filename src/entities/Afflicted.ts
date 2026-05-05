@@ -3,6 +3,7 @@ import { Entity } from './Entity';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import { AfflictedDef, AfflictedStatus, Position } from '@/types';
 import { MusicManager } from '@systems/MusicManager';
+import { Direction } from './Direction';
 
 const WANDER_SPEED      = 20;
 const WANDER_PAUSE_MIN  = 1500;
@@ -24,30 +25,38 @@ export class Afflicted extends Entity {
   private role: string;
   private status: AfflictedStatus;
   private behaviorLoop: string;
+  private variant: string;
   private origin: Position;
   private wanderTarget: Position | null = null;
   private wanderTimer?: Phaser.Time.TimerEvent;
   private baseScale: number;
+  private currentDir: Direction = Direction.DOWN;
+  private playerVariant: string | null;
 
   constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
-    super(scene, def.x, def.y, 'tileset-sprites', 10);
+    const variant = def.variant || 'walker';
+    const texture = `afflicted-${variant}`;
+    super(scene, def.x, def.y, texture, 0);
     
-    this.baseScale = GAME_CONFIG.ENTITY_SCALE / GAME_CONFIG.ASSET_SCALE;
+    this.baseScale = 1.0;
+    this.setScale(this.baseScale);
 
     this.afflictedId  = def.id;
     this.residentName = def.name;
     this.role         = def.role;
     this.behaviorLoop = def.behaviorLoop;
     this.status       = initialStatus;
+    this.variant      = variant;
+    this.playerVariant = def.playerVariant || null;
     this.origin       = { x: def.x, y: def.y };
 
     this.setDepth(DEPTH.ENTITIES);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const invScale = GAME_CONFIG.ASSET_SCALE / GAME_CONFIG.ENTITY_SCALE;
-    body.setSize(12 * invScale, 12 * invScale);
-    body.setOffset(2 * invScale, 2 * invScale);
+    body.setSize(7, 6);
+    body.setOffset(5, 10);
     body.setCollideWorldBounds(true);
 
+    this.createAnimations();
     this.setupVisuals();
 
     if (this.status === 'wandering') {
@@ -59,11 +68,47 @@ export class Afflicted extends Entity {
     MusicManager.getInstance().playProximity(this.afflictedId, 'goblins', 'city-street');
   }
 
+  private createAnimations(): void {
+    const texture = `afflicted-${this.variant}`;
+    const dirs: { key: Direction; row: number }[] = [
+      { key: Direction.DOWN, row: 0 },
+      { key: Direction.LEFT, row: 1 },
+      { key: Direction.RIGHT, row: 2 },
+      { key: Direction.UP, row: 3 },
+    ];
+
+    for (const { key, row } of dirs) {
+      const start = row * 4;
+      const walkKey = `${texture}-walk-${key}`;
+      const idleKey = `${texture}-idle-${key}`;
+
+      if (!this.scene.anims.exists(walkKey)) {
+        this.scene.anims.create({
+          key: walkKey,
+          frames: this.scene.anims.generateFrameNumbers(texture, {
+            frames: [start, start + 1, start + 2, start + 3],
+          }),
+          frameRate: 8,
+          repeat: -1,
+        });
+      }
+
+      if (!this.scene.anims.exists(idleKey)) {
+        this.scene.anims.create({
+          key: idleKey,
+          frames: [{ key: texture, frame: start }],
+          frameRate: 1,
+          repeat: -1,
+        });
+      }
+    }
+  }
+
   private setupVisuals(): void {
     const bs = this.baseScale;
     switch (this.status) {
       case 'wandering':
-        this.setTint(0x8888cc);
+        this.setTint(0xaaaaff);
         this.scene.tweens.add({
           targets: this,
           scaleX: { from: bs, to: bs * 1.05 },
@@ -75,7 +120,7 @@ export class Afflicted extends Entity {
         });
         break;
       case 'agitated':
-        this.setTint(0xcc4444);
+        this.setTint(0xffaaaa);
         this.scene.tweens.add({
           targets: this,
           scaleX: { from: bs, to: bs * 1.12 },
@@ -87,7 +132,7 @@ export class Afflicted extends Entity {
         });
         break;
       case 'frightened':
-        this.setTint(0xddaa22);
+        this.setTint(0xffeebb);
         this.scene.tweens.add({
           targets: this,
           scaleX: { from: bs * 0.9, to: bs * 1.1 },
@@ -99,11 +144,60 @@ export class Afflicted extends Entity {
         });
         break;
       case 'cured':
-        this.setTint(0xaaccaa);
+        this.setTint(0xccffcc);
         break;
       case 'recovered':
         this.clearTint();
         break;
+    }
+  }
+
+  private createCuredAnimations(): void {
+    if (!this.playerVariant) return;
+    const texture = `player-${this.playerVariant}`;
+    const dirs: { key: Direction; row: number }[] = [
+      { key: Direction.DOWN,  row: 0 },
+      { key: Direction.LEFT,  row: 1 },
+      { key: Direction.RIGHT, row: 2 },
+      { key: Direction.UP,    row: 3 },
+    ];
+    for (const { key, row } of dirs) {
+      const start = row * 4;
+      const walkKey = `${texture}-walk-${key}`;
+      const idleKey = `${texture}-idle-${key}`;
+      if (!this.scene.anims.exists(walkKey)) {
+        this.scene.anims.create({
+          key: walkKey,
+          frames: this.scene.anims.generateFrameNumbers(texture, { frames: [start, start + 1, start + 2, start + 3] }),
+          frameRate: 8,
+          repeat: -1,
+        });
+      }
+      if (!this.scene.anims.exists(idleKey)) {
+        this.scene.anims.create({
+          key: idleKey,
+          frames: [{ key: texture, frame: start }],
+          frameRate: 1,
+          repeat: -1,
+        });
+      }
+    }
+  }
+
+  private updateAnimation(): void {
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    const usePlayerSprite = (this.status === 'cured' || this.status === 'recovered') && this.playerVariant;
+    const texture = usePlayerSprite ? `player-${this.playerVariant}` : `afflicted-${this.variant}`;
+
+    if (body.velocity.x !== 0 || body.velocity.y !== 0) {
+      if (Math.abs(body.velocity.y) >= Math.abs(body.velocity.x)) {
+        this.currentDir = body.velocity.y < 0 ? Direction.UP : Direction.DOWN;
+      } else {
+        this.currentDir = body.velocity.x < 0 ? Direction.LEFT : Direction.RIGHT;
+      }
+      this.play(`${texture}-walk-${this.currentDir}`, true);
+    } else {
+      this.play(`${texture}-idle-${this.currentDir}`, true);
     }
   }
 
@@ -131,7 +225,10 @@ export class Afflicted extends Entity {
   }
 
   updateAI(playerX: number, playerY: number): void {
-    if (this.status === 'cured' || this.status === 'recovered') return;
+    if (this.status === 'cured' || this.status === 'recovered') {
+      this.updateAnimation();
+      return;
+    }
 
     const dist = Phaser.Math.Distance.Between(this.x, this.y, playerX, playerY);
     const body = this.body as Phaser.Physics.Arcade.Body;
@@ -165,6 +262,7 @@ export class Afflicted extends Entity {
       // Chase the player
       const angle = Phaser.Math.Angle.Between(this.x, this.y, playerX, playerY);
       body.setVelocity(Math.cos(angle) * AGITATE_SPEED, Math.sin(angle) * AGITATE_SPEED);
+      this.updateAnimation();
       return;
     }
 
@@ -172,6 +270,7 @@ export class Afflicted extends Entity {
       // Flee from the player
       const angle = Phaser.Math.Angle.Between(playerX, playerY, this.x, this.y);
       body.setVelocity(Math.cos(angle) * FRIGHTEN_SPEED, Math.sin(angle) * FRIGHTEN_SPEED);
+      this.updateAnimation();
       return;
     }
 
@@ -190,6 +289,7 @@ export class Afflicted extends Entity {
         body.setVelocity(Math.cos(angle) * WANDER_SPEED, Math.sin(angle) * WANDER_SPEED);
       }
     }
+    this.updateAnimation();
   }
 
   setStatus(newStatus: AfflictedStatus): void {
@@ -198,6 +298,16 @@ export class Afflicted extends Entity {
     this.scene.tweens.killTweensOf(this);
     this.setScale(this.baseScale);
     this.stopMovement();
+
+    if (newStatus === 'cured' || newStatus === 'recovered') {
+      MusicManager.getInstance().stopProximity(this.afflictedId);
+      if (this.playerVariant) {
+        this.setTexture(`player-${this.playerVariant}`, 0);
+        this.createCuredAnimations();
+        this.play(`player-${this.playerVariant}-idle-${this.currentDir}`, true);
+      }
+    }
+
     this.setupVisuals();
 
     if (newStatus === 'wandering') {

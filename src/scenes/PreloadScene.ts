@@ -43,9 +43,38 @@ export class PreloadScene extends Phaser.Scene {
       frameHeight: upscale,
     });
     this.load.spritesheet('player', 'assets/sprites/player.png', {
-      frameWidth: upscale,
-      frameHeight: upscale,
+      frameWidth: 17,
+      frameHeight: 17,
     });
+
+    this.load.image('vial_cure', 'assets/sprites/vial_cure.png');
+
+    const playerVariants = [
+      'warden', 'ranger', 'rogue', 'mystic', 'drifter', 'scavenger', 'ashwalker',
+    ];
+    for (const v of playerVariants) {
+      this.load.spritesheet(`player-${v}`, `assets/sprites/player-${v}.png`, {
+        frameWidth: 17,
+        frameHeight: 17,
+      });
+    }
+
+    const afflictedVariants = [
+      'walker',
+      'bloater',
+      'crawler',
+      'husk',
+      'spitter',
+      'brute',
+      'ashrot',
+      'veinhost',
+    ];
+    for (const v of afflictedVariants) {
+      this.load.spritesheet(`afflicted-${v}`, `assets/sprites/afflicted-${v}.png`, {
+        frameWidth: 17,
+        frameHeight: 17,
+      });
+    }
 
     const roomsData = RoomManager.getRoomsData();
     for (const room of Object.values(roomsData.rooms)) {

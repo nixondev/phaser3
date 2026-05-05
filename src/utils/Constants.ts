@@ -1,7 +1,7 @@
 export const GAME_CONFIG = {
   WIDTH: 320,
   HEIGHT: 240,
-  ZOOM: 3,
+  ZOOM: 1,
   TILE_SIZE: 16,
   ASSET_SCALE: 4, // 16 * 4 = 64px upscaled assets
   ENTITY_SCALE: 1.5, // Scale multiplier for characters

@@ -704,71 +704,6 @@ function generateTileset() {
   return encodePNG(W, H, px);
 }
 
-// ── Player spritesheet (Upscaled) ──────────────────────────────────────────
-
-function generatePlayer() {
-  const W = 64 * S, H = 64 * S;
-  const px = new Uint8Array(W * H * 4);
-
-  const SKIN = [228, 190, 150];
-  const BODY = [45, 75, 155];
-  const BODY_HI = [60, 95, 180];
-  const HAIR = [70, 45, 25];
-  const EYE = [15, 15, 25];
-  const SHOE = [35, 30, 25];
-
-  function sp(x, y, r, g, b, a = 255) {
-    fillRect(px, W, x, y, x, y, r, g, b, a);
-  }
-
-  function drawCharacter(col, row, facing, walkPhase) {
-    const ox = col * 16;
-    const oy = row * 16;
-    const legOffset = walkPhase === 1 ? -1 : walkPhase === 3 ? 1 : 0;
-    const bobY = walkPhase === 1 || walkPhase === 3 ? -1 : 0;
-
-    fillRect(px, W, ox + 4, oy + 14, ox + 11, oy + 15, 0, 0, 0, 40);
-    fillRect(px, W, ox + 5, oy + 1 + bobY, ox + 10, oy + 3 + bobY, ...HAIR);
-    fillRect(px, W, ox + 5, oy + 3 + bobY, ox + 10, oy + 6 + bobY, ...SKIN);
-    sp(ox + 4, oy + 4 + bobY, ...SKIN);
-    sp(ox + 11, oy + 4 + bobY, ...SKIN);
-    fillRect(px, W, ox + 5, oy + 7 + bobY, ox + 10, oy + 10 + bobY, ...BODY);
-    fillRect(px, W, ox + 6, oy + 7 + bobY, ox + 7, oy + 8 + bobY, ...BODY_HI);
-
-    const armSwing = walkPhase === 1 ? 1 : walkPhase === 3 ? -1 : 0;
-    sp(ox + 4, oy + 8 + bobY + armSwing, ...SKIN);
-    sp(ox + 11, oy + 8 + bobY - armSwing, ...SKIN);
-
-    fillRect(px, W, ox + 5 + legOffset, oy + 11, ox + 7 + legOffset, oy + 13, ...BODY);
-    fillRect(px, W, ox + 8 - legOffset, oy + 11, ox + 10 - legOffset, oy + 13, ...BODY);
-    fillRect(px, W, ox + 5 + legOffset, oy + 13, ox + 7 + legOffset, oy + 14, ...SHOE);
-    fillRect(px, W, ox + 8 - legOffset, oy + 13, ox + 10 - legOffset, oy + 14, ...SHOE);
-
-    if (facing === 'down') {
-      sp(ox + 6, oy + 5 + bobY, ...EYE);
-      sp(ox + 9, oy + 5 + bobY, ...EYE);
-      sp(ox + 7, oy + 6 + bobY, 200, 160, 130);
-      sp(ox + 8, oy + 6 + bobY, 200, 160, 130);
-    } else if (facing === 'up') {
-      fillRect(px, W, ox + 5, oy + 3 + bobY, ox + 10, oy + 4 + bobY, ...HAIR);
-    } else if (facing === 'left') {
-      sp(ox + 5, oy + 5 + bobY, ...EYE);
-      sp(ox + 10, oy + 3 + bobY, ...HAIR);
-    } else if (facing === 'right') {
-      sp(ox + 10, oy + 5 + bobY, ...EYE);
-      sp(ox + 5, oy + 3 + bobY, ...HAIR);
-    }
-  }
-
-  for (let row = 0; row < 4; row++) {
-    const facing = ['down', 'left', 'right', 'up'][row];
-    for (let col = 0; col < 4; col++) {
-      drawCharacter(col, row, facing, col);
-    }
-  }
-
-  return encodePNG(W, H, px);
-}
 
 // ── Tilemap generator ───────────────────────────────────────────────────────
 
@@ -918,8 +853,32 @@ fs.mkdirSync(spriteDir, { recursive: true });
 // console.log(`  tileset.png  (${TILESET_META.imagewidth}x${TILESET_META.imageheight}, ${TILESET_META.tilecount} tiles)`);
 
 // Player spritesheet PNG
-fs.writeFileSync(path.join(spriteDir, 'player.png'), generatePlayer());
-console.log(`  player.png   (${64 * S}x${64 * S}, 4x4 frames of ${16 * S}x${16 * S})`);
+const { generatePlayer, PLAYER_VARIANTS } = require('./generate-player-lib.cjs');
+const { generateAfflicted, generateVialCure, AFFLICTED_VARIANTS } = require('./generate-afflicted-lib.cjs');
+
+fs.writeFileSync(path.join(spriteDir, 'player.png'), generatePlayer(1.0625, 'cultist'));
+console.log(`  player.png   (68x68, 4x4 frames of 17x17, cultist)`);
+
+fs.writeFileSync(path.join(spriteDir, 'player-bigger.png'), generatePlayer(1.0625 * 1.35, 'cultist'));
+console.log(`  player-bigger.png (${Math.round(64 * 1.0625 * 1.35)}x${Math.round(64 * 1.0625 * 1.35)})`);
+
+// Item sprites
+fs.writeFileSync(path.join(spriteDir, 'vial_cure.png'), generateVialCure());
+console.log(`  vial_cure.png (32x32)`);
+
+// Named player variant sprites for recovered residents (all except cultist = protagonist)
+for (const variantName of Object.keys(PLAYER_VARIANTS).filter(v => v !== 'cultist')) {
+  const outputPath = path.join(spriteDir, `player-${variantName}.png`);
+  fs.writeFileSync(outputPath, generatePlayer(1.0625, variantName));
+  console.log(`  player-${variantName}.png (68x68, 4x4 frames of 17x17)`);
+}
+
+// Afflicted variants
+for (const variantName of Object.keys(AFFLICTED_VARIANTS)) {
+  const outputPath = path.join(spriteDir, `afflicted-${variantName}.png`);
+  fs.writeFileSync(outputPath, generateAfflicted(1.0625, variantName));
+  console.log(`  afflicted-${variantName}.png (68x68, 4x4 frames of 17x17)`);
+}
 
 // ── City street (96×72 = 1536×1152px) ───────────────────────────────────────
 //

@@ -85,8 +85,9 @@ Inactive layers dim to 20% so the active one stands out.
 Three ways:
 
 - **P** — toggle the tile palette. A grid of every tileset frame
-  appears in the upper-right. Click any thumbnail to select it. The
-  selected tile gets a yellow outline. Press **P** again to hide.
+  appears in the upper-right. Click any thumbnail to select it, or
+  **click and drag** to select a block of tiles (Multi-tile Stamp).
+  The selected area gets a yellow outline. Press **P** again to hide.
 - **Q / E** — cycle the selected tile index down / up. Useful for
   quick small steps without opening the palette.
 - **Middle-click** or **Alt + Left-click** — eyedropper. Picks the
@@ -94,13 +95,30 @@ Three ways:
   tile in the room and want to paint more like it.
 
 All three update the same selection. The HUD shows the current tile
-index and a preview.
+index (or range), a preview, and the **active tool**.
+
+### Paint tools
+
+- **Esc** — reset to default Paint tool.
+
+| Key | Tool | Description |
+|-----|------|-------------|
+| **(default)** | Paint | Single-tile or Multi-tile brush. Left-click to paint, right-click to erase. |
+| **F** | Flood Fill | Fill a contiguous area of the same tile with the selection. |
+| **R** | Rectangle | Click and drag to fill a rectangular area with the selection. |
+
+### History (Undo/Redo)
+
+The editor tracks up to 50 steps of tile painting history.
+
+- **Ctrl + Z** — Undo last action.
+- **Ctrl + Shift + Z** — Redo last undone action.
 
 ### Paint and erase
 
-- **Left-click** — paint the selected tile.
-- **Left-click + drag** — paint many tiles.
-- **Right-click** — erase.
+- **Left-click** — paint using the active tool.
+- **Left-click + drag** — paint many tiles (Paint tool only).
+- **Right-click** — erase (Paint tool only).
 
 ### Resize the room
 
@@ -129,10 +147,18 @@ connections. Git is the undo (`git checkout public/assets/tilemaps/<roomId>.json
 
 ### Save the tilemap
 
-Press **X**. A yellow toast appears at the top: *"Tilemap copied.
-Paste into: `public/assets/tilemaps/<roomId>.json`"*
+Press **X**. 
 
-Workflow:
+**Development mode:**
+If running via `npm run dev`, the editor attempts to **auto-save**
+directly to `public/assets/tilemaps/<roomId>.json`. A toast will
+confirm: *"Saved to disk: ..."*.
+
+**Production / Fallback:**
+If auto-save fails or is disabled, a yellow toast appears: *"Tilemap
+copied. Paste into: `public/assets/tilemaps/<roomId>.json`"*.
+
+Manual Workflow:
 1. Open that file in your IDE.
 2. `Cmd+A` (select all), `Cmd+V` (paste), `Cmd+S` (save).
 3. Refresh the browser to confirm.
@@ -252,11 +278,18 @@ recharger, etc.
 3. Snippet copies. Paste under `rooms.<roomId>.afflicted`.
 4. Edit `name` and `role`. Reload.
 
-### Move an existing afflicted
+### Move an existing afflicted / interactable
 
-In editor mode, **left-click and drag** them. On release, a small
-snippet with the new `x` / `y` copies to clipboard with the path to
-update in `rooms.json`. Apply manually.
+In editor mode, **left-click and drag** them. 
+
+**Development mode:**
+If running via `npm run dev`, the editor attempts to **auto-save** the
+new position directly to `src/data/rooms.json`. A toast will confirm:
+*"Saved afflicted/interactable ... position"*.
+
+**Production / Fallback:**
+On release, a small snippet with the new `x` / `y` copies to clipboard
+with the path to update in `rooms.json`. Apply manually.
 
 ---
 
@@ -295,8 +328,8 @@ Putting it all together:
 2. Refresh the browser. F4 → arrow to `basement` → Enter. You're in.
 3. F2 to enter editor. Paint Ground (1, then L-click). Paint
    Collision walls (2). Optionally paint Above-layer details (3).
-4. **X** to copy the tilemap. Paste into
-   `public/assets/tilemaps/basement.json`. Save. Refresh.
+   Use **F** (Flood Fill) or **R** (Rectangle) for large areas.
+4. **X** to save the tilemap. In DEV, it auto-saves to disk.
 5. **O** to wire a door from an existing room into `basement`.
    Cycle to `basement`, Enter, click here, click there.
    Paste both blocks into `rooms.json`. Refresh. Walk through.

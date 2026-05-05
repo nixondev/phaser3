@@ -8,7 +8,8 @@
       "width": 96,
       "height": 72,
       "music": "bgm-main",
-      "reverb": "city",
+      "reverb": "Large Long Echo Hall",
+      "reverbMix": 0.45,
       "playerSpawn": {
         "x": 768,
         "y": 944
@@ -359,7 +360,9 @@
           "role": "Former Resident",
           "x": 400,
           "y": 500,
-          "behaviorLoop": "wander"
+          "behaviorLoop": "wander",
+          "variant": "walker",
+          "playerVariant": "ranger"
         },
         {
           "id": "street-wanderer-2",
@@ -367,7 +370,8 @@
           "role": "Local Shopkeeper",
           "x": 1000,
           "y": 700,
-          "behaviorLoop": "wander"
+          "behaviorLoop": "wander",
+          "variant": "walker"
         }
       ]
     },
@@ -379,7 +383,8 @@
       "width": 20,
       "height": 15,
       "music": "bgm-main",
-      "reverb": "indoor",
+      "reverb": "Nice Drum Room",
+      "reverbMix": 0.45,
       "playerSpawn": {
         "x": 248,
         "y": 184
@@ -426,6 +431,19 @@
           "type": "recharge",
           "text": "Your bedside charging dock. Flashlight batteries topped up.",
           "tileFrame": 39
+        },
+        {
+          "id": "cure-vial-1",
+          "x": 152,
+          "y": 56,
+          "type": "item",
+          "tileFrame": 9,
+          "text": "A small vial. Clinical label, hand-annotated.\n'Stabiliser — administer at close range.'",
+          "item": {
+            "name": "Cure Vial",
+            "tileFrame": 9,
+            "category": "cure"
+          }
         }
       ]
     },

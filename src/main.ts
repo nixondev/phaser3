@@ -1,3 +1,4 @@
+
 import Phaser from 'phaser';
 import { GAME_CONFIG } from '@utils/Constants';
 import { BootScene } from '@scenes/BootScene';
@@ -13,7 +14,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: GAME_CONFIG.HEIGHT,
   zoom: GAME_CONFIG.ZOOM,
   parent: 'game-container',
-  pixelArt: false,
+  pixelArt: true,
   antialias: false,
   roundPixels: true,
   physics: {

@@ -309,12 +309,28 @@ export class GameScene extends Phaser.Scene {
     const status = afflicted.getStatus();
     if (status === 'cured' || status === 'recovered') return;
 
+    // If holding a cure, use it automatically rather than respawning
+    const inventory = this.rsm.getInventory();
+    const cureSlot = inventory.findIndex(item => item?.category === 'cure' &&
+      (!item.useTarget || item.useTarget === afflicted.getId()));
+    if (cureSlot !== -1) {
+      const item = inventory[cureSlot]!;
+      this.rsm.removeFromInventory(cureSlot);
+      this.rsm.cureResident(afflicted.getId());
+      afflicted.setStatus('cured');
+      this.cameras.main.shake(200, 0.006);
+      this.emitInventoryChanged();
+      this.dialogOpen = true;
+      this.events.emit('dialog-open', `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.`);
+      return;
+    }
+
     this.isTransitioning = true;
     (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
 
     // Visual/Audio effect (shake camera)
     this.cameras.main.shake(400, 0.01);
-    
+
     // Brief delay then transition back to start
     this.time.delayedCall(400, () => {
       this.transitionManager.transition(() => {
@@ -322,18 +338,18 @@ export class GameScene extends Phaser.Scene {
         const startRoomId = this.roomManager.getStartRoom();
         this.roomManager.loadRoom(startRoomId);
         this.rsm.visitRoom(startRoomId);
-        
+
         const roomDef = this.roomManager.getCurrentRoomDef();
         const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
-        
+
         this.player.setPosition(spawn.x, spawn.y);
         this.player.playIdle();
-        
+
         this.setupCollisions();
         this.setupCamera();
         this.createWorldItemSprites();
         this.spawnAfflicted();
-        
+
         this.events.emit('room-changed', roomDef.name);
       }).then(() => {
         this.isTransitioning = false;

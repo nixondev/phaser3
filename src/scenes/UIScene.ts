@@ -113,8 +113,9 @@ export class UIScene extends Phaser.Scene {
       const item = this.currentInventory[i];
       if (item) {
         const bg = this.slotBgs[i];
-        this.slotIcons[i] = this.add.sprite(bg.x, bg.y, 'tileset-sprites', item.tileFrame)
-          .setDisplaySize(SS - 4, SS - 4);
+        this.slotIcons[i] = item.spriteKey
+          ? this.add.sprite(bg.x, bg.y, item.spriteKey).setDisplaySize(SS - 4, SS - 4)
+          : this.add.sprite(bg.x, bg.y, 'tileset-sprites', item.tileFrame).setDisplaySize(SS - 4, SS - 4);
       }
     }
   }

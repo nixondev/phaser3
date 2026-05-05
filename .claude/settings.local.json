@@ -11,7 +11,9 @@
       "Bash(npm show *)",
       "Bash(npm run *)",
       "Bash(python3 -c ' *)",
-      "Bash(dir \"C:\\\\Users\\\\flyki\\\\Music\\\\EchoThief\")"
+      "Bash(dir \"C:\\\\Users\\\\flyki\\\\Music\\\\EchoThief\")",
+      "Bash(git rm *)",
+      "Bash(rm -f public/assets/sprites/infected-*-2026*.png)"
     ]
   }
 }

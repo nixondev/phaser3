@@ -34,6 +34,16 @@ export class RoomEditorManager {
   private readonly palettePosY = 4;
   private paletteWidth: number = 0;
   private paletteHeight: number = 0;
+  private paletteSelectionStart: { x: number; y: number } | null = null;
+  private paletteSelectionEnd: { x: number; y: number } | null = null;
+
+  // History for undo/redo
+  private history: Array<{
+    layer: 'Ground' | 'Collision' | 'Above',
+    data: number[][]
+  }> = [];
+  private historyIndex: number = -1;
+  private readonly MAX_HISTORY = 50;
 
   private keys: {
     ONE: Phaser.Input.Keyboard.Key;
@@ -55,10 +65,29 @@ export class RoomEditorManager {
     N: Phaser.Input.Keyboard.Key;
     P: Phaser.Input.Keyboard.Key;
     T: Phaser.Input.Keyboard.Key;
+    F: Phaser.Input.Keyboard.Key;
+    R: Phaser.Input.Keyboard.Key;
+    Z: Phaser.Input.Keyboard.Key;
     ENTER: Phaser.Input.Keyboard.Key;
   };
 
   private placementMode: 'interactable' | 'afflicted' | null = null;
+  private activeTool: 'paint' | 'rect' | 'fill' = 'paint';
+  private afflictedVariantIndex: number = 0;
+  private readonly afflictedVariants = [
+    'walker',
+    'bloater',
+    'crawler',
+    'husk',
+    'spitter',
+    'brute',
+    'ashrot',
+    'veinhost',
+  ];
+
+  private rectStart: { x: number; y: number } | null = null;
+  private rectGraphics: Phaser.GameObjects.Graphics;
+  private selectedTiles: number[][] = [[0]]; // 2D array of GIDs for stamping
 
   // Door-pairing state machine. `O` enters this flow.
   private pairPhase: 'idle' | 'pick-target' | 'place-source' | 'place-target' = 'idle';
@@ -99,6 +128,9 @@ export class RoomEditorManager {
       N: kb.addKey(Phaser.Input.Keyboard.KeyCodes.N),
       P: kb.addKey(Phaser.Input.Keyboard.KeyCodes.P),
       T: kb.addKey(Phaser.Input.Keyboard.KeyCodes.T),
+      F: kb.addKey(Phaser.Input.Keyboard.KeyCodes.F),
+      R: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
+      Z: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
       ENTER: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     };
 
@@ -121,6 +153,9 @@ export class RoomEditorManager {
 
     this.mapOutline = this.scene.add.graphics();
     this.mapOutline.setDepth(DEPTH.UI + 198).setVisible(false);
+
+    this.rectGraphics = this.scene.add.graphics();
+    this.rectGraphics.setDepth(DEPTH.UI + 199).setVisible(false);
 
     this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 6, '', {
       fontSize: '8px',
@@ -195,10 +230,14 @@ export class RoomEditorManager {
     if (!this.isActive) return;
 
     this.handleLayerSwitching(input);
+    this.handleToolSwitching();
     this.handleResize();
     this.handlePlacementToggle();
     this.handlePairing();
     this.handlePaletteToggle();
+    this.handleUndoRedo(input);
+    this.handleFloodFill();
+    this.handleRectangle();
     this.redrawMapOutline();
     this.updateHUD();
 
@@ -221,6 +260,23 @@ export class RoomEditorManager {
     this.handleTilePainting();
   }
 
+  private handleToolSwitching(): void {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.F)) {
+      this.activeTool = this.activeTool === 'fill' ? 'paint' : 'fill';
+      this.showToast(`Tool: ${this.activeTool.toUpperCase()}`);
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.R)) {
+      this.activeTool = this.activeTool === 'rect' ? 'paint' : 'rect';
+      this.showToast(`Tool: ${this.activeTool.toUpperCase()}`);
+    }
+    if (this.keys.ESC.isDown) {
+      if (this.activeTool !== 'paint') {
+        this.activeTool = 'paint';
+        this.showToast('Tool: PAINT');
+      }
+    }
+  }
+
   private handlePlacementToggle(): void {
     if (Phaser.Input.Keyboard.JustDown(this.keys.I)) {
       this.placementMode = this.placementMode === 'interactable' ? null : 'interactable';
@@ -228,6 +284,17 @@ export class RoomEditorManager {
     if (Phaser.Input.Keyboard.JustDown(this.keys.N)) {
       this.placementMode = this.placementMode === 'afflicted' ? null : 'afflicted';
     }
+    if (this.placementMode === 'afflicted') {
+      if (Phaser.Input.Keyboard.JustDown(this.keys.Q)) {
+        this.afflictedVariantIndex = (this.afflictedVariantIndex - 1 + this.afflictedVariants.length) % this.afflictedVariants.length;
+        this.showToast(`Variant: ${this.afflictedVariants[this.afflictedVariantIndex].toUpperCase()}`);
+      }
+      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+        this.afflictedVariantIndex = (this.afflictedVariantIndex + 1) % this.afflictedVariants.length;
+        this.showToast(`Variant: ${this.afflictedVariants[this.afflictedVariantIndex].toUpperCase()}`);
+      }
+    }
+
     if (this.placementMode && Phaser.Input.Keyboard.JustDown(this.keys.ESC)) {
       this.placementMode = null;
     }
@@ -471,7 +538,8 @@ export class RoomEditorManager {
         name: 'TODO',
         role: 'TODO',
         x, y,
-        behaviorLoop: 'wander'
+        behaviorLoop: 'wander',
+        variant: this.afflictedVariants[this.afflictedVariantIndex]
       };
       path = `rooms.${roomId}.afflicted`;
       label = 'Afflicted';
@@ -519,6 +587,8 @@ export class RoomEditorManager {
     const frameSize = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
     const scale = T / frameSize;
 
+    const bgRect = new Phaser.Geom.Rectangle(0, 0, this.paletteWidth, this.paletteHeight);
+
     for (let i = 0; i < tileCount; i++) {
       const col = i % cols;
       const row = Math.floor(i / cols);
@@ -527,16 +597,60 @@ export class RoomEditorManager {
       const thumb = this.scene.add.sprite(x, y, 'tileset-sprites', i);
       thumb.setScale(scale).setScrollFactor(0);
       thumb.setInteractive({ useHandCursor: true });
-      thumb.on('pointerdown', () => {
-        this.selectedTileIndex = i + 1; // tilemap GIDs are 1-indexed
-        this.updatePreview();
-        this.updatePaletteHighlight();
+      
+      thumb.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+        const col = i % this.paletteCols;
+        const row = Math.floor(i / this.paletteCols);
+        
+        if (pointer.button === 0) { // Left click
+          this.paletteSelectionStart = { x: col, y: row };
+          this.paletteSelectionEnd = { x: col, y: row };
+          this.updateMultiTileSelection();
+        }
       });
+
+      thumb.on('pointerover', (pointer: Phaser.Input.Pointer) => {
+        if (pointer.leftButtonDown() && this.paletteSelectionStart) {
+          const col = i % this.paletteCols;
+          const row = Math.floor(i / this.paletteCols);
+          this.paletteSelectionEnd = { x: col, y: row };
+          this.updateMultiTileSelection();
+        }
+      });
+
       this.paletteContainer.add(thumb);
     }
 
+    this.scene.input.on('pointerup', () => {
+      this.paletteSelectionStart = null;
+    });
+
     this.paletteHighlight.setScrollFactor(0).setDepth(DEPTH.UI + 211);
     this.paletteBuilt = true;
+  }
+
+  private updateMultiTileSelection(): void {
+    if (!this.paletteSelectionStart || !this.paletteSelectionEnd) return;
+
+    const x1 = Math.min(this.paletteSelectionStart.x, this.paletteSelectionEnd.x);
+    const y1 = Math.min(this.paletteSelectionStart.y, this.paletteSelectionEnd.y);
+    const x2 = Math.max(this.paletteSelectionStart.x, this.paletteSelectionEnd.x);
+    const y2 = Math.max(this.paletteSelectionStart.y, this.paletteSelectionEnd.y);
+
+    const newTiles: number[][] = [];
+    for (let row = y1; row <= y2; row++) {
+      const rowData: number[] = [];
+      for (let col = x1; col <= x2; col++) {
+        const index = row * this.paletteCols + col;
+        rowData.push(index + 1); // 1-indexed GID
+      }
+      newTiles.push(rowData);
+    }
+
+    this.selectedTiles = newTiles;
+    this.selectedTileIndex = newTiles[0][0];
+    this.updatePreview();
+    this.updatePaletteHighlight();
   }
 
   private updatePaletteHighlight(): void {
@@ -545,15 +659,43 @@ export class RoomEditorManager {
       return;
     }
     this.paletteHighlight.clear();
-    if (this.selectedTileIndex < 1) return;
-    const i = this.selectedTileIndex - 1;
+    
+    // Draw highlight for all selected tiles
     const T = this.paletteThumb;
-    const col = i % this.paletteCols;
-    const row = Math.floor(i / this.paletteCols);
-    const x = this.palettePosX + 1 + col * T;
-    const y = this.palettePosY + 1 + row * T;
+    const cols = this.selectedTiles[0].length;
+    const rows = this.selectedTiles.length;
+    
+    // We need to find the top-left tile's position in the palette grid
+    // Since we only track GIDs in selectedTiles, we should probably track the selection rect instead
+    // But for now, let's assume the first tile in selectedTiles is the one we use for positioning if it's a single tile,
+    // or we can just redraw based on the last known selection if we are in the middle of selecting.
+    
+    // Actually, let's just use a simpler way: find the range of indices
+    let minCol = 999, maxCol = -1, minRow = 999, maxRow = -1;
+    
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const gid = this.selectedTiles[r][c];
+        if (gid <= 0) continue;
+        const i = gid - 1;
+        const col = i % this.paletteCols;
+        const row = Math.floor(i / this.paletteCols);
+        minCol = Math.min(minCol, col);
+        maxCol = Math.max(maxCol, col);
+        minRow = Math.min(minRow, row);
+        maxRow = Math.max(maxRow, row);
+      }
+    }
+
+    if (maxCol === -1) return;
+
+    const x = this.palettePosX + 1 + minCol * T;
+    const y = this.palettePosY + 1 + minRow * T;
+    const w = (maxCol - minCol + 1) * T;
+    const h = (maxRow - minRow + 1) * T;
+
     this.paletteHighlight.lineStyle(2, 0xffff00, 1);
-    this.paletteHighlight.strokeRect(x, y, T, T);
+    this.paletteHighlight.strokeRect(x, y, w, h);
   }
 
   /** Total valid GID across all tilesets in the current map. Phaser's
@@ -692,9 +834,9 @@ export class RoomEditorManager {
       statusLine = `pair: click target door in ${this.pairTargetRoomId}`;
     }
     const lines = [
-      `${this.currentLayerName} layer | tile ${this.selectedTileIndex} | ${dims}`,
+      `TOOL: ${this.activeTool.toUpperCase()} | ${this.currentLayerName} layer | tile ${this.selectedTileIndex} | ${dims}`,
       `1/2/3 layer  Q/E tile  P palette  L-clk paint  R-clk erase`,
-      `X save  I sign  O door-pair  N npc  T stamp`,
+      `F fill  R rect  X save  I sign  O door-pair  N npc  T stamp`,
       `Sh+Arrow grow  Ctrl+Sh+Arrow shrink`
     ];
     if (statusLine) lines.unshift(`* ${statusLine}`);
@@ -880,8 +1022,35 @@ export class RoomEditorManager {
     const roomId = this.roomManager.getCurrentRoomId();
     const path = `public/assets/tilemaps/${roomId}.json`;
     const json = JSON.stringify(exportData, null, 2);
-    console.log(`[Editor] Tilemap JSON for ${path}:\n`, exportData);
-    this.copyAndToast(json, `Tilemap copied. Paste into:\n${path}`);
+    
+    // Auto-save attempt
+    if (import.meta.env.DEV) {
+      this.saveTilemapToDisk(roomId, exportData);
+    } else {
+      console.log(`[Editor] Tilemap JSON for ${path}:\n`, exportData);
+      this.copyAndToast(json, `Tilemap copied. Paste into:\n${path}`);
+    }
+  }
+
+  private async saveTilemapToDisk(roomId: string, data: any): Promise<void> {
+    try {
+      this.showToast(`Saving ${roomId}.json...`);
+      const resp = await fetch(`/__editor/save-tilemap?roomId=${roomId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await resp.json();
+      if (result.ok) {
+        this.showToast(`Saved to disk: ${result.path}`);
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+    } catch (err: any) {
+      console.error('[Editor] Save failed:', err);
+      const json = JSON.stringify(data, null, 2);
+      this.copyAndToast(json, `Disk save failed: ${err.message}\nFallback: JSON copied to clipboard.`);
+    }
   }
 
   private handleTilePainting(): void {
@@ -913,9 +1082,14 @@ export class RoomEditorManager {
     this.tileCursor.lineStyle(1, 0xffff00, 0.8);
     const tw = map.tileWidth * (map.layers[0]?.tilemapLayer?.scaleX || 1);
     const th = map.tileHeight * (map.layers[0]?.tilemapLayer?.scaleY || 1);
-    this.tileCursor.strokeRect(tileX * tw, tileY * th, tw, th);
+    
+    // Draw cursor for multi-tile selection
+    const rows = this.selectedTiles.length;
+    const cols = this.selectedTiles[0].length;
+    this.tileCursor.strokeRect(tileX * tw, tileY * th, tw * cols, th * rows);
 
     if (this.selectedObject) return; // Don't paint while dragging
+    if (this.activeTool !== 'paint') return; // Don't paint while using other tools
 
     let changed = false;
 
@@ -925,30 +1099,39 @@ export class RoomEditorManager {
       const tile = map.getTileAt(tileX, tileY, true, this.currentLayerName);
       if (tile && tile.index !== -1) {
         this.selectedTileIndex = tile.index;
+        this.selectedTiles = [[tile.index]];
         this.updatePreview();
         this.updatePaletteHighlight();
       }
     } 
     // Left Click: Paint (only if NOT alt)
     else if (pointer.leftButtonDown()) {
-      const max = this.maxTileIndex();
-      const safeIndex = this.selectedTileIndex > max ? max : this.selectedTileIndex;
-      if (safeIndex !== this.selectedTileIndex) this.selectedTileIndex = safeIndex;
-      const currentTile = map.getTileAt(tileX, tileY, true, this.currentLayerName);
-      if (currentTile && currentTile.index !== safeIndex) {
-        // Phaser's PutTileAt crashes when index === 0 (it tries
-        // tilemap.tiles[0][2] which is undefined). Route 0 to removeTileAt.
-        if (safeIndex <= 0) {
-          if (currentTile.index !== -1) {
-            map.removeTileAt(tileX, tileY, true, true, this.currentLayerName);
-            changed = true;
-          }
-        } else {
-          try {
-            map.putTileAt(safeIndex, tileX, tileY, true, this.currentLayerName);
-            changed = true;
-          } catch (e) {
-            console.warn('[Editor] putTileAt failed', { safeIndex, tileX, tileY, layer: this.currentLayerName, err: e });
+      if (pointer.primaryDown) {
+        this.pushHistory();
+      }
+      
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const tx = tileX + c;
+          const ty = tileY + r;
+          if (tx >= map.width || ty >= map.height) continue;
+
+          const safeIndex = this.selectedTiles[r][c];
+          const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
+          if (currentTile && currentTile.index !== safeIndex) {
+            if (safeIndex <= 0) {
+              if (currentTile.index !== -1) {
+                map.removeTileAt(tx, ty, true, true, this.currentLayerName);
+                changed = true;
+              }
+            } else {
+              try {
+                map.putTileAt(safeIndex, tx, ty, true, this.currentLayerName);
+                changed = true;
+              } catch (e) {
+                console.warn('[Editor] putTileAt failed', { safeIndex, tx, ty, layer: this.currentLayerName, err: e });
+              }
+            }
           }
         }
       }
@@ -956,10 +1139,18 @@ export class RoomEditorManager {
 
     // Right Click: Erase
     if (pointer.rightButtonDown()) {
-      const currentTile = map.getTileAt(tileX, tileY, true, this.currentLayerName);
-      if (currentTile && currentTile.index !== -1) {
-        map.removeTileAt(tileX, tileY, true, true, this.currentLayerName);
-        changed = true;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const tx = tileX + c;
+          const ty = tileY + r;
+          if (tx >= map.width || ty >= map.height) continue;
+          
+          const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
+          if (currentTile && currentTile.index !== -1) {
+            map.removeTileAt(tx, ty, true, true, this.currentLayerName);
+            changed = true;
+          }
+        }
       }
     }
 
@@ -976,6 +1167,24 @@ export class RoomEditorManager {
       // but usually Phaser's collider works on the layer itself which is now updated.
     }
   }
+  private async saveObjectToDisk(kind: 'afflicted' | 'interactable', id: string, x: number, y: number): Promise<void> {
+    if (!import.meta.env.DEV) return;
+    const roomId = this.roomManager.getCurrentRoomId();
+    try {
+      const resp = await fetch('/__editor/save-object', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, kind, id, x, y })
+      });
+      const result = await resp.json();
+      if (!result.ok) throw new Error(result.error || 'Unknown error');
+      this.showToast(`Saved ${kind} "${id}" position.`);
+    } catch (err: any) {
+      console.error('[Editor] Object save failed:', err);
+      this.showToast(`Disk save failed: ${err.message}`);
+    }
+  }
+
   private logObjectSnippet(): void {
     if (!this.selectedObject) return;
     const s = this.selectedObject.sprite;
@@ -992,11 +1201,15 @@ export class RoomEditorManager {
       return;
     }
 
-    const listKey = type === 'afflicted' ? 'afflicted' : 'interactables';
-    const path = `src/data/rooms.json → rooms.${roomId}.${listKey}[id="${id}"]`;
-    const snippet = JSON.stringify({ id, x, y }, null, 2);
-    console.log(`[Editor] Position update for ${path}:\n${snippet}`);
-    this.copyAndToast(snippet, `Position copied. Update x/y in:\n${path}`);
+    if (import.meta.env.DEV) {
+      this.saveObjectToDisk(type, id, x, y);
+    } else {
+      const listKey = type === 'afflicted' ? 'afflicted' : 'interactables';
+      const path = `src/data/rooms.json → rooms.${roomId}.${listKey}[id="${id}"]`;
+      const snippet = JSON.stringify({ id, x, y }, null, 2);
+      console.log(`[Editor] Position update for ${path}:\n${snippet}`);
+      this.copyAndToast(snippet, `Position copied. Update x/y in:\n${path}`);
+    }
   }
 
   private async copyAndToast(text: string, message: string): Promise<void> {
@@ -1021,7 +1234,7 @@ export class RoomEditorManager {
       targets: this.toastText,
       alpha: 0,
       duration: 600,
-      delay: 4500,
+      delay: 2000, // Reduced delay for more responsive feedback
       ease: 'Sine.easeIn'
     });
   }
@@ -1071,11 +1284,267 @@ export class RoomEditorManager {
       this.tilePreview.setFrame(0); 
     }
 
-    // Position preview next to the "Tile: X" part of the text
-    // The first line is roughly 140px wide at 8px font
-    this.tilePreview.setPosition(this.editorText.x + 145, this.editorText.y + 6);
+    // Position preview next to the "TOOL: X" part of the text
+    // The first line is roughly 160px wide now with TOOL: prefix
+    this.tilePreview.setPosition(this.editorText.x + 185, this.editorText.y + 6);
   }
 
+  private handleUndoRedo(input: InputState): void {
+    const ctrl = this.keys.CTRL.isDown;
+    const shift = this.keys.SHIFT.isDown;
+    const z = Phaser.Input.Keyboard.JustDown(this.keys.Z);
+
+    if (z) {
+      if (ctrl && shift) {
+        this.redo();
+      } else if (ctrl) {
+        this.undo();
+      }
+    }
+  }
+
+  private pushHistory(): void {
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    // Capture current layer state
+    const layer = this.currentLayerName;
+    const data: number[][] = [];
+    const tilemapLayer = map.getLayer(layer).tilemapLayer;
+    if (!tilemapLayer) return;
+
+    for (let y = 0; y < map.height; y++) {
+      const row: number[] = [];
+      for (let x = 0; x < map.width; x++) {
+        const tile = map.getTileAt(x, y, true, layer);
+        row.push(tile ? tile.index : -1);
+      }
+      data.push(row);
+    }
+
+    // If we're not at the end of the stack, discard the future
+    if (this.historyIndex < this.history.length - 1) {
+      this.history = this.history.slice(0, this.historyIndex + 1);
+    }
+
+    this.history.push({ layer, data });
+    if (this.history.length > this.MAX_HISTORY) {
+      this.history.shift();
+    } else {
+      this.historyIndex++;
+    }
+  }
+
+  private undo(): void {
+    if (this.historyIndex <= 0) {
+      this.showToast('Nothing to undo');
+      return;
+    }
+    
+    // To undo, we need to restore the state BEFORE the current action.
+    // The history stack stores states AFTER actions.
+    this.historyIndex--;
+    this.applyHistoryState(this.history[this.historyIndex]);
+    this.showToast(`Undo (${this.historyIndex + 1}/${this.history.length})`);
+  }
+
+  private redo(): void {
+    if (this.historyIndex >= this.history.length - 1) {
+      this.showToast('Nothing to redo');
+      return;
+    }
+    this.historyIndex++;
+    this.applyHistoryState(this.history[this.historyIndex]);
+    this.showToast(`Redo (${this.historyIndex + 1}/${this.history.length})`);
+  }
+
+  private applyHistoryState(state: { layer: 'Ground' | 'Collision' | 'Above', data: number[][] }): void {
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    for (let y = 0; y < state.data.length; y++) {
+      for (let x = 0; x < state.data[y].length; x++) {
+        const idx = state.data[y][x];
+        if (idx === -1) {
+          map.removeTileAt(x, y, true, true, state.layer);
+        } else {
+          map.putTileAt(idx, x, y, true, state.layer);
+        }
+      }
+    }
+
+    if (state.layer === 'Collision') {
+      this.refreshCollision();
+    }
+    this.updateLayerOpacities();
+  }
+
+  private handleFloodFill(): void {
+    if (this.activeTool !== 'fill') return;
+    
+    const map = this.roomManager.getMap();
+    if (!map) return;
+    
+    const pointer = this.scene.input.activePointer;
+    if (pointer.primaryDown && !this.wasPrimaryDown) {
+      const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+      const tileX = map.worldToTileX(worldPoint.x);
+      const tileY = map.worldToTileY(worldPoint.y);
+
+      if (tileX !== null && tileY !== null) {
+        this.executeFloodFill(tileX, tileY);
+      }
+    }
+  }
+
+  private handleRectangle(): void {
+    if (this.activeTool !== 'rect') {
+      this.rectStart = null;
+      this.rectGraphics.setVisible(false);
+      return;
+    }
+
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    const pointer = this.scene.input.activePointer;
+    const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+    const tileX = map.worldToTileX(worldPoint.x);
+    const tileY = map.worldToTileY(worldPoint.y);
+
+    if (tileX === null || tileY === null) return;
+
+    const justDown = pointer.primaryDown && !this.wasPrimaryDown;
+    const isDown = pointer.primaryDown;
+
+    if (justDown) {
+      this.rectStart = { x: tileX, y: tileY };
+      this.rectGraphics.setVisible(true);
+    }
+
+    if (isDown && this.rectStart) {
+      this.updateRectGraphics(this.rectStart.x, this.rectStart.y, tileX, tileY);
+    } else if (this.rectStart) {
+      // Released
+      this.executeRectangleFill(this.rectStart.x, this.rectStart.y, tileX, tileY);
+      this.rectStart = null;
+      this.rectGraphics.setVisible(false);
+    }
+  }
+
+  private updateRectGraphics(x1: number, y1: number, x2: number, y2: number): void {
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    const startX = Math.min(x1, x2);
+    const startY = Math.min(y1, y2);
+    const endX = Math.max(x1, x2);
+    const endY = Math.max(y1, y2);
+
+    const tw = GAME_CONFIG.TILE_SIZE;
+    const th = GAME_CONFIG.TILE_SIZE;
+
+    this.rectGraphics.clear();
+    this.rectGraphics.lineStyle(2, 0xffff00, 1);
+    this.rectGraphics.strokeRect(
+      startX * tw,
+      startY * th,
+      (endX - startX + 1) * tw,
+      (endY - startY + 1) * th
+    );
+    this.rectGraphics.fillStyle(0xffff00, 0.3);
+    this.rectGraphics.fillRect(
+      startX * tw,
+      startY * th,
+      (endX - startX + 1) * tw,
+      (endY - startY + 1) * th
+    );
+  }
+
+  private executeRectangleFill(x1: number, y1: number, x2: number, y2: number): void {
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    const startX = Math.min(x1, x2);
+    const startY = Math.min(y1, y2);
+    const endX = Math.max(x1, x2);
+    const endY = Math.max(y1, y2);
+
+    this.pushHistory();
+
+    const layer = this.currentLayerName;
+    const fillIndex = this.selectedTileIndex;
+    let changed = false;
+
+    for (let y = startY; y <= endY; y++) {
+      for (let x = startX; x <= endX; x++) {
+        if (fillIndex <= 0) {
+          map.removeTileAt(x, y, true, true, layer);
+        } else {
+          map.putTileAt(fillIndex, x, y, true, layer);
+        }
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      if (layer === 'Collision') this.refreshCollision();
+      this.pushHistory();
+      const count = (endX - startX + 1) * (endY - startY + 1);
+      this.showToast(`Rect filled ${count} tiles`);
+    }
+  }
+
+  private executeFloodFill(startX: number, startY: number): void {
+    const map = this.roomManager.getMap();
+    if (!map) return;
+
+    const layer = this.currentLayerName;
+    const targetTile = map.getTileAt(startX, startY, true, layer);
+    const targetIndex = targetTile ? targetTile.index : -1;
+    const fillIndex = this.selectedTileIndex;
+
+    if (targetIndex === fillIndex) return;
+
+    // Save state before fill
+    this.pushHistory();
+
+    const stack: Array<[number, number]> = [[startX, startY]];
+    const processed = new Set<string>();
+
+    let count = 0;
+    while (stack.length > 0) {
+      const [x, y] = stack.pop()!;
+      const key = `${x},${y}`;
+      if (processed.has(key)) continue;
+      processed.add(key);
+
+      const tile = map.getTileAt(x, y, true, layer);
+      const idx = tile ? tile.index : -1;
+
+      if (idx === targetIndex) {
+        if (fillIndex <= 0) {
+          map.removeTileAt(x, y, true, true, layer);
+        } else {
+          map.putTileAt(fillIndex, x, y, true, layer);
+        }
+        count++;
+
+        if (x > 0) stack.push([x - 1, y]);
+        if (x < map.width - 1) stack.push([x + 1, y]);
+        if (y > 0) stack.push([x, y - 1]);
+        if (y < map.height - 1) stack.push([x, y + 1]);
+      }
+    }
+
+    if (count > 0 && layer === 'Collision') {
+      this.refreshCollision();
+    }
+    
+    // Save state after fill (for undo)
+    this.pushHistory();
+    this.showToast(`Filled ${count} tiles`);
+  }
   private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown[], _dx: number, dy: number): void {
     if (!this.isActive) return;
     if (dy > 0) {

@@ -21,6 +21,7 @@ export interface DoorDefinition {
 export interface ItemDef {
   name: string;
   tileFrame: number;
+  spriteKey?: string;
   category: 'key' | 'component' | 'fuel' | 'cure' | 'document' | 'tool';
   keyId?: string;
   useTarget?: string;
@@ -53,6 +54,8 @@ export interface AfflictedDef {
   x: number;
   y: number;
   behaviorLoop: string;
+  variant?: string;
+  playerVariant?: string;
   cureCondition?: string;
   recoveryUnlock?: string;
 }
