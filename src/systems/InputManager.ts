@@ -17,6 +17,7 @@ export class InputManager {
   private f1Key: Phaser.Input.Keyboard.Key;
   private f2Key: Phaser.Input.Keyboard.Key;
   private f3Key: Phaser.Input.Keyboard.Key;
+  private charKeys: Phaser.Input.Keyboard.Key[];
 
   constructor(scene: Phaser.Scene) {
     const kb = scene.input.keyboard!;
@@ -35,6 +36,12 @@ export class InputManager {
     this.f1Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F1);
     this.f2Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F2);
     this.f3Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F3);
+    this.charKeys = [
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+      kb.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
+    ];
   }
 
   /** Movement keys use isDown (continuous), action keys use JustDown (tap). */
@@ -52,6 +59,10 @@ export class InputManager {
       debug: Phaser.Input.Keyboard.JustDown(this.f1Key),
       editor: Phaser.Input.Keyboard.JustDown(this.f2Key),
       visuals: Phaser.Input.Keyboard.JustDown(this.f3Key),
+      char1: Phaser.Input.Keyboard.JustDown(this.charKeys[0]),
+      char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]),
+      char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]),
+      char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]),
     };
   }
 
@@ -70,6 +81,10 @@ export class InputManager {
       debug: Phaser.Input.Keyboard.JustDown(this.f1Key),
       editor: Phaser.Input.Keyboard.JustDown(this.f2Key),
       visuals: Phaser.Input.Keyboard.JustDown(this.f3Key),
+      char1: Phaser.Input.Keyboard.JustDown(this.charKeys[0]),
+      char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]),
+      char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]),
+      char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]),
     };
   }
 }

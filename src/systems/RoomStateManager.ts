@@ -1,4 +1,4 @@
-import { ItemDef, DroppedItemState } from '@/types';
+import { ItemDef, DroppedItemState, CharacterState } from '@/types';
 
 export class RoomStateManager {
   private static instance: RoomStateManager;
@@ -13,6 +13,9 @@ export class RoomStateManager {
   private inventory: (ItemDef | null)[] = new Array(12).fill(null);
   private droppedItems: Map<string, DroppedItemState[]> = new Map();
   private tutorialShown = false;
+  private roster: CharacterState[] = [];
+  private activeCharacterId = 'player';
+  private characterInventories: Map<string, (ItemDef | null)[]> = new Map();
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -160,6 +163,59 @@ export class RoomStateManager {
     return this.droppedItems.get(roomId) || [];
   }
 
+  // ── Roster / character switching ────────────────────────────────────────
+
+  initRoster(protagonistState: CharacterState): void {
+    if (this.roster.length === 0) {
+      this.roster = [protagonistState];
+      this.characterInventories.set('player', this.inventory);
+    }
+  }
+
+  addToRoster(state: CharacterState): void {
+    if (this.roster.find(c => c.id === state.id)) return;
+    this.roster.push(state);
+    this.characterInventories.set(state.id, new Array(12).fill(null));
+  }
+
+  getRoster(): CharacterState[] {
+    return this.roster;
+  }
+
+  getActiveCharacterId(): string {
+    return this.activeCharacterId;
+  }
+
+  setActiveCharacter(id: string): void {
+    if (id === this.activeCharacterId) return;
+    // Stash current inventory under the outgoing character
+    this.characterInventories.set(this.activeCharacterId, [...this.inventory]);
+    // Load the incoming character's inventory into the active slot
+    const incoming = this.characterInventories.get(id) ?? new Array(12).fill(null);
+    this.inventory = incoming as (ItemDef | null)[];
+    this.activeCharacterId = id;
+  }
+
+  updateCharacterPosition(id: string, roomId: string, x: number, y: number): void {
+    const state = this.roster.find(c => c.id === id);
+    if (state) {
+      state.roomId = roomId;
+      state.x = x;
+      state.y = y;
+    }
+  }
+
+  getCharacterState(id: string): CharacterState | undefined {
+    return this.roster.find(c => c.id === id);
+  }
+
+  getCharacterInventory(id: string): (ItemDef | null)[] {
+    if (!this.characterInventories.has(id)) {
+      this.characterInventories.set(id, new Array(12).fill(null));
+    }
+    return this.characterInventories.get(id)!;
+  }
+
   // ── Tutorial ────────────────────────────────────────────────────────────
 
   isTutorialShown(): boolean {
@@ -181,9 +237,12 @@ export class RoomStateManager {
     this.recoveredResidents.clear();
     this.poweredDevices.clear();
     this.generatorFuel = 0;
-    this.inventory.fill(null);
+    this.inventory = new Array(12).fill(null);
     this.droppedItems.clear();
     this.tutorialShown = false;
+    this.roster = [];
+    this.activeCharacterId = 'player';
+    this.characterInventories.clear();
   }
 }
 

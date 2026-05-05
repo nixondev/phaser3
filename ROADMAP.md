@@ -1,4 +1,4 @@
-ok# WARDEN — Build Roadmap
+# WARDEN — Build Roadmap
 
 This is a building plan for the **tools and primitives** that let
 content be authored creatively. The story, the cures, the puzzle
@@ -95,9 +95,10 @@ both reference it.
 - **Save: full snapshot to localStorage.** One JSON blob, full state
   every save. Save fires on door transition and on key state changes.
   No deltas, no partial saves.
-- **Respawn-at-house on death.** No full-run-reset on death — the
-  game stays forgiving. The harsher run-reset model stays a "later,
-  if at all" thought.
+- **Full run reset on death.** Any character death wipes all state
+  (`RoomStateManager.reset()`) and restarts the scene from scratch.
+  The player wakes again as the protagonist with an empty inventory.
+  No mid-run save, no respawn point.
 
 ### Tone and surface
 
@@ -124,17 +125,43 @@ both reference it.
 ## What works today (build on this)
 
 - Room transitions, collision layers, door zones, tilemaps.
-- 12-slot inventory with category-aware items.
-- Afflicted state machine (wandering → agitated → cured → recovered).
+- 12-slot per-character inventory with category-aware items.
+- Afflicted state machine (wandering → agitated → frightened → cured → recovered).
 - Per-room reverb and music driven from `rooms.json`.
 - Flashlight + cone detection, dark rooms.
 - Editor: paint, layer isolation, drag afflicted, resize, save-to-disk
-  via dev endpoints.
+  via dev endpoints. Tile palette (P), flood fill (F), rectangle (R),
+  undo/redo (Ctrl+Z), warp picker (F4), maze audit (F5), door pairer (O),
+  default stamp (T).
 - Debug HUD (F1) and visual overlays (F3).
 - Persistent dropped items per room.
 - `RoomStateManager` singleton tracking inventory, collected items,
   unlocked doors, cured/recovered residents, dropped items, visited
-  rooms, fuel.
+  rooms, fuel, character roster, active character, per-character inventories.
+- **Cure flow**: auto-cure on collision if cure item in inventory; cure
+  item usable from inventory menu on adjacent afflicted.
+- **Cure clue dialog**: `curedClue` in afflicted def is shown in the cure
+  message, hinting where to find them after recovery.
+- **Home-room teleport**: cured/recovered afflicted with `associatedRoom`
+  only spawn in that room, disappearing from their original location.
+- **Recovery conversation**: multi-page `backstory[]` paged via E; final
+  page transitions to recovered, hands two `recoveredItems` into the
+  character's inventory.
+- **Character roster + switching**: recovered residents join a roster.
+  Keys `1`/`2`/`3`/`4` (or avatar bar click) switch the active character.
+  Switching saves the outgoing position, swaps inventories, and
+  teleports control (cross-room if needed).
+- **Avatar bar**: bottom-left HUD shows portrait icons for every roster
+  member. Active character highlighted in yellow. Clickable.
+- **Parked bodies**: inactive roster members present in the current room
+  render as static portrait sprites at their last position, so the player
+  can see where they left each character.
+- **Door unlock on cure**: curing an afflicted with an `associatedRoom`
+  automatically unlocks any door in the world that leads to that room,
+  so the player can follow the clue immediately.
+- **Two authored characters**: Kai (Former Lab Technician, house-b,
+  Lab Keycard + Compound Sample) and Maren (Local Shopkeeper, house-c,
+  Store Key + Supply Manifest).
 
 ---
 
@@ -252,21 +279,23 @@ something, that something dies and drops a key" is buildable as data.
 
 ---
 
-## Phase 4 — Roster and switching
+## Phase 4 — Roster and switching (DONE)
 
-The data has to grow before this becomes real.
+Shipped. Character state persists across room transitions. Remaining
+gaps to address organically during Phase 8 content authoring:
 
-- Promote `recoveredResidents: Set<string>` to `roster:
-  CharacterRecord[]`. Each record: id, name, role, introduced-item
-  ids, current carrying inventory, current room, current position.
-- Active character pointer. One field, `activeCharacterId`.
-- Switch keybind. Keep it simple — a single hotkey cycles, or
-  `1`/`2`/`3` map to roster slots. Switching saves the previous
-  character's room/position and restores the new one's.
-- Inventory: per-character (default). Each character has their own
-  12-slot grid; hand-offs become puzzles.
-- A character left in a room persists there. Switching teleports
-  control, not bodies.
+- `CharacterState` persists `{ id, textureKey, roomId, x, y }`.
+- `RoomStateManager` holds `roster[]`, `activeCharacterId`, and
+  `characterInventories` map. Switching swaps the inventory array.
+- `1`/`2`/`3`/`4` keys and avatar bar clicks trigger `switchToCharacter`.
+- Cross-room switches trigger a full fade transition and room load.
+- Drop-and-pickup is the only hand-off; no trade verb.
+
+**Still outstanding (not blocking):**
+- Save/load (Phase 7) doesn't yet serialize roster or character
+  inventories — will be wired when Phase 7 ships.
+- Characters left in a different room don't have a visual indicator
+  on the map (low priority until Phase 5 world flags exist).
 
 ---
 
@@ -353,9 +382,9 @@ any chain the design wants.
 - **Master-key has no source.** Place one (Phase 8 content), drop the
   requirement on most of those doors (Phase 1 cleanup), or document
   them as deliberately gated for later content.
-- **GameScene is 753 lines doing everything.** Extract things only
+- **GameScene is ~920 lines doing everything.** Extract things only
   when a phase actually needs to. Phase 1 will likely pull out the
-  interaction resolver; Phase 4 will pull out player-vs-roster.
+  interaction resolver.
 - **Editor edits don't survive HMR.** Vite re-evaluates `rooms.json`
   on hot-reload and resets the in-memory clone. Workflow: save, then
   full-reload page. Acceptable.

@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, INVENTORY_CONFIG } from '@utils/Constants';
-import { ItemDef } from '@/types';
+import { ItemDef, CharacterState } from '@/types';
 
 const COLS = INVENTORY_CONFIG.COLS;
 const ROWS = INVENTORY_CONFIG.ROWS;
@@ -26,6 +26,12 @@ export class UIScene extends Phaser.Scene {
   private invModeText!: Phaser.GameObjects.Text;
   private currentInventory: (ItemDef | null)[] = new Array(COLS * ROWS).fill(null);
   private isInvMode = false;
+
+  // Avatar bar
+  private avatarContainer!: Phaser.GameObjects.Container;
+  private avatarSprites: Phaser.GameObjects.Sprite[] = [];
+  private avatarHighlight!: Phaser.GameObjects.Rectangle;
+  private rosterData: CharacterState[] = [];
 
   constructor() {
     super(SCENES.UI);
@@ -91,6 +97,12 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5, 0);
     this.updateInvHint();
 
+    // ── Avatar bar ────────────────────────────────────────────────────────
+    this.avatarContainer = this.add.container(0, 0);
+    this.avatarHighlight = this.add.rectangle(0, 0, 16, 16)
+      .setStrokeStyle(1, 0xffdd44).setFillStyle(0, 0).setVisible(false);
+    this.avatarContainer.add(this.avatarHighlight);
+
     // ── Events ────────────────────────────────────────────────────────────
     const gs = this.scene.get(SCENES.GAME);
     gs.events.on('room-changed', this.showRoomName, this);
@@ -103,6 +115,8 @@ export class UIScene extends Phaser.Scene {
     gs.events.on('inventory-cursor', this.onInventoryCursor, this);
     gs.events.on('door-unlocked', this.onDoorUnlocked, this);
     gs.events.on('flashlight-battery', this.drawBattery, this);
+    gs.events.on('roster-changed', this.onRosterChanged, this);
+    gs.events.on('character-switched', this.onCharacterSwitched, this);
   }
 
   // ── Inventory rendering ─────────────────────────────────────────────────
@@ -179,6 +193,60 @@ export class UIScene extends Phaser.Scene {
     this.roomNameText.setText('Door unlocked!').setAlpha(1);
     if (this.roomNameTween) this.roomNameTween.destroy();
     this.roomNameTween = this.tweens.add({ targets: this.roomNameText, alpha: 0, delay: 1200, duration: 400 });
+  }
+
+  private onRosterChanged(roster: CharacterState[]): void {
+    this.rosterData = roster;
+    // Destroy old avatar sprites
+    this.avatarSprites.forEach(s => s.destroy());
+    this.avatarSprites = [];
+
+    const AVATAR_SIZE = 14;
+    const AVATAR_GAP = 2;
+    const AVATAR_X = 4;
+    const AVATAR_Y = 218;
+
+    roster.forEach((char, i) => {
+      const x = AVATAR_X + i * (AVATAR_SIZE + AVATAR_GAP) + AVATAR_SIZE / 2;
+      const y = AVATAR_Y + AVATAR_SIZE / 2;
+      const sprite = this.add.sprite(x, y, char.textureKey, 0)
+        .setDisplaySize(AVATAR_SIZE, AVATAR_SIZE)
+        .setInteractive({ useHandCursor: true });
+      sprite.on('pointerdown', () => {
+        this.scene.get(SCENES.GAME).events.emit('character-switch-request', char.id);
+      });
+      this.avatarSprites.push(sprite);
+      this.avatarContainer.add(sprite);
+    });
+
+    // Move highlight to active character
+    this.updateAvatarHighlight();
+  }
+
+  private onCharacterSwitched(id: string): void {
+    this.updateAvatarHighlight(id);
+  }
+
+  private updateAvatarHighlight(activeId?: string): void {
+    if (this.rosterData.length === 0) {
+      this.avatarHighlight.setVisible(false);
+      return;
+    }
+
+    const AVATAR_SIZE = 14;
+    const AVATAR_GAP = 2;
+    const AVATAR_X = 4;
+    const AVATAR_Y = 218;
+
+    const idx = activeId
+      ? this.rosterData.findIndex(c => c.id === activeId)
+      : 0;
+
+    if (idx < 0) return;
+
+    const x = AVATAR_X + idx * (AVATAR_SIZE + AVATAR_GAP) + AVATAR_SIZE / 2;
+    const y = AVATAR_Y + AVATAR_SIZE / 2;
+    this.avatarHighlight.setPosition(x, y).setVisible(true);
   }
 
   private drawBattery(percent: number): void {

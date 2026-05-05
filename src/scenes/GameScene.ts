@@ -11,7 +11,7 @@ import { DebugManager } from '@systems/DebugManager';
 import { RoomEditorManager } from '@systems/RoomEditorManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus } from '@/types';
+import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState } from '@/types';
 import { debug } from '@utils/Debug';
 
 const CLINIC_DOOR_X     = 160;
@@ -46,6 +46,12 @@ export class GameScene extends Phaser.Scene {
   // Inventory
   private inventoryMode = false;
   private inventoryCursor = 0;
+
+  // Recovery conversation paging — tracks which backstory page each cured resident is on
+  private recoveryPage: Map<string, number> = new Map();
+
+  // Standing sprites for inactive roster members present in the current room
+  private parkedBodies: Map<string, Phaser.GameObjects.Sprite> = new Map();
 
   constructor() {
     super(SCENES.GAME);
@@ -92,14 +98,21 @@ export class GameScene extends Phaser.Scene {
       this.editorManager?.destroy();
     });
 
+    this.events.on('character-switch-request', (id: string) => {
+      this.switchToCharacter(id);
+    });
+
     const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
     this.player = new Player(this, spawn.x, spawn.y);
+
+    this.rsm.initRoster({ id: 'player', textureKey: 'player', roomId: startRoom, x: spawn.x, y: spawn.y });
 
     this.setupCollisions();
     this.setupCamera();
     this.setupLighting();
     this.createWorldItemSprites();
     this.spawnAfflicted();
+    this.refreshParkedBodies();
 
     this.emitFullState(roomDef.name);
     debug('GameScene created, starting in room:', startRoom);
@@ -146,6 +159,13 @@ export class GameScene extends Phaser.Scene {
     if (input.flashlight) {
       this.flashlight.toggle();
     }
+
+    // Character switching via number keys
+    const roster = this.rsm.getRoster();
+    if (input.char1 && roster[0]) this.switchToCharacter(roster[0].id);
+    if (input.char2 && roster[1]) this.switchToCharacter(roster[1].id);
+    if (input.char3 && roster[2]) this.switchToCharacter(roster[2].id);
+    if (input.char4 && roster[3]) this.switchToCharacter(roster[3].id);
 
     // Dialog mode
     if (this.dialogOpen) {
@@ -215,6 +235,7 @@ export class GameScene extends Phaser.Scene {
       this.setupCamera();
       this.createWorldItemSprites();
       this.spawnAfflicted();
+      this.refreshParkedBodies();
 
       const roomDef = this.roomManager.getCurrentRoomDef();
       this.events.emit('room-changed', roomDef.name);
@@ -236,6 +257,7 @@ export class GameScene extends Phaser.Scene {
     this.setupLighting();
     this.createWorldItemSprites();
     this.spawnAfflicted();
+    this.refreshParkedBodies();
     this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
   }
 
@@ -270,6 +292,7 @@ export class GameScene extends Phaser.Scene {
       this.setupLighting();
       this.createWorldItemSprites();
       this.spawnAfflicted();
+      this.refreshParkedBodies();
       if (USE_MIDI_MUSIC) MusicManager.getInstance().playRoomMusic(roomId);
       this.events.emit('room-changed', room.name);
     }).then(() => { this.isTransitioning = false; });
@@ -287,10 +310,24 @@ export class GameScene extends Phaser.Scene {
     if (this.playerAfflictedCollider) this.playerAfflictedCollider.destroy();
 
     const roomDef = this.roomManager.getCurrentRoomDef();
+    const currentRoomId = this.roomManager.getCurrentRoomId();
     for (const def of roomDef.afflicted || []) {
       let status: AfflictedStatus = 'wandering';
-      if (this.rsm.isResidentRecovered(def.id)) status = 'recovered';
-      else if (this.rsm.isResidentCured(def.id)) status = 'cured';
+      const isCured = this.rsm.isResidentCured(def.id);
+      const isRecovered = this.rsm.isResidentRecovered(def.id);
+      if (isRecovered) status = 'recovered';
+      else if (isCured) status = 'cured';
+
+      // Cured/recovered residents with an associatedRoom only appear in that room
+      if ((isCured || isRecovered) && def.associatedRoom && def.associatedRoom !== currentRoomId) {
+        continue;
+      }
+
+      // The currently active character IS the player sprite — don't also spawn them as an NPC
+      if (def.id === this.rsm.getActiveCharacterId()) {
+        continue;
+      }
+
       const afflicted = new Afflicted(this, def, status);
       this.afflictedGroup.add(afflicted);
     }
@@ -318,41 +355,29 @@ export class GameScene extends Phaser.Scene {
       this.rsm.removeFromInventory(cureSlot);
       this.rsm.cureResident(afflicted.getId());
       afflicted.setStatus('cured');
+      const associatedRoom = afflicted.getAssociatedRoom();
+      if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
       this.cameras.main.shake(200, 0.006);
       this.emitInventoryChanged();
       this.dialogOpen = true;
-      this.events.emit('dialog-open', `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.`);
+      const clue = afflicted.getCuredClue();
+      const msg = clue
+        ? `The ${item.name} shattered on impact.\n${afflicted.getName()} slumps against the wall.\n\n${clue}`
+        : `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.\nThey seem to need some time alone.`;
+      this.events.emit('dialog-open', msg);
       return;
     }
 
     this.isTransitioning = true;
     (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
 
-    // Visual/Audio effect (shake camera)
     this.cameras.main.shake(400, 0.01);
 
-    // Brief delay then transition back to start
     this.time.delayedCall(400, () => {
       this.transitionManager.transition(() => {
-        MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
-        const startRoomId = this.roomManager.getStartRoom();
-        this.roomManager.loadRoom(startRoomId);
-        this.rsm.visitRoom(startRoomId);
-
-        const roomDef = this.roomManager.getCurrentRoomDef();
-        const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
-
-        this.player.setPosition(spawn.x, spawn.y);
-        this.player.playIdle();
-
-        this.setupCollisions();
-        this.setupCamera();
-        this.createWorldItemSprites();
-        this.spawnAfflicted();
-
-        this.events.emit('room-changed', roomDef.name);
-      }).then(() => {
-        this.isTransitioning = false;
+        if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
+        this.rsm.reset();
+        this.scene.restart();
       });
     });
   }
@@ -443,9 +468,15 @@ export class GameScene extends Phaser.Scene {
           this.rsm.removeFromInventory(slot);
           this.rsm.cureResident(nearest.getId());
           nearest.setStatus('cured');
+          const associatedRoom = nearest.getAssociatedRoom();
+          if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
           this.exitInventory();
           this.dialogOpen = true;
-          this.events.emit('dialog-open', `You applied the ${item.name}.\n${nearest.getName()} seems to be calming down.`);
+          const clue = nearest.getCuredClue();
+          const msg = clue
+            ? `You applied the ${item.name}.\n${nearest.getName()} slumps against the wall.\n\n${clue}`
+            : `You applied the ${item.name}.\n${nearest.getName()} seems to be calming down.\nThey seem to need some time alone.`;
+          this.events.emit('dialog-open', msg);
           this.emitInventoryChanged();
           return;
         } else {
@@ -574,17 +605,111 @@ export class GameScene extends Phaser.Scene {
     const status = afflicted.getStatus();
     const name = afflicted.getName();
     const role = afflicted.getRole();
+    const id = afflicted.getId();
 
     if (status === 'cured') {
-      this.rsm.recoverResident(afflicted.getId());
-      afflicted.setStatus('recovered');
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', `${name} — ${role}\n"...where am I? What happened?"`);
-      this.events.emit('hide-interact-prompt');
+      const associatedRoom = afflicted.getAssociatedRoom();
+      const currentRoom = this.roomManager.getCurrentRoomId();
+
+      // If they have a home room and we're not in it yet, they're just dazed.
+      // The clue was already shown at cure time. Walk through a door to find them there.
+      if (associatedRoom && associatedRoom !== currentRoom) {
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', `${name} stares past you. They seem distant.\nMaybe they need somewhere familiar.`);
+        this.events.emit('hide-interact-prompt');
+        return;
+      }
+
+      // We're in their home room — run the backstory conversation.
+      const pages = afflicted.getBackstory();
+      const page = this.recoveryPage.get(id) ?? 0;
+
+      if (pages.length === 0 || page >= pages.length - 1) {
+        // Final page (or no backstory): recover and hand over items
+        const finalText = pages[page] ?? `${name} — ${role}\n"I'm ready to help. Let's go."`;
+        this.rsm.recoverResident(id);
+        afflicted.setStatus('recovered');
+        this.recoveryPage.delete(id);
+
+        const charState: CharacterState = {
+          id,
+          textureKey: `player-${afflicted.getPlayerVariant() ?? 'warden'}`,
+          roomId: currentRoom,
+          x: afflicted.x,
+          y: afflicted.y,
+        };
+        this.rsm.addToRoster(charState);
+
+        const items = afflicted.getRecoveredItems();
+        const charInv = this.rsm.getCharacterInventory(id);
+        items.forEach((item, i) => { charInv[i] = item; });
+
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', finalText);
+        this.events.emit('hide-interact-prompt');
+        this.events.emit('roster-changed', this.rsm.getRoster());
+      } else {
+        // Still in conversation — show current page, advance counter
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', pages[page]);
+        this.events.emit('hide-interact-prompt');
+        this.recoveryPage.set(id, page + 1);
+      }
     } else if (status === 'recovered') {
       this.dialogOpen = true;
-      this.events.emit('dialog-open', `${name} — ${role}\n"I'm still trying to remember..."`);
+      this.events.emit('dialog-open', `${name}\n"I'm ready when you are."`);
       this.events.emit('hide-interact-prompt');
+    }
+  }
+
+  public switchToCharacter(targetId: string): void {
+    if (this.isTransitioning || this.dialogOpen) return;
+    if (targetId === this.rsm.getActiveCharacterId()) return;
+
+    const target = this.rsm.getCharacterState(targetId);
+    if (!target) return;
+
+    // Save current character's position
+    const curId = this.rsm.getActiveCharacterId();
+    this.rsm.updateCharacterPosition(curId, this.roomManager.getCurrentRoomId(), this.player.x, this.player.y);
+
+    this.rsm.setActiveCharacter(targetId);
+
+    const doSwitch = () => {
+      // Remove any lingering Afflicted entity for the incoming character
+      const toRemove: Afflicted[] = [];
+      this.afflictedGroup.getChildren().forEach(child => {
+        const a = child as Afflicted;
+        if (a.getId() === targetId) toRemove.push(a);
+      });
+      toRemove.forEach(a => { a.destroy(); this.afflictedGroup.remove(a); });
+
+      this.player.rebuildAnimations(target.textureKey);
+      this.player.setPosition(target.x, target.y);
+      this.events.emit('character-switched', targetId);
+      this.events.emit('inventory-changed', this.rsm.getInventory());
+    };
+
+    if (target.roomId !== this.roomManager.getCurrentRoomId()) {
+      this.isTransitioning = true;
+      (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+      this.transitionManager.transition(() => {
+        MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
+        this.roomManager.loadRoom(target.roomId);
+        this.rsm.visitRoom(target.roomId);
+        this.setupCollisions();
+        this.setupCamera();
+        this.setupLighting();
+        this.createWorldItemSprites();
+        this.spawnAfflicted();
+        doSwitch();
+        this.refreshParkedBodies();
+        if (USE_MIDI_MUSIC) MusicManager.getInstance().playRoomMusic(target.roomId);
+        this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
+      }).then(() => { this.isTransitioning = false; });
+    } else {
+      doSwitch();
+      this.refreshParkedBodies();
     }
   }
 
@@ -620,6 +745,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ── World item sprites ──────────────────────────────────────────────────
+
+  private unlockDoorsToRoom(targetRoomId: string): void {
+    const allRooms = RoomManager.getRoomsData().rooms;
+    for (const room of Object.values(allRooms)) {
+      for (const door of room.doors) {
+        if (door.targetRoom === targetRoomId) {
+          this.rsm.unlockDoor(door.id);
+        }
+      }
+    }
+  }
+
+  private refreshParkedBodies(): void {
+    this.parkedBodies.forEach(s => s.destroy());
+    this.parkedBodies.clear();
+
+    const currentRoomId = this.roomManager.getCurrentRoomId();
+    const activeId = this.rsm.getActiveCharacterId();
+
+    for (const char of this.rsm.getRoster()) {
+      if (char.id === activeId) continue;
+      if (char.roomId !== currentRoomId) continue;
+
+      const sprite = this.add.sprite(char.x, char.y, char.textureKey, 0)
+        .setScale(1.0)
+        .setDepth(DEPTH.ENTITIES);
+      this.parkedBodies.set(char.id, sprite);
+    }
+  }
 
   private createWorldItemSprites(): void {
     this.itemSprites.forEach((s) => s.destroy());
@@ -785,6 +939,7 @@ export class GameScene extends Phaser.Scene {
       this.setupLighting();
       this.createWorldItemSprites();
       this.spawnAfflicted();
+      this.refreshParkedBodies();
 
       if (USE_MIDI_MUSIC) {
         MusicManager.getInstance().playRoomMusic(doorDef.targetRoom);
@@ -804,6 +959,11 @@ export class GameScene extends Phaser.Scene {
   private emitFullState(roomName: string): void {
     this.events.emit('room-changed', roomName);
     this.events.emit('inventory-changed', this.rsm.getInventory());
+    // Delay one frame so UIScene's event listeners are registered before we fire
+    this.time.delayedCall(0, () => {
+      this.events.emit('roster-changed', this.rsm.getRoster());
+      this.events.emit('character-switched', this.rsm.getActiveCharacterId());
+    });
   }
 
   private getRoomStateManager(): RoomStateManager {

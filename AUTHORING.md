@@ -241,6 +241,53 @@ Snippet:
 
 Paste under `rooms.<roomId>.afflicted`. Edit `name` and `role`. Reload.
 
+### Full afflicted fields
+
+The minimal snippet above starts the NPC wandering with no cure
+recovery. For a curable character that joins the roster, fill in the
+optional fields:
+
+```json
+{
+  "id": "unique-id",
+  "name": "Kai",
+  "role": "Former Lab Technician",
+  "x": 400, "y": 500,
+  "behaviorLoop": "wander",
+
+  "variant": "walker",
+  "playerVariant": "ranger",
+
+  "associatedRoom": "house-b",
+  "curedClue": "Short mumble shown in the cure dialog — hints where to find them.",
+
+  "backstory": [
+    "First dialog page (E press 1).",
+    "Second page (E press 2).",
+    "Final page — recovery triggers here, items handed over."
+  ],
+  "recoveredItems": [
+    { "name": "Lab Keycard", "tileFrame": 8, "category": "key", "keyId": "lab-door" },
+    { "name": "Compound Sample", "tileFrame": 9, "category": "component" }
+  ]
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `variant` | no | Afflicted sprite to use (`walker`, `bloater`, `crawler`, `husk`, `spitter`, `brute`, `ashrot`, `veinhost`). Default: `walker`. |
+| `playerVariant` | no | Player sprite to swap to on cure (`ranger`, `rogue`, `mystic`, `drifter`, `scavenger`, `warden`, `ashwalker`). If omitted, no sprite swap occurs. |
+| `associatedRoom` | no | Room ID where they appear after being cured. They disappear from their original room once cured and only spawn here. |
+| `curedClue` | no | Short line shown at the bottom of the cure dialog. Should hint at `associatedRoom` without naming it. |
+| `backstory` | no | Array of dialog pages. Player presses E once per page. Final page triggers full recovery: status → `recovered`, character joins roster, `recoveredItems` placed in their inventory. |
+| `recoveredItems` | no | Two items (by convention) placed in the character's personal inventory on recovery. Standard `ItemDef` format. |
+
+The same entry should appear in **both** the original room (as
+`wandering`) and the `associatedRoom` (so they respawn there after
+cure). The `associatedRoom` copy only needs `id`, `name`, `role`,
+`x`, `y`, `behaviorLoop`, `variant`, `playerVariant`, and
+`associatedRoom` — the engine reads all fields from both defs.
+
 To **reposition** an existing afflicted (instead of placing a new one):
 in editor mode, just click and drag them. On release, a snippet with
 just the new `x` and `y` is copied to clipboard, and the toast tells
@@ -331,8 +378,10 @@ These are things you'll do directly in `rooms.json`:
 - Edit text on an existing interactable.
 - Change an interactable's `requires`, `tileFrame`, or `type`.
 - Re-link a door's `targetRoom` / `targetDoor`.
-- Define item state machines, world flags, character recovery
-  unlocks (engine doesn't support these yet — see `ROADMAP.md`).
+- Define item state machines or world flags (engine doesn't support
+  these yet — see `ROADMAP.md` Phase 3 and Phase 5).
+- Edit afflicted `backstory`, `curedClue`, `recoveredItems` — text-edit
+  directly in `rooms.json`.
 
 The editor stays focused on placement and layout. Everything else is
 text editing in the JSON, with reload to verify. That's the deal:

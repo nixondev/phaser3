@@ -58,6 +58,18 @@ export interface AfflictedDef {
   playerVariant?: string;
   cureCondition?: string;
   recoveryUnlock?: string;
+  associatedRoom?: string;
+  curedClue?: string;
+  backstory?: string[];
+  recoveredItems?: ItemDef[];
+}
+
+export interface CharacterState {
+  id: string;
+  textureKey: string;
+  roomId: string;
+  x: number;
+  y: number;
 }
 
 export interface RoomDefinition {
@@ -95,5 +107,9 @@ export interface InputState {
   debug: boolean;
   editor: boolean;
   visuals: boolean;
+  char1: boolean;
+  char2: boolean;
+  char3: boolean;
+  char4: boolean;
 }
 

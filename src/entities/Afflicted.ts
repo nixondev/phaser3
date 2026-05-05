@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Entity } from './Entity';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
-import { AfflictedDef, AfflictedStatus, Position } from '@/types';
+import { AfflictedDef, AfflictedStatus, ItemDef, Position } from '@/types';
 import { MusicManager } from '@systems/MusicManager';
 import { Direction } from './Direction';
 
@@ -32,6 +32,10 @@ export class Afflicted extends Entity {
   private baseScale: number;
   private currentDir: Direction = Direction.DOWN;
   private playerVariant: string | null;
+  private associatedRoom: string | null;
+  private curedClue: string | null;
+  private backstory: string[];
+  private recoveredItems: ItemDef[];
 
   constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
     const variant = def.variant || 'walker';
@@ -41,14 +45,18 @@ export class Afflicted extends Entity {
     this.baseScale = 1.0;
     this.setScale(this.baseScale);
 
-    this.afflictedId  = def.id;
-    this.residentName = def.name;
-    this.role         = def.role;
-    this.behaviorLoop = def.behaviorLoop;
-    this.status       = initialStatus;
-    this.variant      = variant;
-    this.playerVariant = def.playerVariant || null;
-    this.origin       = { x: def.x, y: def.y };
+    this.afflictedId    = def.id;
+    this.residentName   = def.name;
+    this.role           = def.role;
+    this.behaviorLoop   = def.behaviorLoop;
+    this.status         = initialStatus;
+    this.variant        = variant;
+    this.playerVariant  = def.playerVariant || null;
+    this.associatedRoom = def.associatedRoom || null;
+    this.curedClue      = def.curedClue || null;
+    this.backstory      = def.backstory || [];
+    this.recoveredItems = def.recoveredItems || [];
+    this.origin         = { x: def.x, y: def.y };
 
     this.setDepth(DEPTH.ENTITIES);
     const body = this.body as Phaser.Physics.Arcade.Body;
@@ -320,8 +328,13 @@ export class Afflicted extends Entity {
     super.destroy(fromScene);
   }
 
-  getStatus():  AfflictedStatus { return this.status;       }
-  getId():      string          { return this.afflictedId;  }
-  getName():    string          { return this.residentName; }
-  getRole():    string          { return this.role;         }
+  getStatus():         AfflictedStatus  { return this.status;         }
+  getId():             string           { return this.afflictedId;    }
+  getName():           string           { return this.residentName;   }
+  getRole():           string           { return this.role;           }
+  getPlayerVariant():  string | null    { return this.playerVariant;  }
+  getAssociatedRoom(): string | null    { return this.associatedRoom; }
+  getCuredClue():      string | null    { return this.curedClue;      }
+  getBackstory():      string[]         { return this.backstory;      }
+  getRecoveredItems(): ItemDef[]        { return this.recoveredItems; }
 }

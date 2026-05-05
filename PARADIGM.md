@@ -42,9 +42,9 @@ ones most relevant to puzzle design:
 - **Event-tick time + one bespoke wall-clock deadline.** Every other
   timer ticks on game events, not seconds. Exactly one place in the
   city has a real-time pulse.
-- **Full-snapshot save on key events; respawn-at-house on death.**
-  No missable items, no unwinnable runs. The game is forgiving;
-  the puzzles are the difficulty.
+- **Full run reset on any character death.** Death wipes all state and
+  restarts from the beginning. No respawn, no mid-run save. The game is
+  difficult; the puzzles are the difficulty.
 - **Every published target renders a sprite.** No invisible
   interactables. The maze is legible; the *solutions* aren't.
 - **No bespoke code per puzzle.** Every puzzle is composed from the
@@ -61,7 +61,8 @@ The complete list of what the player can do at any moment:
 - **Open inventory** (Tab) and select an item
 - **Drop** the selected item (Q)
 - **Toggle flashlight** (F)
-- **Switch active character** (Phase 4 — between recovered residents)
+- **Switch active character** (`1`/`2`/`3`/`4` keys or avatar bar click —
+  between recovered residents in the roster)
 - **Read a document** (Phase 7 — modal of the item's `content`)
 
 That's it. No combat, no minigames, no QTEs, no "guess the right
@@ -153,17 +154,50 @@ Entities can hold items internally (`holds: ItemDef[]`). On the right
 state change, those items drop into the world like any other dropped
 item.
 
-### Characters (Phase 4)
+### Characters
 
 A roster of recovered residents the player can switch between. Each:
 
 - Has their own 12-slot inventory (per-character — hand-offs become
   puzzles).
 - Persists in whatever room they were left in.
+- Switches in via `1`/`2`/`3`/`4` or clicking their avatar in the
+  bottom-left bar. Cross-room switches trigger a fade transition.
 - Can be required by a `requires` rule (some interactions only work
-  for a specific role).
+  for a specific role — Phase 2).
 
 Switching characters teleports the camera/control, not the bodies.
+
+A recovered resident's data in `rooms.json`:
+
+```json
+{
+  "id": "street-wanderer-1",
+  "name": "Kai",
+  "role": "Former Lab Technician",
+  "x": 400, "y": 500,
+  "behaviorLoop": "wander",
+  "variant": "walker",
+  "playerVariant": "ranger",
+  "associatedRoom": "house-b",
+  "curedClue": "...mumbles about the north block... chemicals...",
+  "backstory": [
+    "Page one dialog string.",
+    "Page two.",
+    "Final page — triggers recovery + item handover."
+  ],
+  "recoveredItems": [
+    { "name": "Lab Keycard", "tileFrame": 8, "category": "key", "keyId": "lab-door" },
+    { "name": "Compound Sample", "tileFrame": 9, "category": "component" }
+  ]
+}
+```
+
+`associatedRoom` controls where the cured resident reappears after
+their first cure (they vanish from the original room and only appear
+in the associated one). `curedClue` is shown in the cure dialog.
+`backstory` pages are shown E-by-E; the final page triggers the full
+recovery, roster addition, and item handover.
 
 ### World flags (Phase 5)
 

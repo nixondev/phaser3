@@ -80,14 +80,68 @@ export class Player extends Entity {
       } else {
         this.direction = vx < 0 ? Direction.LEFT : Direction.RIGHT;
       }
-      this.play(`walk-${this.direction}`, true);
+      const tk = this.texture.key;
+      const walkKey = tk === 'player' ? `walk-${this.direction}` : `${tk}-walk-${this.direction}`;
+      this.play(walkKey, true);
     } else {
-      this.play(`idle-${this.direction}`, true);
+      const tk = this.texture.key;
+      const idleKey = tk === 'player' ? `idle-${this.direction}` : `${tk}-idle-${this.direction}`;
+      this.play(idleKey, true);
     }
   }
 
   playIdle(): void {
-    this.play(`idle-${this.direction}`, true);
+    const tk = this.texture.key;
+    const idleKey = tk === 'player' ? `idle-${this.direction}` : `${tk}-idle-${this.direction}`;
+    this.play(idleKey, true);
+  }
+
+  rebuildAnimations(textureKey: string): void {
+    const dirs: { key: Direction; row: number }[] = [
+      { key: Direction.DOWN, row: 0 },
+      { key: Direction.LEFT, row: 1 },
+      { key: Direction.RIGHT, row: 2 },
+      { key: Direction.UP, row: 3 },
+    ];
+
+    if (textureKey === 'player') {
+      // Protagonist uses bare keys; animations already exist
+      this.setTexture('player', 0);
+      this.play(`idle-${this.direction}`, true);
+      return;
+    }
+
+    for (const { key, row } of dirs) {
+      const start = row * 4;
+      const walkKey = `${textureKey}-walk-${key}`;
+      const idleKey = `${textureKey}-idle-${key}`;
+
+      if (!this.scene.anims.exists(walkKey)) {
+        this.scene.anims.create({
+          key: walkKey,
+          frames: this.scene.anims.generateFrameNumbers(textureKey, {
+            frames: [start, start + 1, start + 2, start + 3],
+          }),
+          frameRate: PLAYER_CONFIG.ANIM_FPS,
+          repeat: -1,
+        });
+      }
+      if (!this.scene.anims.exists(idleKey)) {
+        this.scene.anims.create({
+          key: idleKey,
+          frames: [{ key: textureKey, frame: start }],
+          frameRate: 1,
+          repeat: -1,
+        });
+      }
+    }
+
+    this.setTexture(textureKey, 0);
+    this.play(`${textureKey}-idle-${this.direction}`, true);
+  }
+
+  getCurrentTextureKey(): string {
+    return this.texture.key;
   }
 
   getFacingAngle(): number {

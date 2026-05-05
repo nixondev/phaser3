@@ -373,10 +373,33 @@ to be a clear waypoint for future you.
 
 ---
 
+## Character switching (live)
+
+Once a resident is cured and has completed their recovery conversation
+(all `backstory` pages via E), they join the roster. Switch between
+roster members using:
+
+| Key | Action |
+|-----|--------|
+| **1** | Switch to roster slot 1 (protagonist) |
+| **2** | Switch to roster slot 2 (first recovered) |
+| **3** | Switch to roster slot 3 |
+| **4** | Switch to roster slot 4 |
+
+Or click the portrait icons in the avatar bar at the bottom-left of
+the screen. The active character is outlined in yellow.
+
+Switching saves the current character's room and position, swaps
+inventories, and repositions the player sprite at the target
+character's last known location. Cross-room switches play a full
+fade transition.
+
+---
+
 ## What this guide does NOT cover
 
-- Item state machines, world flags, character switching — these are
-  engine features still being built. See `ROADMAP.md` for what's next.
+- Item state machines, world flags — engine features still being built.
+  See `ROADMAP.md` for what's next.
 - Story content, character names, puzzle paths — those decisions live
   in your head until you're standing in the room. See `PARADIGM.md`
   for the design grammar that shapes them.

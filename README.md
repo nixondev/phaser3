@@ -54,7 +54,7 @@ npm run build-tiles  # Compose individual PNGs into tileset.png
 
 - **GameScene:** Handles the main game loop, movement, AI, room transitions, and interaction logic.
 - **UIScene:** Manages the HUD, inventory grid, dialog boxes, and interaction prompts.
-- **RoomStateManager:** A singleton managing all persistent game state (inventory, cured residents, unlocked doors, etc.).
+- **RoomStateManager:** A singleton managing all persistent game state (per-character inventories, character roster, active character, cured/recovered residents, unlocked doors, dropped items, visited rooms, etc.).
 - **MusicManager:** Singleton managing on-demand loading of MIDI tracks and SoundFonts, supporting parallel proximity layers and spatial effects.
 - **SpessaSynthPlayer:** Modern MIDI synthesis engine wrapper using AudioWorklets for high-fidelity, low-latency audio.
 - **AudioEffectsManager:** Handles environmental reverb (City, Indoor, Sewer, Hospital, Substation) using Web Audio ConvolverNodes.
@@ -66,10 +66,11 @@ For details on the audio directory structure and how to override assets, see the
 | Key | Action |
 |-----|--------|
 | **Arrow keys / WASD** | Move |
-| **E** | Interact / Use item / Dismiss dialog |
+| **E** | Interact / Use item / Advance dialog |
 | **F** | Toggle Flashlight |
 | **TAB** | Toggle inventory |
 | **Q** | Drop selected inventory item |
+| **1 / 2 / 3 / 4** | Switch active character (roster slots) |
 | **ESC** | Pause menu |
 | **- / +** | Adjust Volume (in Pause menu) |
 
@@ -105,10 +106,15 @@ In editor mode (F2): `1/2/3` switch active layer, `Q/E` cycle tile, left-click p
 ## Development Status
 
 The project is currently in active development.
-- **Completed:** Combat system removal, core data model for cured residents, city map expansion with functional interiors, and basic entity state machines.
-- **Audio:** Modern SoundFont-based synthesis (SpessaSynth) with atmospheric convolution reverb (data-driven per room from `rooms.json`) and dynamic vertical layering.
-- **Tooling:** In-engine debug HUD, visual overlays, and a live room editor (F1/F2/F3) with disk-backed save endpoints in dev (see `CLAUDE.md` § Debug & Editor Systems).
-- **Current Focus:** Implementing the cure mechanic and expanding environmental storytelling.
+
+- **Core loop:** Room transitions, collision, tilemaps, inventory (12-slot per character), afflicted state machine (wander → agitate → frighten → cure → recover).
+- **Cure flow:** Auto-cure on collision, inventory-use cure, cure clue dialog, home-room teleport for cured residents, multi-page backstory conversations, two-item handover on recovery. Curing a resident automatically unlocks the door to their home room.
+- **Character roster:** Recovered residents join a playable roster. Switch via `1`/`2`/`3`/`4` or the avatar bar (bottom-left HUD). Per-character inventories; cross-room switches fade-transition. Inactive roster members appear as parked body sprites at their last position.
+- **Death:** Any character death triggers a full game reset — all state wiped, protagonist restarts from scratch.
+- **Authored characters:** Kai (Former Lab Technician, house-b) and Maren (Local Shopkeeper, house-c) — each with a 3-page backstory and two recoverable items.
+- **Audio:** Modern SoundFont-based synthesis (SpessaSynth) with atmospheric convolution reverb (data-driven per room from `rooms.json`) and proximity-based layering.
+- **Tooling:** In-engine debug HUD (F1), visual overlays (F3), and a live room editor (F2) with tile palette, flood fill, undo/redo, door pairer, warp picker, and disk-backed save endpoints in dev.
+- **Current Focus:** Phase 1 (unified interaction resolver) and building the first full puzzle chain as data.
 
 ---
 
