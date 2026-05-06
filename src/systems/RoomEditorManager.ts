@@ -11,6 +11,8 @@ export class RoomEditorManager {
   
   private isActive: boolean = false;
   private selectedObject: any = null;
+  private selectedDoor: { zone: Phaser.GameObjects.Zone; doorId: string } | null = null;
+  private doorHandles!: Phaser.GameObjects.Graphics;
   private dragOffset: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private wasPrimaryDown: boolean = false;
 
@@ -157,6 +159,10 @@ export class RoomEditorManager {
     this.rectGraphics = this.scene.add.graphics();
     this.rectGraphics.setDepth(DEPTH.UI + 199).setVisible(false);
 
+    // Cyan crosshair drawn on each door zone so they can be grabbed in editor mode
+    this.doorHandles = this.scene.add.graphics();
+    this.doorHandles.setDepth(DEPTH.UI + 197).setVisible(false);
+
     this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 6, '', {
       fontSize: '8px',
       color: '#000000',
@@ -216,11 +222,14 @@ export class RoomEditorManager {
       this.tileCursor.setVisible(this.isActive);
       this.tilePreview.setVisible(this.isActive);
       this.mapOutline.setVisible(this.isActive);
+      this.doorHandles.setVisible(this.isActive);
       // Palette also hides when the editor closes; reopens on next P press.
       if (!this.isActive) {
         this.paletteVisible = false;
         this.paletteContainer.setVisible(false);
         this.paletteHighlight.clear();
+        this.doorHandles.clear();
+        this.selectedDoor = null;
       }
 
       this.updateLayerOpacities();
@@ -244,6 +253,7 @@ export class RoomEditorManager {
     this.handleFloodFill();
     this.handleRectangle();
     this.redrawMapOutline();
+    this.redrawDoorHandles();
     this.updateHUD();
 
     // Door-pair clicks short-circuit normal painting/selection.
@@ -851,12 +861,10 @@ export class RoomEditorManager {
   
   private handleSelection(justDown: boolean): void {
     const pointer = this.scene.input.activePointer;
-    
-    // Only select on JUST DOWN to avoid grabbing while painting
-    if (justDown && !this.selectedObject) {
+
+    if (justDown && !this.selectedObject && !this.selectedDoor) {
       const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-      
-      // Try to select an object
+
       // 1. Check Afflicted
       const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.Physics.Arcade.Group;
       if (afflictedGroup) {
@@ -869,30 +877,101 @@ export class RoomEditorManager {
           return;
         }
       }
-      
-      // 2. Check Interactables
-      // Note: We don't have sprites for all interactables, some are just zones
-      // In a more complete editor we'd draw icons for these
-    }
-  }
-  
-  private handleDragging(justUp: boolean): void {
-    if (!this.selectedObject) return;
-    
-    const pointer = this.scene.input.activePointer;
-    if (pointer.primaryDown) {
-      const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-      this.selectedObject.sprite.x = worldPoint.x - this.dragOffset.x;
-      this.selectedObject.sprite.y = worldPoint.y - this.dragOffset.y;
-    } else {
-      if (justUp) {
-        this.logObjectSnippet();
+
+      // 2. Check door zones (grab handle is 16×16 at zone center)
+      for (const zone of this.roomManager.getDoorZones()) {
+        const body = zone.body as Phaser.Physics.Arcade.StaticBody;
+        if (Phaser.Geom.Rectangle.Contains(
+          new Phaser.Geom.Rectangle(body.x, body.y, body.width, body.height),
+          worldPoint.x, worldPoint.y
+        )) {
+          const doorDef = zone.getData('doorDef') as any;
+          this.selectedDoor = { zone, doorId: doorDef?.id ?? '' };
+          this.dragOffset.set(worldPoint.x - zone.x, worldPoint.y - zone.y);
+          return;
+        }
       }
     }
-    
-    if (this.keys.ESC.isDown) {
-      this.deselect();
+  }
+
+  private handleDragging(justUp: boolean): void {
+    const pointer = this.scene.input.activePointer;
+    const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+
+    // Afflicted drag
+    if (this.selectedObject) {
+      if (pointer.primaryDown) {
+        this.selectedObject.sprite.x = worldPoint.x - this.dragOffset.x;
+        this.selectedObject.sprite.y = worldPoint.y - this.dragOffset.y;
+      } else {
+        if (justUp) this.logObjectSnippet();
+      }
+      if (this.keys.ESC.isDown) this.deselect();
     }
+
+    // Door drag
+    if (this.selectedDoor) {
+      if (pointer.primaryDown) {
+        const map = this.roomManager.getMap();
+        const T = GAME_CONFIG.TILE_SIZE;
+        if (map) {
+          // Snap to tile grid while dragging
+          const wx = worldPoint.x - this.dragOffset.x;
+          const wy = worldPoint.y - this.dragOffset.y;
+          const tileX = map.worldToTileX(wx) ?? 0;
+          const tileY = map.worldToTileY(wy) ?? 0;
+          const snappedX = tileX * T;
+          const snappedY = tileY * T;
+          this.selectedDoor.zone.setPosition(snappedX + T / 2, snappedY + T / 2);
+          const body = this.selectedDoor.zone.body as Phaser.Physics.Arcade.StaticBody;
+          body.reset(snappedX, snappedY);
+        }
+      } else {
+        if (justUp) this.releaseDoorDrag();
+      }
+      if (this.keys.ESC.isDown) this.selectedDoor = null;
+    }
+  }
+
+  // ── Door dragging ────────────────────────────────────────────────────────
+
+  private redrawDoorHandles(): void {
+    this.doorHandles.clear();
+    if (!this.isActive) return;
+    const T = GAME_CONFIG.TILE_SIZE;
+    for (const zone of this.roomManager.getDoorZones()) {
+      const body = zone.body as Phaser.Physics.Arcade.StaticBody;
+      const isDragging = this.selectedDoor?.zone === zone;
+      // Outer square
+      this.doorHandles.lineStyle(1, isDragging ? 0xffffff : 0x00ffff, isDragging ? 1 : 0.7);
+      this.doorHandles.strokeRect(body.x, body.y, body.width, body.height);
+      // Cross-hair so it's obvious the handle is clickable
+      const cx = body.x + body.width / 2;
+      const cy = body.y + body.height / 2;
+      this.doorHandles.lineBetween(cx - T / 4, cy, cx + T / 4, cy);
+      this.doorHandles.lineBetween(cx, cy - T / 4, cx, cy + T / 4);
+    }
+  }
+
+  private releaseDoorDrag(): void {
+    if (!this.selectedDoor) return;
+    const { zone, doorId } = this.selectedDoor;
+    const body = zone.body as Phaser.Physics.Arcade.StaticBody;
+    const roomId = this.roomManager.getCurrentRoomId();
+    const data = RoomManager.getRoomsData();
+    const room = data.rooms[roomId];
+    if (!room) { this.selectedDoor = null; return; }
+    const door = (room.doors || []).find((d: any) => d.id === doorId);
+    if (door) {
+      (door as any).x = body.x;
+      (door as any).y = body.y;
+      // Re-emit the full updated room so the user can paste it
+      const updated: any = JSON.parse(JSON.stringify(room));
+      const fragment = `"${roomId}": ${JSON.stringify(updated, null, 2)}`;
+      console.log(`[Editor] Moved door "${doorId}" to (${body.x}, ${body.y}). Replace entry in rooms.json:\n${fragment}`);
+      this.copyAndToast(fragment, `Door moved.\nReplace "${roomId}" entry in rooms.json.`);
+    }
+    this.selectedDoor = null;
   }
   
   private select(obj: any, type: string): void {
@@ -1564,11 +1643,13 @@ export class RoomEditorManager {
   destroy(): void {
     this.scene.input.off('wheel', this.onWheel, this);
     this.deselect();
+    this.selectedDoor = null;
     this.toastTween?.stop();
     this.editorText?.destroy();
     this.tileCursor?.destroy();
     this.tilePreview?.destroy();
     this.mapOutline?.destroy();
+    this.doorHandles?.destroy();
     this.toastText?.destroy();
     this.paletteContainer?.destroy();
     this.paletteHighlight?.destroy();

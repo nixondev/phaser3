@@ -30,6 +30,7 @@ export const SCENES = {
   GAME: 'Game',
   UI: 'UI',
   PAUSE: 'Pause',
+  EDITOR: 'Editor',
 } as const;
 
 export const ROOM_CONFIG = {

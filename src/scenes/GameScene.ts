@@ -7,8 +7,6 @@ import { InputManager } from '@systems/InputManager';
 import { RoomManager } from '@systems/RoomManager';
 import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
-import { DebugManager } from '@systems/DebugManager';
-import { RoomEditorManager } from '@systems/RoomEditorManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef } from '@/types';
@@ -41,8 +39,6 @@ export class GameScene extends Phaser.Scene {
 
   // Flashlight (persistent across rooms — always available)
   private flashlight!: Flashlight;
-  private debugManager!: DebugManager;
-  private editorManager!: RoomEditorManager;
 
   // Inventory
   private inventoryMode = false;
@@ -71,8 +67,6 @@ export class GameScene extends Phaser.Scene {
     this.rsm = RoomStateManager.getInstance();
     this.afflictedGroup = this.physics.add.group();
     this.flashlight = new Flashlight(this);
-    this.debugManager = new DebugManager(this, this.roomManager, this.rsm);
-    this.editorManager = new RoomEditorManager(this, this.roomManager, this.rsm);
 
     // Always hand AudioManager the new scene (keeps volume control working).
     // Stop title MP3 before starting in-game music.
@@ -95,8 +89,6 @@ export class GameScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
-      this.debugManager?.destroy();
-      this.editorManager?.destroy();
     });
 
     this.events.on('character-switch-request', (id: string) => {
@@ -144,31 +136,17 @@ export class GameScene extends Phaser.Scene {
     const input = this.inputManager.getState();
     this.updateLighting();
 
-    // While a modal overlay is open (warp picker, pair-target picker, etc.),
-    // suspend gameplay input so arrow keys are consumed by the modal,
-    // not by the player.
-    if (this.debugManager?.isModalOpen() || this.editorManager?.isModalOpen()) {
-      const body = this.player.body as Phaser.Physics.Arcade.Body;
-      body.setVelocity(0, 0);
-      this.player.playIdle();
-      this.debugManager.update(input, delta);
-      this.editorManager.update(input);
-      return;
-    }
-
     // Flashlight toggle — available in all non-transition states
     if (input.flashlight) {
       this.flashlight.toggle();
     }
 
-    // Character switching via number keys (suppressed while room editor is open)
-    if (!this.editorManager?.isEditorActive()) {
-      const roster = this.rsm.getRoster();
-      if (input.char1 && roster[0]) this.switchToCharacter(roster[0].id);
-      if (input.char2 && roster[1]) this.switchToCharacter(roster[1].id);
-      if (input.char3 && roster[2]) this.switchToCharacter(roster[2].id);
-      if (input.char4 && roster[3]) this.switchToCharacter(roster[3].id);
-    }
+    // Character switching via number keys
+    const roster = this.rsm.getRoster();
+    if (input.char1 && roster[0]) this.switchToCharacter(roster[0].id);
+    if (input.char2 && roster[1]) this.switchToCharacter(roster[1].id);
+    if (input.char3 && roster[2]) this.switchToCharacter(roster[2].id);
+    if (input.char4 && roster[3]) this.switchToCharacter(roster[3].id);
 
     // Dialog mode
     if (this.dialogOpen) {
@@ -221,84 +199,10 @@ export class GameScene extends Phaser.Scene {
     this.checkInteractables(input);
     this.updateClinicProximity();
 
-    this.debugManager.update(input, delta);
-    this.editorManager.update(input);
-
     if (input.menu) {
       this.scene.pause();
       this.scene.launch(SCENES.PAUSE);
     }
-  }
-
-  public reloadRoom(): void {
-    const roomId = this.roomManager.getCurrentRoomId();
-    this.transitionManager.transition(() => {
-      this.roomManager.loadRoom(roomId);
-      this.setupCollisions();
-      this.setupCamera();
-      this.createWorldItemSprites();
-      this.spawnAfflicted();
-      this.refreshParkedBodies();
-
-      const roomDef = this.roomManager.getCurrentRoomDef();
-      this.events.emit('room-changed', roomDef.name);
-    });
-  }
-
-  /**
-   * Editor hook: after RoomManager.resizeMap mutates the tilemap and
-   * room metadata, this re-binds physics, camera, sprites, and entities
-   * to the new geometry. Player is shifted by the same pixel offset so
-   * they stay over the same logical tile.
-   */
-  public refreshAfterResize(pixelOffsetX: number, pixelOffsetY: number): void {
-    if (this.player && (pixelOffsetX !== 0 || pixelOffsetY !== 0)) {
-      this.player.setPosition(this.player.x + pixelOffsetX, this.player.y + pixelOffsetY);
-    }
-    this.setupCollisions();
-    this.setupCamera();
-    this.setupLighting();
-    this.createWorldItemSprites();
-    this.spawnAfflicted();
-    this.refreshParkedBodies();
-    this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
-  }
-
-  /** Lighter editor hook: re-applies camera bounds/follow without rebuilding entities. */
-  public refreshCamera(): void {
-    this.setupCamera();
-  }
-
-  /**
-   * Debug warp: jump to any room's playerSpawn with a transition,
-   * mirroring the door-transition setup path. No-op if already in
-   * the target room or mid-transition.
-   */
-  public warpToRoom(roomId: string): void {
-    if (this.isTransitioning || this.dialogOpen) return;
-    if (this.roomManager.getCurrentRoomId() === roomId) return;
-    if (!this.roomManager.getRoomDef(roomId)) {
-      console.warn(`[Warp] Unknown room id: ${roomId}`);
-      return;
-    }
-    this.isTransitioning = true;
-    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
-    this.transitionManager.transition(() => {
-      MusicManager.getInstance().stopProximity(CLINIC_SOUND_ID);
-      this.roomManager.loadRoom(roomId);
-      this.rsm.visitRoom(roomId);
-      const room = this.roomManager.getCurrentRoomDef();
-      const spawn = room.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
-      this.player.setPosition(spawn.x, spawn.y);
-      this.setupCollisions();
-      this.setupCamera();
-      this.setupLighting();
-      this.createWorldItemSprites();
-      this.spawnAfflicted();
-      this.refreshParkedBodies();
-      if (USE_MIDI_MUSIC) MusicManager.getInstance().playRoomMusic(roomId);
-      this.events.emit('room-changed', room.name);
-    }).then(() => { this.isTransitioning = false; });
   }
 
   // ── Afflicted ───────────────────────────────────────────────────────────

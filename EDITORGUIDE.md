@@ -14,29 +14,48 @@ Companion docs:
 
 ## Getting started
 
-### Start the game
+### Start the dev server
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:8080` in a browser. The protagonist spawns in
-their apartment.
+Open `http://localhost:8080` in a browser. The title screen appears.
 
-### Three modes (toggle with F-keys)
+### Two paths from the title
 
-| Key | Mode |
-|-----|------|
-| **F1** | Debug HUD — FPS, room id, player coords, cursor coords, tile GIDs under cursor |
-| **F2** | Editor — paint tiles, place interactables, drag NPCs, resize the room |
-| **F3** | Visual overlays — collision (red walls), doors (cyan if wired, red if unwired/broken), interactable radii (yellow), NPC radii (magenta) |
+- **Space / Enter** — start the actual game. Gameplay only; the F-keys
+  do nothing during normal play.
+- **F1** — **open the editor scene** (this guide). Replaces the title
+  screen entirely until you click **Exit** in the top bar.
 
-All three can be on at once.
+### What you see in the editor
 
-### Move the protagonist
+A full-screen overlay with the Phaser canvas in the middle:
 
-WASD or arrow keys. The protag is your cursor for everything you'll
-do in the editor — walk anywhere collision allows.
+- **Top bar** — current room name, Save (X), Audit (F5), Reload (L),
+  Exit.
+- **Left panel** — clickable list of every room in `rooms.json`. Click
+  a room to warp into it.
+- **Right panel** — Layer buttons (1/2/3), Tools (palette, stamp,
+  place-interactable, place-NPC, pair-door, warp-picker), and a
+  keyboard cheatsheet.
+- **Status bar** — toast messages and the currently armed action.
+
+The editor's debug HUD (FPS, room id, mouse coords, tile GIDs) and
+visual overlays (collision in red, doors in cyan / red-when-unwired,
+NPC radii in magenta) are **on by default**. Toggle them with F1 / F3.
+
+### Camera control
+
+The protagonist isn't here — your mouse cursor IS the cursor.
+
+| Input | Action |
+|-------|--------|
+| **WASD / Arrow keys** | Pan the camera |
+| **Right-click drag** | Pan the camera |
+| **Ctrl + Wheel** | Zoom in / out (0.5×–4×) |
+| **Plain wheel** | Cycle the selected tile (works as before) |
 
 ---
 

@@ -172,6 +172,13 @@ blockout* at speed without touching the interaction engine.
 
 **Shipped:**
 
+- **Dedicated EditorScene** launched from the title screen via **F1**.
+  Replaces the in-game F1/F2/F3 overlay model — gameplay is gameplay,
+  editor is editor. DOM panels (top bar, room list, layer/tool
+  buttons, keyboard cheatsheet, status bar) wrap the Phaser canvas.
+  Camera pan via right-click-drag or WASD; Ctrl+Wheel zooms.
+  RoomEditorManager and DebugManager reused unchanged via stub
+  scene-coupling points.
 - `npm run new-room <id> [w] [h]` CLI script — creates the rooms.json
   stub, default tilemap (perimeter walls + floor), and the
   `public/music/<id>/` directory (with a `.gitkeep`, ready for

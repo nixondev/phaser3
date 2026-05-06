@@ -44,16 +44,31 @@ export class MenuScene extends Phaser.Scene {
     });
 
     this.add
-      .text(w / 2, h - 20, 'Arrow Keys / WASD to move', {
+      .text(w / 2, h - 28, 'Arrow Keys / WASD to move', {
         fontSize: '8px',
         color: '#666666',
         fontFamily: 'monospace',
       })
       .setOrigin(0.5);
 
+    this.add
+      .text(w / 2, h - 14, 'F1 — open editor', {
+        fontSize: '8px',
+        color: '#888866',
+        fontFamily: 'monospace',
+      })
+      .setOrigin(0.5);
+
     this.input.keyboard!.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
+    this.input.keyboard!.on('keydown-F1', () => this.openEditor());
     this.input.on('pointerdown', () => this.resumeAudio());
+  }
+
+  private openEditor(): void {
+    if (this.started) return;
+    this.started = true;
+    this.scene.start(SCENES.EDITOR);
   }
 
   private resumeAudio(): void {
