@@ -198,6 +198,11 @@ export class RoomEditorManager {
   isModalOpen(): boolean {
     return this.pairPhase === 'pick-target';
   }
+
+  /** True when the live editor is open — GameScene uses this to suppress 1/2/3 char switching. */
+  isEditorActive(): boolean {
+    return this.isActive;
+  }
   
   update(input: InputState): void {
     const pointer = this.scene.input.activePointer;

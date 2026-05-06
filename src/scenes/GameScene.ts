@@ -11,7 +11,7 @@ import { DebugManager } from '@systems/DebugManager';
 import { RoomEditorManager } from '@systems/RoomEditorManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState } from '@/types';
+import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef } from '@/types';
 import { debug } from '@utils/Debug';
 
 const CLINIC_DOOR_X     = 160;
@@ -31,6 +31,7 @@ export class GameScene extends Phaser.Scene {
   private doorOverlaps: Phaser.Physics.Arcade.Collider[] = [];
   private isTransitioning = false;
   private dialogOpen = false;
+  private cureCooldown = false;  // prevents multi-afflicted same-frame double-trigger
   private lockedDoorCooldown = 0;
   private itemSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
   private darknessLayer?: Phaser.GameObjects.RenderTexture;
@@ -160,12 +161,14 @@ export class GameScene extends Phaser.Scene {
       this.flashlight.toggle();
     }
 
-    // Character switching via number keys
-    const roster = this.rsm.getRoster();
-    if (input.char1 && roster[0]) this.switchToCharacter(roster[0].id);
-    if (input.char2 && roster[1]) this.switchToCharacter(roster[1].id);
-    if (input.char3 && roster[2]) this.switchToCharacter(roster[2].id);
-    if (input.char4 && roster[3]) this.switchToCharacter(roster[3].id);
+    // Character switching via number keys (suppressed while room editor is open)
+    if (!this.editorManager?.isEditorActive()) {
+      const roster = this.rsm.getRoster();
+      if (input.char1 && roster[0]) this.switchToCharacter(roster[0].id);
+      if (input.char2 && roster[1]) this.switchToCharacter(roster[1].id);
+      if (input.char3 && roster[2]) this.switchToCharacter(roster[2].id);
+      if (input.char4 && roster[3]) this.switchToCharacter(roster[3].id);
+    }
 
     // Dialog mode
     if (this.dialogOpen) {
@@ -300,6 +303,22 @@ export class GameScene extends Phaser.Scene {
 
   // ── Afflicted ───────────────────────────────────────────────────────────
 
+  // Returns the most complete def for an afflicted ID across all rooms —
+  // the one with backstory/recoveredItems wins over minimal stub entries.
+  private findFullAfflictedDef(id: string): AfflictedDef | null {
+    const allRooms = RoomManager.getRoomsData().rooms;
+    let best: AfflictedDef | null = null;
+    for (const room of Object.values(allRooms)) {
+      for (const d of room.afflicted || []) {
+        if (d.id !== id) continue;
+        if (!best || (d.backstory?.length ?? 0) > (best.backstory?.length ?? 0)) {
+          best = d;
+        }
+      }
+    }
+    return best;
+  }
+
   private spawnAfflicted(): void {
     // Clear existing and stop their proximity sounds
     this.afflictedGroup.getChildren().forEach((a) => {
@@ -328,7 +347,12 @@ export class GameScene extends Phaser.Scene {
         continue;
       }
 
-      const afflicted = new Afflicted(this, def, status);
+      // Use the most complete def (the one with backstory/recoveredItems),
+      // but keep the current room's x/y for positioning.
+      const fullDef = this.findFullAfflictedDef(def.id);
+      const spawnDef: AfflictedDef = fullDef ? { ...fullDef, x: def.x, y: def.y } : def;
+
+      const afflicted = new Afflicted(this, spawnDef, status);
       this.afflictedGroup.add(afflicted);
     }
 
@@ -341,7 +365,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleAfflictedCollision(_player: any, afflictedObject: any): void {
-    if (this.isTransitioning) return;
+    if (this.isTransitioning || this.cureCooldown) return;
     const afflicted = afflictedObject as Afflicted;
     const status = afflicted.getStatus();
     if (status === 'cured' || status === 'recovered') return;
@@ -351,6 +375,8 @@ export class GameScene extends Phaser.Scene {
     const cureSlot = inventory.findIndex(item => item?.category === 'cure' &&
       (!item.useTarget || item.useTarget === afflicted.getId()));
     if (cureSlot !== -1) {
+      this.cureCooldown = true;
+      this.time.delayedCall(500, () => { this.cureCooldown = false; });
       const item = inventory[cureSlot]!;
       this.rsm.removeFromInventory(cureSlot);
       this.rsm.cureResident(afflicted.getId());
@@ -686,6 +712,11 @@ export class GameScene extends Phaser.Scene {
 
       this.player.rebuildAnimations(target.textureKey);
       this.player.setPosition(target.x, target.y);
+
+      // Brief cooldown so the player can't be killed the instant they teleport in
+      this.cureCooldown = true;
+      this.time.delayedCall(600, () => { this.cureCooldown = false; });
+
       this.events.emit('character-switched', targetId);
       this.events.emit('inventory-changed', this.rsm.getInventory());
     };
