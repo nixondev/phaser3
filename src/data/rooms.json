@@ -460,11 +460,11 @@
           "x": 216,
           "y": 184,
           "type": "item",
-          "tileFrame": 50,
+          "tileFrame": 70,
           "text": "Your hand-held flashlight, resting on the dock.\nStill the only thing between you and the dark.",
           "item": {
             "name": "Flashlight",
-            "tileFrame": 50,
+            "tileFrame": 70,
             "category": "tool",
             "keyId": "flashlight"
           }

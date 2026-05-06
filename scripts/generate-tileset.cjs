@@ -983,6 +983,35 @@ function generateTileset() {
     }
   });
 
+  // ── GID 71 | frame 70 — Flashlight ───────────────────────────────────────
+  tile(70, (x, y, px, py) => {
+    tr(px, py);
+    const B = [40, 40, 45], B2 = [60, 60, 65], B3 = [80, 80, 85]; // Dark body
+    const L = [220, 220, 180], L2 = [255, 255, 220]; // Lens/Glass
+
+    // Main cylinder body (diagonal)
+    // Diagonal line from (4,11) to (9,6)
+    const dx = x - 4, dy = y - 11;
+    const distToLine = Math.abs(-1 * dx - 1 * dy) / Math.sqrt(2); // distance to x+y=15
+    if (x >= 4 && x <= 10 && y >= 5 && y <= 12 && distToLine < 1.8) {
+       sp(px, py, ...B);
+       if (distToLine < 1.0) sp(px, py, ...B2);
+    }
+
+    // Head (flared)
+    if (x >= 8 && x <= 13 && y >= 2 && y <= 7) {
+       const hdx = x - 10.5, hdy = y - 4.5;
+       if (hdx * hdx + hdy * hdy < 3.5 * 3.5) {
+         sp(px, py, ...B2);
+         if (hdx * hdx + hdy * hdy < 2.5 * 2.5) sp(px, py, ...L);
+         if (hdx > 0 && hdy < 0 && hdx * hdx + hdy * hdy < 1.5 * 1.5) sp(px, py, ...L2);
+       }
+    }
+
+    // Switch
+    if (x >= 6 && x <= 7 && y >= 8 && y <= 9) sp(px, py, 180, 40, 40);
+  });
+
   return encodePNG(W, H, px);
 }
 

@@ -17,6 +17,7 @@ export class UIScene extends Phaser.Scene {
   private dialogText!: Phaser.GameObjects.Text;
   private batteryBar!: Phaser.GameObjects.Graphics;
   private batteryLabel!: Phaser.GameObjects.Text;
+  private lastBatteryPercent = 100;
 
   // Inventory grid
   private slotBgs: Phaser.GameObjects.Rectangle[] = [];
@@ -68,8 +69,8 @@ export class UIScene extends Phaser.Scene {
     this.dialogBox = this.add.container(0, 0, [bg, this.dialogText, hint]).setVisible(false);
 
     // ── Battery Bar ───────────────────────────────────────────────────────
-    this.batteryLabel = this.add.text(4, 4, 'PWR', { fontSize: '6px', color: '#8888aa', fontFamily: 'monospace' });
-    this.batteryBar = this.add.graphics();
+    this.batteryLabel = this.add.text(4, 4, 'PWR', { fontSize: '6px', color: '#8888aa', fontFamily: 'monospace' }).setVisible(false);
+    this.batteryBar = this.add.graphics().setVisible(false);
     this.drawBattery(100);
 
     // ── Inventory grid ────────────────────────────────────────────────────
@@ -171,6 +172,8 @@ export class UIScene extends Phaser.Scene {
   private onInventoryChanged(inventory: (ItemDef | null)[]): void {
     this.currentInventory = inventory;
     this.refreshInventoryIcons();
+    // Update battery visibility
+    this.drawBattery(this.lastBatteryPercent);
   }
 
   private onInventoryMode(active: boolean): void {
@@ -225,6 +228,9 @@ export class UIScene extends Phaser.Scene {
 
   private onCharacterSwitched(id: string): void {
     this.updateAvatarHighlight(id);
+    
+    // Character switch also changes inventory, update battery visibility
+    this.drawBattery(this.lastBatteryPercent);
   }
 
   private updateAvatarHighlight(activeId?: string): void {
@@ -250,6 +256,13 @@ export class UIScene extends Phaser.Scene {
   }
 
   private drawBattery(percent: number): void {
+    this.lastBatteryPercent = percent;
+    const hasFlashlight = this.currentInventory.some(item => item?.keyId === 'flashlight');
+    this.batteryBar.setVisible(hasFlashlight);
+    this.batteryLabel.setVisible(hasFlashlight);
+
+    if (!hasFlashlight) return;
+
     this.batteryBar.clear();
     const w = 40;
     const h = 4;
