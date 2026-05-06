@@ -4,7 +4,6 @@ import { RoomManager } from '@systems/RoomManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { RoomEditorManager } from '@systems/RoomEditorManager';
 import { DebugManager } from '@systems/DebugManager';
-import { InputManager } from '@systems/InputManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { InputState } from '@/types';
@@ -30,10 +29,12 @@ export class EditorScene extends Phaser.Scene {
 
   private roomManager!: RoomManager;
   private rsm!: RoomStateManager;
-  private inputManager!: InputManager;
   private editorManager!: RoomEditorManager;
   private debugManager!: DebugManager;
   private editorUI!: EditorUI;
+  // Keys for HUD (H) and visual overlays (V) — no F-keys, no conflicts with RoomEditorManager
+  private hudKey!: Phaser.Input.Keyboard.Key;
+  private overlayKey!: Phaser.Input.Keyboard.Key;
   private placeholderSprites = new Map<string, Phaser.GameObjects.Sprite>();
 
   private firstFrame = true;
@@ -53,8 +54,11 @@ export class EditorScene extends Phaser.Scene {
 
     this.roomManager = new RoomManager(this);
     this.rsm = RoomStateManager.getInstance();
-    this.inputManager = new InputManager(this);
     this.afflictedGroup = this.add.group();
+
+    const kb = this.input.keyboard!;
+    this.hudKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.H);
+    this.overlayKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.V);
 
     this.editorManager = new RoomEditorManager(this, this.roomManager, this.rsm);
     this.debugManager = new DebugManager(this, this.roomManager, this.rsm);
@@ -138,15 +142,15 @@ export class EditorScene extends Phaser.Scene {
       D: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
 
-    // Right-click drag to pan
+    // Middle-click drag to pan (right-click is reserved for tile erase in RoomEditorManager)
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.rightButtonDown()) {
+      if (pointer.middleButtonDown()) {
         this.panActive = true;
         this.panLast.set(pointer.x, pointer.y);
       }
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (this.panActive && pointer.rightButtonDown()) {
+      if (this.panActive && pointer.middleButtonDown()) {
         const cam = this.cameras.main;
         const dx = pointer.x - this.panLast.x;
         const dy = pointer.y - this.panLast.y;
@@ -231,23 +235,29 @@ export class EditorScene extends Phaser.Scene {
   }
 
   /**
-   * On the first frame, force editor/debug/visuals true so RoomEditorManager
-   * flips to active and DebugManager's HUD + visual overlay turn on without
-   * the user having to press F-keys. After that, suppress the editor toggle
-   * (so F2 can't accidentally turn the editor off) but pass debug/visuals
-   * through so F1/F3 still work as toggles.
+   * Build a minimal InputState for the editor's managers. InputManager is not
+   * used here — it would consume JustDown flags on keys that RoomEditorManager
+   * also reads (Q, E, 1/2/3, ESC…), causing them to silently drop.
+   *
+   * On the first frame, inject editor/debug/visuals=true to auto-activate
+   * RoomEditorManager and DebugManager without requiring any key press.
+   * After that, only H (HUD) and V (Overlays) pass through — everything else
+   * is false so RoomEditorManager reads its own key objects uncontested.
    */
   private buildEditorInputState(): InputState {
-    const state = this.inputManager.getState();
+    const base: InputState = {
+      up: false, down: false, left: false, right: false,
+      action: false, menu: false, inventory: false, drop: false,
+      flashlight: false, editor: false, char1: false, char2: false,
+      char3: false, char4: false,
+      debug: Phaser.Input.Keyboard.JustDown(this.hudKey),
+      visuals: Phaser.Input.Keyboard.JustDown(this.overlayKey),
+    };
     if (this.firstFrame) {
-      state.editor = true;
-      state.debug = true;
-      state.visuals = true;
       this.firstFrame = false;
-    } else {
-      state.editor = false;
+      base.editor = true;
     }
-    return state;
+    return base;
   }
 
   // ── Public actions exposed to EditorUI ──

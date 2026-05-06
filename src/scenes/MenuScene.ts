@@ -52,7 +52,7 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(w / 2, h - 14, 'F1 — open editor', {
+      .text(w / 2, h - 14, '? — open editor', {
         fontSize: '8px',
         color: '#888866',
         fontFamily: 'monospace',
@@ -61,7 +61,9 @@ export class MenuScene extends Phaser.Scene {
 
     this.input.keyboard!.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
-    this.input.keyboard!.on('keydown-F1', () => this.openEditor());
+    this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
+      if (event.key === '?') this.openEditor();
+    });
     this.input.on('pointerdown', () => this.resumeAudio());
   }
 

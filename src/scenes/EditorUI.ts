@@ -23,6 +23,8 @@ export class EditorUI {
   private statusEl!: HTMLDivElement;
   private currentRoomEl!: HTMLSpanElement;
   private resizeObserver?: ResizeObserver;
+  private hudActive = false;
+  private overlaysActive = false;
 
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;
@@ -155,6 +157,21 @@ export class EditorUI {
 
     const warp = this.root.querySelector<HTMLButtonElement>('#editor-warp');
     warp?.addEventListener('click', () => synthesizeKey(115, 'F4'));
+
+    // HUD and Overlays — synthesize H/V which EditorScene reads via JustDown(hudKey/overlayKey)
+    const hudBtn = this.root.querySelector<HTMLButtonElement>('#editor-toggle-hud');
+    hudBtn?.addEventListener('click', () => {
+      this.hudActive = !this.hudActive;
+      hudBtn.classList.toggle('active', this.hudActive);
+      synthesizeKey(72, 'KeyH');
+    });
+
+    const overlaysBtn = this.root.querySelector<HTMLButtonElement>('#editor-toggle-overlays');
+    overlaysBtn?.addEventListener('click', () => {
+      this.overlaysActive = !this.overlaysActive;
+      overlaysBtn.classList.toggle('active', this.overlaysActive);
+      synthesizeKey(86, 'KeyV');
+    });
   }
 
   // ── HTML / CSS ─────────────────────────────────────────────────────────
@@ -167,9 +184,9 @@ export class EditorUI {
         <span class="label">Room:</span>
         <span id="editor-current-room" class="value">—</span>
         <span class="spacer"></span>
-        <button id="editor-save" class="btn" title="Export tilemap to clipboard (X)">Save (X)</button>
-        <button id="editor-audit" class="btn" title="Map graph audit (F5)">Audit (F5)</button>
-        <button id="editor-reload" class="btn" title="Reload current room from disk (L)">Reload (L)</button>
+        <button id="editor-save" class="btn" title="Export tilemap to clipboard (X)">Save</button>
+        <button id="editor-audit" class="btn" title="Audit room graph">Audit</button>
+        <button id="editor-reload" class="btn" title="Reload current room from disk (L)">Reload</button>
         <button id="editor-exit" class="btn btn-warn" title="Return to title screen">Exit</button>
       </header>
 
@@ -182,6 +199,11 @@ export class EditorUI {
       <main id="editor-center"></main>
 
       <aside id="editor-rightpanel">
+        <h3>View</h3>
+        <div class="row">
+          <button class="btn toggle-btn" id="editor-toggle-hud">H · HUD</button>
+          <button class="btn toggle-btn" id="editor-toggle-overlays">V · Overlays</button>
+        </div>
         <h3>Layer</h3>
         <div class="row">
           <button class="btn layer-btn" data-layer-key="1">1 Ground</button>
@@ -195,19 +217,22 @@ export class EditorUI {
           <button class="btn" id="editor-place-interactable">I · Place interactable</button>
           <button class="btn" id="editor-place-npc">N · Place NPC</button>
           <button class="btn" id="editor-pair-door">O · Pair doors</button>
-          <button class="btn" id="editor-warp">F4 · Warp picker</button>
+          <button class="btn" id="editor-warp">Warp picker</button>
         </div>
         <h3>Cheatsheet</h3>
         <div class="cheats">
           <div><kbd>Q</kbd>/<kbd>E</kbd> tile cycle</div>
           <div><kbd>L-clk</kbd> paint &nbsp; <kbd>R-clk</kbd> erase</div>
           <div><kbd>M-clk</kbd>/<kbd>Alt+L</kbd> eyedropper</div>
-          <div><kbd>Sh+Arrow</kbd> grow edge</div>
-          <div><kbd>Ctrl+Sh+Arrow</kbd> shrink</div>
-          <div><kbd>R-drag</kbd> pan camera</div>
+          <div><kbd>Sh+Arrow</kbd> expand edge</div>
+          <div><kbd>Ctrl+Sh+Arrow</kbd> shrink edge</div>
+          <div><kbd>Mid-drag</kbd> pan camera</div>
           <div><kbd>Ctrl+Wheel</kbd> zoom</div>
           <div><kbd>WASD</kbd> pan</div>
-          <div><kbd>Esc</kbd> cancel armed action</div>
+          <div><kbd>R</kbd> cycle reverb</div>
+          <div><kbd>[</kbd>/<kbd>]</kbd> reverb mix</div>
+          <div><kbd>-</kbd>/<kbd>+</kbd> volume</div>
+          <div><kbd>Esc</kbd> cancel / exit</div>
         </div>
       </aside>
 
@@ -249,6 +274,8 @@ export class EditorUI {
       #editor-overlay .btn:hover { background: #353535; border-color: #555; }
       #editor-overlay .btn-warn { background: #4a2a2a; border-color: #6a3a3a; }
       #editor-overlay .btn-warn:hover { background: #5a3030; }
+      #editor-overlay .toggle-btn { color: #888; border-color: #333; }
+      #editor-overlay .toggle-btn.active { color: #d4f1d4; border-color: #4f6d4f; background: #2d3a2d; }
 
       #editor-topbar {
         grid-area: top;
