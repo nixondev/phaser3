@@ -32,9 +32,6 @@ export class EditorScene extends Phaser.Scene {
   private editorManager!: RoomEditorManager;
   private debugManager!: DebugManager;
   private editorUI!: EditorUI;
-  // Keys for HUD (H) and visual overlays (V) — no F-keys, no conflicts with RoomEditorManager
-  private hudKey!: Phaser.Input.Keyboard.Key;
-  private overlayKey!: Phaser.Input.Keyboard.Key;
   private placeholderSprites = new Map<string, Phaser.GameObjects.Sprite>();
 
   private firstFrame = true;
@@ -56,9 +53,6 @@ export class EditorScene extends Phaser.Scene {
     this.rsm = RoomStateManager.getInstance();
     this.afflictedGroup = this.add.group();
 
-    const kb = this.input.keyboard!;
-    this.hudKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.H);
-    this.overlayKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.V);
 
     this.editorManager = new RoomEditorManager(this, this.roomManager, this.rsm);
     this.debugManager = new DebugManager(this, this.roomManager, this.rsm);
@@ -76,6 +70,9 @@ export class EditorScene extends Phaser.Scene {
     const input = this.buildEditorInputState();
     this.debugManager.update(input, delta);
     this.editorManager.update(input);
+    if (this.editorManager.isEditorActive()) {
+      this.editorUI.setStatus(this.editorManager.getStatusText());
+    }
   }
 
   // ── Stubs ────────────────────────────────────────────────────────────────
@@ -245,19 +242,15 @@ export class EditorScene extends Phaser.Scene {
    * is false so RoomEditorManager reads its own key objects uncontested.
    */
   private buildEditorInputState(): InputState {
-    const base: InputState = {
+    const editor = this.firstFrame;
+    if (this.firstFrame) this.firstFrame = false;
+    return {
       up: false, down: false, left: false, right: false,
       action: false, menu: false, inventory: false, drop: false,
-      flashlight: false, editor: false, char1: false, char2: false,
-      char3: false, char4: false,
-      debug: Phaser.Input.Keyboard.JustDown(this.hudKey),
-      visuals: Phaser.Input.Keyboard.JustDown(this.overlayKey),
+      flashlight: false, debug: false, visuals: false,
+      editor,
+      char1: false, char2: false, char3: false, char4: false,
     };
-    if (this.firstFrame) {
-      this.firstFrame = false;
-      base.editor = true;
-    }
-    return base;
   }
 
   // ── Public actions exposed to EditorUI ──

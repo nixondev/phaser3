@@ -23,8 +23,6 @@ export class EditorUI {
   private statusEl!: HTMLDivElement;
   private currentRoomEl!: HTMLSpanElement;
   private resizeObserver?: ResizeObserver;
-  private hudActive = false;
-  private overlaysActive = false;
 
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;
@@ -157,21 +155,6 @@ export class EditorUI {
 
     const warp = this.root.querySelector<HTMLButtonElement>('#editor-warp');
     warp?.addEventListener('click', () => synthesizeKey(115, 'F4'));
-
-    // HUD and Overlays — synthesize H/V which EditorScene reads via JustDown(hudKey/overlayKey)
-    const hudBtn = this.root.querySelector<HTMLButtonElement>('#editor-toggle-hud');
-    hudBtn?.addEventListener('click', () => {
-      this.hudActive = !this.hudActive;
-      hudBtn.classList.toggle('active', this.hudActive);
-      synthesizeKey(72, 'KeyH');
-    });
-
-    const overlaysBtn = this.root.querySelector<HTMLButtonElement>('#editor-toggle-overlays');
-    overlaysBtn?.addEventListener('click', () => {
-      this.overlaysActive = !this.overlaysActive;
-      overlaysBtn.classList.toggle('active', this.overlaysActive);
-      synthesizeKey(86, 'KeyV');
-    });
   }
 
   // ── HTML / CSS ─────────────────────────────────────────────────────────
@@ -199,11 +182,6 @@ export class EditorUI {
       <main id="editor-center"></main>
 
       <aside id="editor-rightpanel">
-        <h3>View</h3>
-        <div class="row">
-          <button class="btn toggle-btn" id="editor-toggle-hud">H · HUD</button>
-          <button class="btn toggle-btn" id="editor-toggle-overlays">V · Overlays</button>
-        </div>
         <h3>Layer</h3>
         <div class="row">
           <button class="btn layer-btn" data-layer-key="1">1 Ground</button>
@@ -274,8 +252,6 @@ export class EditorUI {
       #editor-overlay .btn:hover { background: #353535; border-color: #555; }
       #editor-overlay .btn-warn { background: #4a2a2a; border-color: #6a3a3a; }
       #editor-overlay .btn-warn:hover { background: #5a3030; }
-      #editor-overlay .toggle-btn { color: #888; border-color: #333; }
-      #editor-overlay .toggle-btn.active { color: #d4f1d4; border-color: #4f6d4f; background: #2d3a2d; }
 
       #editor-topbar {
         grid-area: top;

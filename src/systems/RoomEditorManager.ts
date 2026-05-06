@@ -218,7 +218,7 @@ export class RoomEditorManager {
 
     if (input.editor) {
       this.isActive = !this.isActive;
-      this.editorText.setVisible(this.isActive);
+      this.editorText.setVisible(false); // status is shown in the DOM status bar
       this.tileCursor.setVisible(this.isActive);
       this.tilePreview.setVisible(this.isActive);
       this.mapOutline.setVisible(this.isActive);
@@ -835,27 +835,28 @@ export class RoomEditorManager {
     });
   }
 
-  private updateHUD(): void {
+  /** Returns the current editor status string for display in the DOM status bar. */
+  public getStatusText(): string {
     const map = this.roomManager.getMap();
-    const dims = map ? `${map.width}x${map.height}` : '?';
-    let statusLine = '';
+    const dims = map ? `${map.width}×${map.height}` : '?';
+    let ctx = '';
     if (this.placementMode) {
-      statusLine = `armed ${this.placementMode} (Esc cancel)`;
+      ctx = `armed: ${this.placementMode}  (Esc cancel)`;
     } else if (this.pairPhase === 'pick-target') {
-      statusLine = 'pair: pick target room (Up/Down, Enter, Esc)';
+      ctx = 'pair: pick target room  (↑↓ Enter Esc)';
     } else if (this.pairPhase === 'place-source') {
-      statusLine = `pair: click source door (target=${this.pairTargetRoomId})`;
+      ctx = `pair: click source door  (target=${this.pairTargetRoomId})`;
     } else if (this.pairPhase === 'place-target') {
-      statusLine = `pair: click target door in ${this.pairTargetRoomId}`;
+      ctx = `pair: click target door in ${this.pairTargetRoomId}`;
     }
-    const lines = [
-      `TOOL: ${this.activeTool.toUpperCase()} | ${this.currentLayerName} layer | tile ${this.selectedTileIndex} | ${dims}`,
-      `1/2/3 layer  Q/E tile  P palette  L-clk paint  R-clk erase`,
-      `F fill  R rect  X save  I sign  O door-pair  N npc  T stamp`,
-      `Sh+Arrow grow  Ctrl+Sh+Arrow shrink`
-    ];
-    if (statusLine) lines.unshift(`* ${statusLine}`);
-    this.editorText.setText(lines);
+    const base = `${this.currentLayerName} · tile ${this.selectedTileIndex} · ${this.activeTool} · ${dims}`;
+    return ctx ? `${ctx}  |  ${base}` : base;
+  }
+
+  private updateHUD(): void {
+    // Status text is now read by EditorScene and displayed in the DOM status bar.
+    // editorText on the canvas is kept invisible; we still call updatePreview so
+    // the tile thumbnail stays in sync.
     this.updatePreview();
   }
   
@@ -1202,9 +1203,11 @@ export class RoomEditorManager {
 
           const safeIndex = this.selectedTiles[r][c];
           const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
-          if (currentTile && currentTile.index !== safeIndex) {
+          // currentTile is null when the slot was fully erased (removeTileAt with replaceWithNull=true).
+          // Phaser's nonNull flag only returns a -1 tile for index=-1 objects, not null slots.
+          if (!currentTile || currentTile.index !== safeIndex) {
             if (safeIndex <= 0) {
-              if (currentTile.index !== -1) {
+              if (currentTile && currentTile.index !== -1) {
                 map.removeTileAt(tx, ty, true, true, this.currentLayerName);
                 changed = true;
               }
