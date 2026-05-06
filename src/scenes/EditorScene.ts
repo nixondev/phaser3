@@ -260,15 +260,6 @@ export class EditorScene extends Phaser.Scene {
   public getEditorManager(): RoomEditorManager { return this.editorManager; }
   public getDebugManager(): DebugManager { return this.debugManager; }
 
-  /** Synthesize a key tap so EditorUI buttons can drive the existing key handlers. */
-  public synthesizeKey(keyCode: number): void {
-    const kb = this.input.keyboard;
-    if (!kb) return;
-    const ev = new KeyboardEvent('keydown', { keyCode, code: '', bubbles: true });
-    Object.defineProperty(ev, 'keyCode', { value: keyCode });
-    window.dispatchEvent(ev);
-  }
-
   // ── Cleanup ──
 
   private cleanup(): void {

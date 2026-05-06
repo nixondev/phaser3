@@ -131,11 +131,12 @@ export class EditorUI {
     const stamp = this.root.querySelector<HTMLButtonElement>('#editor-stamp');
     stamp?.addEventListener('click', () => synthesizeKey(84, 'KeyT'));
 
-    // Layer buttons
+    // Layer buttons — data-layer-key holds the digit ("1"/"2"/"3"); map to keyCode 49/50/51.
     this.root.querySelectorAll<HTMLButtonElement>('.layer-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        const code = parseInt(btn.dataset.layerKey || '0', 10);
-        if (code) synthesizeKey(code, `Digit${btn.dataset.layerKey}`);
+        const digit = btn.dataset.layerKey || '';
+        const keyCode = digit.charCodeAt(0); // '1'=49, '2'=50, '3'=51
+        if (keyCode >= 49 && keyCode <= 57) synthesizeKey(keyCode, `Digit${digit}`);
       });
     });
 
@@ -183,9 +184,9 @@ export class EditorUI {
       <aside id="editor-rightpanel">
         <h3>Layer</h3>
         <div class="row">
-          <button class="btn layer-btn" data-layer-key="49">1 Ground</button>
-          <button class="btn layer-btn" data-layer-key="50">2 Coll.</button>
-          <button class="btn layer-btn" data-layer-key="51">3 Above</button>
+          <button class="btn layer-btn" data-layer-key="1">1 Ground</button>
+          <button class="btn layer-btn" data-layer-key="2">2 Coll.</button>
+          <button class="btn layer-btn" data-layer-key="3">3 Above</button>
         </div>
         <h3>Tools</h3>
         <div class="row col">
@@ -323,15 +324,41 @@ export class EditorUI {
  * Dispatch a synthetic keydown event so Phaser's keyboard plugin (which
  * listens on window) treats it as a real key press. Used by EditorUI buttons
  * to drive the existing key handlers in RoomEditorManager / DebugManager.
+ *
+ * IMPORTANT: the keyup must be deferred to a later frame. Phaser's
+ * KeyboardPlugin processes its event queue in a single batch on each Game
+ * step. Inside that batch, `Key.onDown` sets `_justDown=true` and `Key.onUp`
+ * sets it back to `false`. If both events are queued in the same frame, the
+ * scene update reads `_justDown=false` and `JustDown(...)` returns false —
+ * the action never fires. Spacing the keyup out two animation frames keeps
+ * the button click visible to one full editor update tick.
+ *
+ * Each event also gets a strictly-increasing timestamp so Phaser's
+ * "duplicate event bailout" (same keyCode + same timeStamp + same type)
+ * doesn't drop rapid repeat clicks.
  */
+let _synthClock = 0;
+function nextStamp(): number {
+  const now = performance.now();
+  _synthClock = Math.max(now, _synthClock + 1);
+  return _synthClock;
+}
 function synthesizeKey(keyCode: number, code: string): void {
-  const ev = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code });
-  Object.defineProperty(ev, 'keyCode', { get: () => keyCode });
-  Object.defineProperty(ev, 'which', { get: () => keyCode });
-  window.dispatchEvent(ev);
-  // Also dispatch keyup so JustDown resets cleanly.
-  const up = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, code });
-  Object.defineProperty(up, 'keyCode', { get: () => keyCode });
-  Object.defineProperty(up, 'which', { get: () => keyCode });
-  window.dispatchEvent(up);
+  const down = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, code });
+  Object.defineProperty(down, 'keyCode', { get: () => keyCode });
+  Object.defineProperty(down, 'which', { get: () => keyCode });
+  Object.defineProperty(down, 'timeStamp', { get: () => nextStamp() });
+  window.dispatchEvent(down);
+  // Defer keyup by two animation frames so Phaser processes the keydown
+  // (setting _justDown=true) and runs at least one scene update before the
+  // keyup clears _justDown.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const up = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, code });
+      Object.defineProperty(up, 'keyCode', { get: () => keyCode });
+      Object.defineProperty(up, 'which', { get: () => keyCode });
+      Object.defineProperty(up, 'timeStamp', { get: () => nextStamp() });
+      window.dispatchEvent(up);
+    });
+  });
 }
