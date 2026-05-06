@@ -136,8 +136,11 @@ export class GameScene extends Phaser.Scene {
     const input = this.inputManager.getState();
     this.updateLighting();
 
-    // Flashlight toggle — available in all non-transition states
-    if (input.flashlight) {
+    // Flashlight toggle — only if active character carries the flashlight item
+    const hasFlashlight = this.rsm.hasItemWithKeyId('flashlight');
+    if (!hasFlashlight) {
+      this.flashlight.turnOff();
+    } else if (input.flashlight) {
       this.flashlight.toggle();
     }
 

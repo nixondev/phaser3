@@ -384,6 +384,45 @@ const tileDefs = [
     if (x>=5&&x<=10&&y>=3&&y<=5) sp(...MTL);
     if (x>=3&&x<=12&&y>=6&&y<=14) { if (x < 4 || x > 11 || y > 13) sp(...FD); else sp(...FC); if (x >= 4 && x < 5 && y >= 7 && y <= 12) sp(...FM); }
   }},
+  { name: "50_flashlight", fn: (x, y, sp, tr) => {
+    tr();
+    const BODY=[60,60,70], BODY2=[40,40,50], HEAD=[120,120,130], LENS=[255,240,180], GLOW=[255,255,200], GRIP=[30,30,35];
+    // Flared head (front of flashlight) — diagonal cylinder oriented top-left to bottom-right
+    // Head: small flared cone at upper-left
+    if (x >= 2 && x <= 5 && y >= 2 && y <= 6) {
+      const inHead = (x + y >= 5 && x + y <= 9);
+      if (inHead) {
+        sp(...HEAD);
+        if (x === 2 && y === 2) sp(...LENS);
+        if (x === 3 && y === 3) sp(...LENS);
+        if (x === 2 && y === 3) sp(...GLOW);
+        if (x === 3 && y === 2) sp(...GLOW);
+      }
+    }
+    // Lens detail — bright bulb at the very tip
+    if ((x === 2 && y === 2) || (x === 3 && y === 3)) sp(...LENS);
+    // Body: diagonal tube from head down to grip
+    for (let i = 0; i < 8; i++) {
+      const cx = 5 + i, cy = 5 + i;
+      if (x >= cx - 1 && x <= cx + 1 && y >= cy - 1 && y <= cy + 1) {
+        const dist = Math.abs((x - cx) + (y - cy));
+        if (dist <= 1) {
+          if (i < 5) sp(...BODY); else sp(...GRIP);
+          if (x === cx && y === cy) {
+            if (i < 5) sp(...BODY2); else sp(...GRIP);
+          }
+        }
+      }
+    }
+    // Switch / button highlight on the body
+    if (x === 7 && y === 8) sp(255, 200, 60);
+    // Tail cap
+    if (x >= 12 && x <= 14 && y >= 12 && y <= 14) {
+      if (x + y >= 25 && x + y <= 27) sp(...GRIP);
+    }
+    // Faint light beam glow forward of the lens
+    if ((x === 1 && y === 1) || (x === 0 && y === 2) || (x === 2 && y === 0)) sp(255, 240, 180, 120);
+  }},
 ];
 
 // Large tree (3x3)

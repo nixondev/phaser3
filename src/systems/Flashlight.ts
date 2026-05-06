@@ -8,7 +8,7 @@ export class Flashlight {
   private scene: Phaser.Scene;
   private graphics: Phaser.GameObjects.Graphics;
   private maskGraphics: Phaser.GameObjects.Graphics;
-  private on: boolean = true;
+  private on: boolean = false;
   private charge: number = BATTERY_MAX;
 
   // Last known position and angle, used for cone checks
@@ -28,6 +28,13 @@ export class Flashlight {
     if (!this.on && this.charge <= 0) return; // Cannot turn on if no charge
     this.on = !this.on;
     if (!this.on) this.graphics.clear();
+  }
+
+  turnOff(): void {
+    if (!this.on) return;
+    this.on = false;
+    this.graphics.clear();
+    this.maskGraphics.clear();
   }
 
   get isOn(): boolean {

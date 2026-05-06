@@ -143,6 +143,10 @@ export class RoomStateManager {
     );
   }
 
+  hasItemWithKeyId(keyId: string): boolean {
+    return this.inventory.some((item) => item !== null && item.keyId === keyId);
+  }
+
   // ── Dropped items ───────────────────────────────────────────────────────
 
   addDroppedItem(roomId: string, dropped: DroppedItemState): void {

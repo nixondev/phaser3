@@ -432,7 +432,7 @@
           "x": 248,
           "y": 144,
           "type": "sign",
-          "text": "Flashlight: Press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nIt keeps the afflicted at bay."
+          "text": "Flashlight: Pick it up, press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nDrop it (Q) and another can use it.\nIt keeps the afflicted at bay."
         },
         {
           "id": "desk-note",
@@ -454,6 +454,20 @@
           "type": "recharge",
           "text": "Your bedside charging dock. Flashlight batteries topped up.",
           "tileFrame": 39
+        },
+        {
+          "id": "starter-flashlight",
+          "x": 216,
+          "y": 184,
+          "type": "item",
+          "tileFrame": 50,
+          "text": "Your hand-held flashlight, resting on the dock.\nStill the only thing between you and the dark.",
+          "item": {
+            "name": "Flashlight",
+            "tileFrame": 50,
+            "category": "tool",
+            "keyId": "flashlight"
+          }
         },
         {
           "id": "cure-vial-1",
