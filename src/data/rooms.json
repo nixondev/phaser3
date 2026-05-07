@@ -368,11 +368,11 @@
           "backstory": [
             "Kai — Former Lab Technician\n\"I remember now. The city sealed overnight.\nWe were mid-experiment.\"",
             "\"Whatever you used... it worked. I've been\nlooping for weeks. Trapped in that corner.\"\n\n\"I know this city's systems. I want out too.\"",
-            "\"Tell me what you need. I'll help.\"\n\n[Kai hands you a Lab Keycard and a Compound Sample.]\n[Kai joins your cause.]"
+            "\"Tell me what you need. I'll help.\"\n\n[Kai hands you a Lab Keycard and a Compound Sample.]\n[Kai joins your cause. They are waiting for you at Apartment 4B.]"
           ],
           "recoveredItems": [
             { "name": "Lab Keycard", "tileFrame": 8, "category": "key", "keyId": "lab-door" },
-            { "name": "Compound Sample", "tileFrame": 9, "category": "component" }
+            { "name": "Compound Sample", "tileFrame": 9, "category": "cure" }
           ]
         },
         {
@@ -389,7 +389,7 @@
           "backstory": [
             "Maren — Local Shopkeeper\n\"The community room. That's where I kept\nthe last of the supplies. I know what's left.\"",
             "\"I've been walking the same block\nfor... I don't know how long. Thank you.\"\n\n\"Take what you need from what I have.\"",
-            "\"I'll help you map what's still usable\nin here. There's more to this city\nthan anyone told us.\"\n\n[Maren joins your cause.]"
+            "\"I'll help you map what's still usable\nin here. There's more to this city\nthan anyone told us.\"\n\n[Maren joins your cause. They are waiting for you at the Community Room.]"
           ],
           "recoveredItems": [
             { "name": "Store Key", "tileFrame": 8, "category": "key", "keyId": "store-front" },

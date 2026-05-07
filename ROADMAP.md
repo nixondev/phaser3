@@ -240,6 +240,7 @@ Direct extension of Phase 1. Every interactable gets:
   - an item id in the active character's inventory
   - the active character being a specific roster member
   - a world-state flag being set
+- **`visibilityRequires`**: (Optional) a list of conditions (same types as `requires`). If present, the interactable (and its `[E]` prompt) is only active and visible when these are met.
 - **`produces`**: a list of effects that fire on a successful E.
   Each effect is one of:
   - consume an item (or several)

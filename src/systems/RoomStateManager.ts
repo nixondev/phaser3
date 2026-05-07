@@ -192,8 +192,8 @@ export class RoomStateManager {
 
   setActiveCharacter(id: string): void {
     if (id === this.activeCharacterId) return;
-    // Stash current inventory under the outgoing character
-    this.characterInventories.set(this.activeCharacterId, [...this.inventory]);
+    // Stash current inventory reference under the outgoing character
+    this.characterInventories.set(this.activeCharacterId, this.inventory);
     // Load the incoming character's inventory into the active slot
     const incoming = this.characterInventories.get(id) ?? new Array(12).fill(null);
     this.inventory = incoming as (ItemDef | null)[];
@@ -214,6 +214,7 @@ export class RoomStateManager {
   }
 
   getCharacterInventory(id: string): (ItemDef | null)[] {
+    if (id === this.activeCharacterId) return this.inventory;
     if (!this.characterInventories.has(id)) {
       this.characterInventories.set(id, new Array(12).fill(null));
     }

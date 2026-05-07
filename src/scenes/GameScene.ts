@@ -244,8 +244,11 @@ export class GameScene extends Phaser.Scene {
       if (isRecovered) status = 'recovered';
       else if (isCured) status = 'cured';
 
-      // Cured/recovered residents with an associatedRoom only appear in that room
-      if ((isCured || isRecovered) && def.associatedRoom && def.associatedRoom !== currentRoomId) {
+      // Recovered residents are represented by parked body sprites — never spawn as NPC
+      if (isRecovered) continue;
+
+      // Cured residents with an associatedRoom only appear in that room
+      if (isCured && def.associatedRoom && def.associatedRoom !== currentRoomId) {
         continue;
       }
 
@@ -577,10 +580,16 @@ export class GameScene extends Phaser.Scene {
         const charInv = this.rsm.getCharacterInventory(id);
         items.forEach((item, i) => { charInv[i] = item; });
 
+        // Remove the Afflicted NPC entity — they are now a parked body / roster member
+        afflicted.destroy();
+        this.afflictedGroup.remove(afflicted);
+        this.refreshParkedBodies();
+
         this.dialogOpen = true;
         this.events.emit('dialog-open', finalText);
         this.events.emit('hide-interact-prompt');
         this.events.emit('roster-changed', this.rsm.getRoster());
+        this.events.emit('inventory-changed', this.rsm.getInventory());
       } else {
         // Still in conversation — show current page, advance counter
         this.dialogOpen = true;

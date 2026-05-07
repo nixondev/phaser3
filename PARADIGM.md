@@ -325,6 +325,21 @@ Multiple characters, multiple items, multiple flags, multiple rooms,
 all required at once. The final exit. Composed entirely of patterns 1
 through 9 — no new mechanic.
 
+### 11. Character-specific insight
+
+```
+interactable.visibilityRequires = [character_A]
+```
+
+The interactable (and its `[E]` prompt) only appears when character A
+is active. To any other character, the tile appears inert.
+
+> *Used to represent specialized knowledge or senses. A Lab Technician
+> sees a "Console" where others see a "Metal Box"; a Resident with
+> sharp eyes sees a "Loose Floorboard" where others see "Stone." This
+> forces the player to sweep rooms with different characters to find
+> hidden seams.*
+
 ---
 
 ## How a path is constructed

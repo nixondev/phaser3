@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, INVENTORY_CONFIG } from '@utils/Constants';
 import { ItemDef, CharacterState } from '@/types';
 
@@ -33,6 +33,7 @@ export class UIScene extends Phaser.Scene {
   private avatarSprites: Phaser.GameObjects.Sprite[] = [];
   private avatarHighlight!: Phaser.GameObjects.Rectangle;
   private rosterData: CharacterState[] = [];
+  private activeCharacterId = '';
 
   constructor() {
     super(SCENES.UI);
@@ -68,12 +69,12 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(1, 1);
     this.dialogBox = this.add.container(0, 0, [bg, this.dialogText, hint]).setVisible(false);
 
-    // ── Battery Bar ───────────────────────────────────────────────────────
+    // â”€â”€ Battery Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.batteryLabel = this.add.text(4, 4, 'PWR', { fontSize: '6px', color: '#8888aa', fontFamily: 'monospace' }).setVisible(false);
     this.batteryBar = this.add.graphics().setVisible(false);
     this.drawBattery(100);
 
-    // ── Inventory grid ────────────────────────────────────────────────────
+    // â”€â”€ Inventory grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
         const x = GRID_X + c * SS + SS / 2;
@@ -98,13 +99,13 @@ export class UIScene extends Phaser.Scene {
     }).setOrigin(0.5, 0);
     this.updateInvHint();
 
-    // ── Avatar bar ────────────────────────────────────────────────────────
+    // â”€â”€ Avatar bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.avatarContainer = this.add.container(0, 0);
     this.avatarHighlight = this.add.rectangle(0, 0, 16, 16)
       .setStrokeStyle(1, 0xffdd44).setFillStyle(0, 0).setVisible(false);
     this.avatarContainer.add(this.avatarHighlight);
 
-    // ── Events ────────────────────────────────────────────────────────────
+    // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const gs = this.scene.get(SCENES.GAME);
     gs.events.on('room-changed', this.showRoomName, this);
     gs.events.on('show-interact-prompt', () => this.interactPrompt.setVisible(true), this);
@@ -120,7 +121,7 @@ export class UIScene extends Phaser.Scene {
     gs.events.on('character-switched', this.onCharacterSwitched, this);
   }
 
-  // ── Inventory rendering ─────────────────────────────────────────────────
+  // â”€â”€ Inventory rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private refreshInventoryIcons(): void {
     for (let i = 0; i < COLS * ROWS; i++) {
@@ -151,7 +152,7 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  // ── Event handlers ──────────────────────────────────────────────────────
+  // â”€â”€ Event handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private showRoomName(name: string): void {
     this.roomNameText.setText(name).setAlpha(1);
@@ -204,16 +205,15 @@ export class UIScene extends Phaser.Scene {
     this.avatarSprites.forEach(s => s.destroy());
     this.avatarSprites = [];
 
-    const AVATAR_SIZE = 14;
+    const AVATAR_SIZE = 16;
     const AVATAR_GAP = 2;
     const AVATAR_X = 4;
-    const AVATAR_Y = 218;
+    const AVATAR_Y = 216;
 
     roster.forEach((char, i) => {
       const x = AVATAR_X + i * (AVATAR_SIZE + AVATAR_GAP) + AVATAR_SIZE / 2;
       const y = AVATAR_Y + AVATAR_SIZE / 2;
       const sprite = this.add.sprite(x, y, char.textureKey, 0)
-        .setDisplaySize(AVATAR_SIZE, AVATAR_SIZE)
         .setInteractive({ useHandCursor: true });
       sprite.on('pointerdown', () => {
         this.scene.get(SCENES.GAME).events.emit('character-switch-request', char.id);
@@ -223,10 +223,11 @@ export class UIScene extends Phaser.Scene {
     });
 
     // Move highlight to active character
-    this.updateAvatarHighlight();
+    this.updateAvatarHighlight(this.activeCharacterId);
   }
 
   private onCharacterSwitched(id: string): void {
+    this.activeCharacterId = id;
     this.updateAvatarHighlight(id);
     
     // Character switch also changes inventory, update battery visibility
@@ -239,10 +240,10 @@ export class UIScene extends Phaser.Scene {
       return;
     }
 
-    const AVATAR_SIZE = 14;
+    const AVATAR_SIZE = 16;
     const AVATAR_GAP = 2;
     const AVATAR_X = 4;
-    const AVATAR_Y = 218;
+    const AVATAR_Y = 216;
 
     const idx = activeId
       ? this.rosterData.findIndex(c => c.id === activeId)
@@ -284,3 +285,7 @@ export class UIScene extends Phaser.Scene {
     this.batteryBar.strokeRect(x, y, w, h);
   }
 }
+
+
+
+
