@@ -1,4 +1,4 @@
-import { RoomManager } from '@systems/RoomManager';
+﻿import { RoomManager } from '@systems/RoomManager';
 import type { EditorScene } from './EditorScene';
 
 /**
@@ -10,7 +10,7 @@ import type { EditorScene } from './EditorScene';
  * destroy so MenuScene/GameScene render normally afterward.
  *
  * Buttons synthesize keyboard events to drive the existing key handlers in
- * RoomEditorManager and DebugManager — this keeps those managers untouched.
+ * RoomEditorManager and DebugManager â€” this keeps those managers untouched.
  */
 export class EditorUI {
   private root: HTMLDivElement;
@@ -53,6 +53,19 @@ export class EditorUI {
     this.populateRoomList();
     this.wireButtons();
 
+    // Ensure the Phaser canvas can receive keyboard focus so WASD pan
+    // works after clicking DOM buttons/room list items.
+    const canvas = this.scene.game.canvas;
+    if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex', '0');
+    canvas.focus();
+
+    // Prevent WASD from scrolling the DOM panels when they have focus.
+    this.root.addEventListener('click', () => this.scene.game.canvas.focus(), true);
+    this.root.addEventListener('keydown', (e: KeyboardEvent) => {
+      const panKeys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+      if (panKeys.includes(e.code)) e.preventDefault();
+    });
+
     // Phaser's Scale.FIT watches the parent. When the grid resizes the
     // center cell, refresh the scale manager so the canvas updates.
     this.resizeObserver = new ResizeObserver(() => {
@@ -63,7 +76,7 @@ export class EditorUI {
     requestAnimationFrame(() => this.scene.scale.refresh());
   }
 
-  // ── Public API ──────────────────────────────────────────────────────────
+  // â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   public onRoomChanged(roomId: string): void {
     if (this.currentRoomEl) this.currentRoomEl.textContent = roomId;
@@ -91,7 +104,7 @@ export class EditorUI {
     requestAnimationFrame(() => this.scene.scale.refresh());
   }
 
-  // ── Internals ──────────────────────────────────────────────────────────
+  // â”€â”€ Internals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private populateRoomList(): void {
     const rooms = RoomManager.getRoomsData().rooms;
@@ -131,7 +144,7 @@ export class EditorUI {
     const stamp = this.root.querySelector<HTMLButtonElement>('#editor-stamp');
     stamp?.addEventListener('click', () => synthesizeKey(84, 'KeyT'));
 
-    // Layer buttons — data-layer-key holds the digit ("1"/"2"/"3"); map to keyCode 49/50/51.
+    // Layer buttons â€” data-layer-key holds the digit ("1"/"2"/"3"); map to keyCode 49/50/51.
     this.root.querySelectorAll<HTMLButtonElement>('.layer-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const digit = btn.dataset.layerKey || '';
@@ -153,11 +166,14 @@ export class EditorUI {
     const palette = this.root.querySelector<HTMLButtonElement>('#editor-palette');
     palette?.addEventListener('click', () => synthesizeKey(80, 'KeyP'));
 
-    const warp = this.root.querySelector<HTMLButtonElement>('#editor-warp');
-    warp?.addEventListener('click', () => synthesizeKey(115, 'F4'));
+    const hud = this.root.querySelector<HTMLButtonElement>('#editor-hud');
+    hud?.addEventListener('click', () => synthesizeKey(72, 'KeyH'));
+
+    const visuals = this.root.querySelector<HTMLButtonElement>('#editor-visuals');
+    visuals?.addEventListener('click', () => synthesizeKey(86, 'KeyV'));
   }
 
-  // ── HTML / CSS ─────────────────────────────────────────────────────────
+  // â”€â”€ HTML / CSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private static html(): string {
     return `
@@ -165,7 +181,7 @@ export class EditorUI {
         <span class="brand">WARDEN editor</span>
         <span class="sep">|</span>
         <span class="label">Room:</span>
-        <span id="editor-current-room" class="value">—</span>
+        <span id="editor-current-room" class="value">â€”</span>
         <span class="spacer"></span>
         <button id="editor-save" class="btn" title="Export tilemap to clipboard (X)">Save</button>
         <button id="editor-audit" class="btn" title="Audit room graph">Audit</button>
@@ -190,12 +206,16 @@ export class EditorUI {
         </div>
         <h3>Tools</h3>
         <div class="row col">
-          <button class="btn" id="editor-palette">P · Tile palette</button>
-          <button class="btn" id="editor-stamp">T · Stamp default room</button>
-          <button class="btn" id="editor-place-interactable">I · Place interactable</button>
-          <button class="btn" id="editor-place-npc">N · Place NPC</button>
-          <button class="btn" id="editor-pair-door">O · Pair doors</button>
-          <button class="btn" id="editor-warp">Warp picker</button>
+          <button class="btn" id="editor-palette">P Â· Tile palette</button>
+          <button class="btn" id="editor-stamp">T Â· Stamp default room</button>
+          <button class="btn" id="editor-place-interactable">I Â· Place interactable</button>
+          <button class="btn" id="editor-place-npc">N Â· Place NPC</button>
+          <button class="btn" id="editor-pair-door">O Â· Pair doors</button>
+        </div>
+        <h3>Views</h3>
+        <div class="row col">
+          <button class="btn" id="editor-hud">H Â· HUD overlay</button>
+          <button class="btn" id="editor-visuals">V Â· Visual debug</button>
         </div>
         <h3>Cheatsheet</h3>
         <div class="cheats">
@@ -207,6 +227,7 @@ export class EditorUI {
           <div><kbd>Mid-drag</kbd> pan camera</div>
           <div><kbd>Ctrl+Wheel</kbd> zoom</div>
           <div><kbd>WASD</kbd> pan</div>
+          <div><kbd>H</kbd> HUD &nbsp; <kbd>V</kbd> visuals</div>
           <div><kbd>R</kbd> cycle reverb</div>
           <div><kbd>[</kbd>/<kbd>]</kbd> reverb mix</div>
           <div><kbd>-</kbd>/<kbd>+</kbd> volume</div>
@@ -332,7 +353,7 @@ export class EditorUI {
  * KeyboardPlugin processes its event queue in a single batch on each Game
  * step. Inside that batch, `Key.onDown` sets `_justDown=true` and `Key.onUp`
  * sets it back to `false`. If both events are queued in the same frame, the
- * scene update reads `_justDown=false` and `JustDown(...)` returns false —
+ * scene update reads `_justDown=false` and `JustDown(...)` returns false â€”
  * the action never fires. Spacing the keyup out two animation frames keeps
  * the button click visible to one full editor update tick.
  *
@@ -365,3 +386,5 @@ function synthesizeKey(keyCode: number, code: string): void {
     });
   });
 }
+
+

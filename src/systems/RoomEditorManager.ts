@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
@@ -205,7 +205,7 @@ export class RoomEditorManager {
     return this.pairPhase === 'pick-target';
   }
 
-  /** True when the live editor is open — GameScene uses this to suppress 1/2/3 char switching. */
+  /** True when the live editor is open â€” GameScene uses this to suppress 1/2/3 char switching. */
   isEditorActive(): boolean {
     return this.isActive;
   }
@@ -316,7 +316,7 @@ export class RoomEditorManager {
     // O is now wired to door-pairing in handlePairing(), not single-side door.
   }
 
-  // ── Door pairing (O key) ───────────────────────────────────────────────
+  // â”€â”€ Door pairing (O key) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private handlePairing(): void {
     // Esc cancels at any phase
@@ -498,7 +498,7 @@ export class RoomEditorManager {
     return 'right';
   }
 
-  /** Always emit a single 16x16 door zone — one tile. Place two side-by-side
+  /** Always emit a single 16x16 door zone â€” one tile. Place two side-by-side
    *  in `rooms.json` if you want a 2-tile-wide opening. Direction only
    *  affects which side of the door the player lands on (`spawnX/Y`). */
   private buildDoorRect(tileX: number, tileY: number, direction: string, T: number)
@@ -568,7 +568,7 @@ export class RoomEditorManager {
     this.placementMode = null; // Disarm after one placement
   }
 
-  // ── Tile palette (P key) ───────────────────────────────────────────────
+  // â”€â”€ Tile palette (P key) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private handlePaletteToggle(): void {
     if (Phaser.Input.Keyboard.JustDown(this.keys.P)) {
@@ -838,18 +838,18 @@ export class RoomEditorManager {
   /** Returns the current editor status string for display in the DOM status bar. */
   public getStatusText(): string {
     const map = this.roomManager.getMap();
-    const dims = map ? `${map.width}×${map.height}` : '?';
+    const dims = map ? `${map.width}Ã—${map.height}` : '?';
     let ctx = '';
     if (this.placementMode) {
       ctx = `armed: ${this.placementMode}  (Esc cancel)`;
     } else if (this.pairPhase === 'pick-target') {
-      ctx = 'pair: pick target room  (↑↓ Enter Esc)';
+      ctx = 'pair: pick target room  (â†‘â†“ Enter Esc)';
     } else if (this.pairPhase === 'place-source') {
       ctx = `pair: click source door  (target=${this.pairTargetRoomId})`;
     } else if (this.pairPhase === 'place-target') {
       ctx = `pair: click target door in ${this.pairTargetRoomId}`;
     }
-    const base = `${this.currentLayerName} · tile ${this.selectedTileIndex} · ${this.activeTool} · ${dims}`;
+    const base = `${this.currentLayerName} Â· tile ${this.selectedTileIndex} Â· ${this.activeTool} Â· ${dims}`;
     return ctx ? `${ctx}  |  ${base}` : base;
   }
 
@@ -879,7 +879,7 @@ export class RoomEditorManager {
         }
       }
 
-      // 2. Check door zones (grab handle is 16×16 at zone center)
+      // 2. Check door zones (grab handle is 16Ã—16 at zone center)
       for (const zone of this.roomManager.getDoorZones()) {
         const body = zone.body as Phaser.Physics.Arcade.StaticBody;
         if (Phaser.Geom.Rectangle.Contains(
@@ -934,7 +934,7 @@ export class RoomEditorManager {
     }
   }
 
-  // ── Door dragging ────────────────────────────────────────────────────────
+  // â”€â”€ Door dragging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private redrawDoorHandles(): void {
     this.doorHandles.clear();
@@ -1035,7 +1035,7 @@ export class RoomEditorManager {
    * Reset the active room to a baseline: floor everywhere on Ground,
    * walls around the perimeter on Collision (interior cleared), and
    * Above cleared. Same content the `npm run new-room` script writes
-   * for fresh rooms — useful for re-baselining a room mid-edit. Git
+   * for fresh rooms â€” useful for re-baselining a room mid-edit. Git
    * is the undo button.
    */
   private stampDefaultRoom(): void {
@@ -1284,7 +1284,7 @@ export class RoomEditorManager {
     const roomId = this.roomManager.getCurrentRoomId();
 
     if (!id) {
-      console.warn('[Editor] Cannot persist drag — selected object has no id');
+      console.warn('[Editor] Cannot persist drag â€” selected object has no id');
       return;
     }
 
@@ -1292,7 +1292,7 @@ export class RoomEditorManager {
       this.saveObjectToDisk(type, id, x, y);
     } else {
       const listKey = type === 'afflicted' ? 'afflicted' : 'interactables';
-      const path = `src/data/rooms.json → rooms.${roomId}.${listKey}[id="${id}"]`;
+      const path = `src/data/rooms.json â†’ rooms.${roomId}.${listKey}[id="${id}"]`;
       const snippet = JSON.stringify({ id, x, y }, null, 2);
       console.log(`[Editor] Position update for ${path}:\n${snippet}`);
       this.copyAndToast(snippet, `Position copied. Update x/y in:\n${path}`);
@@ -1309,7 +1309,7 @@ export class RoomEditorManager {
     } catch {
       copied = false;
     }
-    this.showToast(copied ? message : `${message}\n(clipboard blocked — see console)`);
+    this.showToast(copied ? message : `${message}\n(clipboard blocked â€” see console)`);
   }
 
   private showToast(message: string): void {
@@ -1633,7 +1633,7 @@ export class RoomEditorManager {
     this.showToast(`Filled ${count} tiles`);
   }
   private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown[], _dx: number, dy: number): void {
-    if (!this.isActive) return;
+    if (!this.isActive || !this.paletteVisible) return;
     if (dy > 0) {
       this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
     } else if (dy < 0) {
@@ -1659,3 +1659,4 @@ export class RoomEditorManager {
     this.pairPickerContainer?.destroy();
   }
 }
+

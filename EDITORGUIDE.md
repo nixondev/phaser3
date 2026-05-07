@@ -24,9 +24,8 @@ Open `http://localhost:8080` in a browser. The title screen appears.
 
 ### Two paths from the title
 
-- **Space / Enter** — start the actual game. Gameplay only; the F-keys
-  do nothing during normal play.
-- **F1** — **open the editor scene** (this guide). Replaces the title
+- **Space / Enter** — start the actual game. Gameplay only.
+- **?** — **open the editor scene** (this guide). Replaces the title
   screen entirely until you click **Exit** in the top bar.
 
 ### What you see in the editor
@@ -37,14 +36,16 @@ A full-screen overlay with the Phaser canvas in the middle:
   Exit.
 - **Left panel** — clickable list of every room in `rooms.json`. Click
   a room to warp into it.
-- **Right panel** — Layer buttons (1/2/3), Tools (palette, stamp,
-  place-interactable, place-NPC, pair-door, warp-picker), and a
-  keyboard cheatsheet.
+- **Right panel** — Views (H · HUD overlay, V · Visual debug), Layer
+  buttons (1/2/3), Tools (palette, stamp, place-interactable, place-NPC,
+  pair-door), and a keyboard cheatsheet.
 - **Status bar** — toast messages and the currently armed action.
 
 The editor's debug HUD (FPS, room id, mouse coords, tile GIDs) and
 visual overlays (collision in red, doors in cyan / red-when-unwired,
-NPC radii in magenta) are **on by default**. Toggle them with F1 / F3.
+NPC radii in magenta) are available via the **Views** buttons in the
+right panel, or press **H** (HUD overlay) / **V** (Visual debug) on
+the keyboard.
 
 ### Camera control
 
@@ -63,22 +64,23 @@ The protagonist isn't here — your mouse cursor IS the cursor.
 
 ### Teleport to any room
 
-Press **F4**. Use **Up/Down** to choose a room from the list, **Enter**
-to teleport, **Esc** to cancel. Player movement is paused while the
-picker is open.
+**Click any room name in the left panel.** The editor warps there
+instantly. Alternatively, press **F4** to open the keyboard-driven
+warp picker: **Up/Down** to choose, **Enter** to teleport, **Esc**
+to cancel.
 
 ### Audit the maze
 
-Press **F5**. Copies a full graph report of every room and every door
-to your clipboard, dumps the same to the browser console, and shows a
-summary toast on screen with door counts:
-`[OK]` / `[TODO]` / `[BROKEN]` / `[ONEWAY]` plus unreachable and orphan
-rooms. The full text is paste-able into a notes file.
+Click **Audit** in the top bar, or press **F5**. Copies a full graph
+report of every room and every door to your clipboard, dumps the same
+to the browser console, and shows a summary toast on screen with door
+counts: `[OK]` / `[TODO]` / `[BROKEN]` / `[ONEWAY]` plus unreachable
+and orphan rooms. The full text is paste-able into a notes file.
 
 ### Teleport within a room
 
-Hold **Shift** and click anywhere in the visible viewport (works when
-F1 or F2 is on). The protag teleports to the cursor.
+Hold **Shift** and click anywhere in the visible viewport. The protag
+teleports to the cursor.
 
 ---
 
@@ -86,8 +88,8 @@ F1 or F2 is on). The protag teleports to the cursor.
 
 ### Enter editor mode
 
-Press **F2**. The yellow map-outline appears, and a HUD strip shows
-at the bottom of the screen.
+The editor is always active when you open the editor scene via `?`.
+The yellow map-outline and HUD strip are visible immediately.
 
 ### Switch the active layer
 
@@ -314,7 +316,7 @@ with the path to update in `rooms.json`. Apply manually.
 
 ## Audio tweaks (live mixing)
 
-These shortcuts work whenever F1 or F2 is on:
+These shortcuts work in the editor scene:
 
 - **R** — cycle reverb profile (city / indoor / sewer / hospital / substation).
 - **`[`** / **`]`** — decrease / increase reverb wet mix (5% steps).
@@ -328,9 +330,9 @@ persist on reload.
 
 ## Cheats / debug shortcuts
 
-These work when F1 or F2 is on:
+These work in the editor scene:
 
-- **L** — hot-reload the current room from disk.
+- **L** — hot-reload the current room from disk (also the **Reload** button in the top bar).
 - **U** — unlock every door in the current room (skip lock checks).
 - **C** — cure every afflicted in the current room.
 - **Shift + Click** — teleport the protag to the cursor.
@@ -344,8 +346,9 @@ Use these to skip ahead while testing. They never persist.
 Putting it all together:
 
 1. `npm run new-room basement` → terminal creates the stub.
-2. Refresh the browser. F4 → arrow to `basement` → Enter. You're in.
-3. F2 to enter editor. Paint Ground (1, then L-click). Paint
+2. Refresh the browser. Press `?` to open the editor. Click `basement`
+   in the left panel. You're in.
+3. The editor is already active. Paint Ground (1, then L-click). Paint
    Collision walls (2). Optionally paint Above-layer details (3).
    Use **F** (Flood Fill) or **R** (Rectangle) for large areas.
 4. **X** to save the tilemap. In DEV, it auto-saves to disk.
@@ -354,8 +357,8 @@ Putting it all together:
    Paste both blocks into `rooms.json`. Refresh. Walk through.
 6. **I**, **N** for any signs / locks / NPCs you want. Each pastes
    into `rooms.json`.
-7. F5 to audit. Look for `[TODO]` or `[BROKEN]` flags on the room's
-   doors. Fix them.
+7. Click **Audit** in the top bar (or press **F5**). Look for `[TODO]`
+   or `[BROKEN]` flags on the room's doors. Fix them.
 8. `git diff` to review. `git commit -m "basement"`.
 
 Total time for a basic room with two doors: about 5 minutes.

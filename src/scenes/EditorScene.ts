@@ -15,7 +15,7 @@ const MAX_ZOOM = 4;
 const ZOOM_STEP = 1.1;
 
 /**
- * Top-level editor scene launched from MenuScene via F1.
+ * Top-level editor scene launched from MenuScene via `?`.
  *
  * Reuses RoomManager, RoomEditorManager, DebugManager, and InputManager
  * unchanged. Provides stubs for the scene-coupling points those classes
@@ -35,6 +35,8 @@ export class EditorScene extends Phaser.Scene {
   private placeholderSprites = new Map<string, Phaser.GameObjects.Sprite>();
 
   private firstFrame = true;
+  private hudKey?: Phaser.Input.Keyboard.Key;
+  private visualsKey?: Phaser.Input.Keyboard.Key;
   private panActive = false;
   private panLast = new Phaser.Math.Vector2();
   private panKeys?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
@@ -138,6 +140,8 @@ export class EditorScene extends Phaser.Scene {
       S: kb.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       D: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
     };
+    this.hudKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.H);
+    this.visualsKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.V);
 
     // Middle-click drag to pan (right-click is reserved for tile erase in RoomEditorManager)
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -236,18 +240,20 @@ export class EditorScene extends Phaser.Scene {
    * used here — it would consume JustDown flags on keys that RoomEditorManager
    * also reads (Q, E, 1/2/3, ESC…), causing them to silently drop.
    *
-   * On the first frame, inject editor/debug/visuals=true to auto-activate
-   * RoomEditorManager and DebugManager without requiring any key press.
-   * After that, only H (HUD) and V (Overlays) pass through — everything else
-   * is false so RoomEditorManager reads its own key objects uncontested.
+   * On the first frame, inject `editor=true` to auto-activate RoomEditorManager.
+   * H (HUD) and V (Visuals) pass through on every frame so the debug overlays
+   * are accessible via keyboard or the UI buttons. Everything else is false so
+   * RoomEditorManager reads its own key objects uncontested.
    */
   private buildEditorInputState(): InputState {
     const editor = this.firstFrame;
     if (this.firstFrame) this.firstFrame = false;
+    const debug = !!this.hudKey && Phaser.Input.Keyboard.JustDown(this.hudKey);
+    const visuals = !!this.visualsKey && Phaser.Input.Keyboard.JustDown(this.visualsKey);
     return {
       up: false, down: false, left: false, right: false,
       action: false, menu: false, inventory: false, drop: false,
-      flashlight: false, debug: false, visuals: false,
+      flashlight: false, debug, visuals,
       editor,
       char1: false, char2: false, char3: false, char4: false,
     };

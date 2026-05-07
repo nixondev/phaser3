@@ -17,7 +17,6 @@ export class DebugManager {
   
   private isVisible: boolean = false;
   private showVisuals: boolean = false;
-  private isEditorMode: boolean = false;
 
   private reverbMix: number = 0.3;
 
@@ -145,12 +144,6 @@ export class DebugManager {
       }
     }
 
-    if (input.editor) {
-      this.isEditorMode = !this.isEditorMode;
-      // In a real implementation, this might enable dragging or other tools
-      console.log('Editor Mode:', this.isEditorMode ? 'ON' : 'OFF');
-    }
-
     // Warp picker (F4 toggles; while open, swallow nav keys for selection)
     if (Phaser.Input.Keyboard.JustDown(this.keys.F4)) {
       this.toggleWarpPicker();
@@ -168,8 +161,8 @@ export class DebugManager {
       this.dumpMapGraph();
     }
 
-    // Shift + Click Teleport (only in debug or editor mode)
-    if ((this.isVisible || this.isEditorMode) && this.scene.input.activePointer.isDown && this.keys.SHIFT.isDown) {
+    // Shift + Click Teleport (only when HUD is visible)
+    if (this.isVisible && this.scene.input.activePointer.isDown && this.keys.SHIFT.isDown) {
       const pointer = this.scene.input.activePointer;
       const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
       const player = (this.scene as any).player;
@@ -178,8 +171,8 @@ export class DebugManager {
       }
     }
 
-    // Audio Editing (only in debug or editor mode)
-    if (this.isVisible || this.isEditorMode) {
+    // Audio Editing
+    if (this.isVisible) {
       this.handleAudioControls();
     }
     
@@ -279,7 +272,8 @@ export class DebugManager {
       `  Tile: ${tileX}, ${tileY}`,
       `  GIDs: ${gids}`,
       'Controls:',
-      '  F1,F2,F3, L,U,C, R,[],-+,Sh+Clk'
+      '  H·HUD  V·vis  L·reload  U·unlock  C·cure',
+      '  R·reverb  []·rev±  -+·vol  Sh+Clk·warp'
     ]);
   }
   
