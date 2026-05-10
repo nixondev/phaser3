@@ -12,12 +12,17 @@
     "regenerate-tiles": "node scripts/regenerate-tiles.cjs",
     "migrate-tiles": "node scripts/migrate-tiles.cjs",
     "new-room": "node scripts/new-room.cjs",
-    "setup": "npm run generate-assets && npm run build-tiles"
+    "setup": "npm run generate-assets && npm run build-tiles",
+    "build:tauri": "tsc && vite build --config vite.config.tauri.ts",
+    "tauri:dev": "npx tauri dev",
+    "tauri:build": "npx tauri build"
   },
   "dependencies": {
     "phaser": "^3.80.1"
   },
   "devDependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/cli": "^2.11.1",
     "spessasynth_core": "^4.2.13",
     "spessasynth_lib": "^4.2.15",
     "typescript": "^5.4.0",

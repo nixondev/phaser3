@@ -321,7 +321,7 @@ export class DebugManager {
     }
 
     // Draw Afflicted radii
-    const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.Physics.Arcade.Group;
+    const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.GameObjects.Group;
     if (afflictedGroup) {
       this.debugGraphics.lineStyle(1, 0xff00ff, 0.6);
       afflictedGroup.getChildren().forEach(child => {

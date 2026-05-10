@@ -15,8 +15,11 @@ export class RoomEditorManager {
   private doorHandles!: Phaser.GameObjects.Graphics;
   private dragOffset: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private wasPrimaryDown: boolean = false;
+  private justDown: boolean = false;
 
-  private selectedTileIndex: number = 0;
+  /** Derived from selectedTiles[0][0] — always reflects the top-left tile of the current stamp. */
+  private get selectedTileIndex(): number { return this.selectedTiles[0][0]; }
+  private set selectedTileIndex(v: number) { this.selectedTiles = [[v]]; }
   private currentLayerName: 'Ground' | 'Collision' | 'Above' = 'Ground';
   private editorText: Phaser.GameObjects.Text;
   private tileCursor: Phaser.GameObjects.Graphics;
@@ -202,17 +205,27 @@ export class RoomEditorManager {
 
   /** GameScene reads this to suspend gameplay input while a modal is open. */
   isModalOpen(): boolean {
-    return this.pairPhase === 'pick-target';
+    return this.pairPhase === 'pick-target' ||
+           this.pairPhase === 'place-source' ||
+           this.pairPhase === 'place-target';
   }
 
   /** True when the live editor is open â€” GameScene uses this to suppress 1/2/3 char switching. */
   isEditorActive(): boolean {
     return this.isActive;
   }
+
+  /** Clear undo/redo history and palette cache — call when loading a new room. */
+  clearHistory(): void {
+    this.history = [];
+    this.historyIndex = -1;
+    this.paletteBuilt = false;
+  }
   
   update(input: InputState): void {
     const pointer = this.scene.input.activePointer;
-    const justDown = pointer.primaryDown && !this.wasPrimaryDown;
+    this.justDown = pointer.primaryDown && !this.wasPrimaryDown;
+    const justDown = this.justDown;
     const justUp = !pointer.primaryDown && this.wasPrimaryDown;
     this.wasPrimaryDown = pointer.primaryDown;
 
@@ -663,7 +676,6 @@ export class RoomEditorManager {
     }
 
     this.selectedTiles = newTiles;
-    this.selectedTileIndex = newTiles[0][0];
     this.updatePreview();
     this.updatePaletteHighlight();
   }
@@ -802,6 +814,9 @@ export class RoomEditorManager {
     }
     this.peekAtChangedEdge(oldW, oldH, newW, newH, offX, offY);
     console.log(`[Editor] Resized map ${oldW}x${oldH} -> ${newW}x${newH} (offset ${offX},${offY})`);
+    if (import.meta.env.DEV) {
+      this.saveRoomSizeToDisk(this.roomManager.getCurrentRoomId(), newW, newH);
+    }
   }
 
   /**
@@ -867,7 +882,7 @@ export class RoomEditorManager {
       const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
 
       // 1. Check Afflicted
-      const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.Physics.Arcade.Group;
+      const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.GameObjects.Group;
       if (afflictedGroup) {
         const hit = afflictedGroup.getChildren().find(child => {
           const a = child as any;
@@ -966,6 +981,13 @@ export class RoomEditorManager {
     if (door) {
       (door as any).x = body.x;
       (door as any).y = body.y;
+      // Recalculate spawnX/Y based on new position and existing direction
+      const T = GAME_CONFIG.TILE_SIZE;
+      const tileX = Math.round(body.x / T);
+      const tileY = Math.round(body.y / T);
+      const rect = this.buildDoorRect(tileX, tileY, (door as any).direction ?? 'up', T);
+      (door as any).spawnX = rect.spawnX;
+      (door as any).spawnY = rect.spawnY;
       // Re-emit the full updated room so the user can paste it
       const updated: any = JSON.parse(JSON.stringify(room));
       const fragment = `"${roomId}": ${JSON.stringify(updated, null, 2)}`;
@@ -1013,7 +1035,7 @@ export class RoomEditorManager {
 
     // Use input state from InputManager to avoid JustDown consumption conflict
     if (input.drop) { // Q
-      this.selectedTileIndex = Math.max(0, this.selectedTileIndex - 1);
+      this.selectedTileIndex = Math.max(1, this.selectedTileIndex - 1);
       this.updatePreview();
       this.updatePaletteHighlight();
     }
@@ -1117,6 +1139,22 @@ export class RoomEditorManager {
     }
   }
 
+  private async saveRoomSizeToDisk(roomId: string, width: number, height: number): Promise<void> {
+    try {
+      const resp = await fetch('/__editor/save-room-size', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, width, height })
+      });
+      const result = await resp.json();
+      if (!result.ok) throw new Error(result.error || 'Unknown error');
+      this.showToast(`Room size saved: ${width}×${height}`);
+    } catch (err: any) {
+      console.error('[Editor] Room size save failed:', err);
+      this.showToast(`Room size save failed: ${err.message}`);
+    }
+  }
+
   private async saveTilemapToDisk(roomId: string, data: any): Promise<void> {
     try {
       this.showToast(`Saving ${roomId}.json...`);
@@ -1184,14 +1222,13 @@ export class RoomEditorManager {
       const tile = map.getTileAt(tileX, tileY, true, this.currentLayerName);
       if (tile && tile.index !== -1) {
         this.selectedTileIndex = tile.index;
-        this.selectedTiles = [[tile.index]];
         this.updatePreview();
         this.updatePaletteHighlight();
       }
     } 
     // Left Click: Paint (only if NOT alt)
     else if (pointer.leftButtonDown()) {
-      if (pointer.primaryDown) {
+      if (this.justDown) {
         this.pushHistory();
       }
       
@@ -1423,15 +1460,14 @@ export class RoomEditorManager {
   }
 
   private undo(): void {
-    if (this.historyIndex <= 0) {
+    if (this.historyIndex < 0) {
       this.showToast('Nothing to undo');
       return;
     }
-    
-    // To undo, we need to restore the state BEFORE the current action.
-    // The history stack stores states AFTER actions.
-    this.historyIndex--;
+
+    // history[historyIndex] is the pre-action snapshot; restore it then step back.
     this.applyHistoryState(this.history[this.historyIndex]);
+    this.historyIndex--;
     this.showToast(`Undo (${this.historyIndex + 1}/${this.history.length})`);
   }
 
@@ -1576,7 +1612,6 @@ export class RoomEditorManager {
 
     if (changed) {
       if (layer === 'Collision') this.refreshCollision();
-      this.pushHistory();
       const count = (endX - startX + 1) * (endY - startY + 1);
       this.showToast(`Rect filled ${count} tiles`);
     }
@@ -1627,9 +1662,6 @@ export class RoomEditorManager {
     if (count > 0 && layer === 'Collision') {
       this.refreshCollision();
     }
-    
-    // Save state after fill (for undo)
-    this.pushHistory();
     this.showToast(`Filled ${count} tiles`);
   }
   private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown[], _dx: number, dy: number): void {
@@ -1637,7 +1669,7 @@ export class RoomEditorManager {
     if (dy > 0) {
       this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
     } else if (dy < 0) {
-      this.selectedTileIndex = Math.max(0, this.selectedTileIndex - 1);
+      this.selectedTileIndex = Math.max(1, this.selectedTileIndex - 1);
     }
     this.updatePreview();
     this.updatePaletteHighlight();

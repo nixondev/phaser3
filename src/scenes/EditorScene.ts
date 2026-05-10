@@ -115,6 +115,7 @@ export class EditorScene extends Phaser.Scene {
       MusicManager.getInstance().playRoomMusic(roomId);
     }
     this.editorUI?.onRoomChanged(roomId);
+    this.editorManager?.clearHistory();
   }
 
   private setupCameraForEditor(): void {
@@ -211,7 +212,7 @@ export class EditorScene extends Phaser.Scene {
     if (!room) return;
 
     for (const inter of room.interactables ?? []) {
-      const tileFrame = (inter as any).tileFrame ?? 0;
+      const tileFrame = (inter as any).tileFrame ?? (inter as any).item?.tileFrame ?? 0;
       const sprite = this.add.sprite(inter.x, inter.y, 'tileset-sprites', tileFrame);
       sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
       sprite.setDepth(DEPTH.ENTITIES);

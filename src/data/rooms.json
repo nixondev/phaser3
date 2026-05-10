@@ -371,8 +371,17 @@
             "\"Tell me what you need. I'll help.\"\n\n[Kai hands you a Lab Keycard and a Compound Sample.]\n[Kai joins your cause. They are waiting for you at Apartment 4B.]"
           ],
           "recoveredItems": [
-            { "name": "Lab Keycard", "tileFrame": 8, "category": "key", "keyId": "lab-door" },
-            { "name": "Compound Sample", "tileFrame": 9, "category": "cure" }
+            {
+              "name": "Lab Keycard",
+              "tileFrame": 8,
+              "category": "key",
+              "keyId": "lab-door"
+            },
+            {
+              "name": "Compound Sample",
+              "tileFrame": 9,
+              "category": "cure"
+            }
           ]
         },
         {
@@ -392,8 +401,18 @@
             "\"I'll help you map what's still usable\nin here. There's more to this city\nthan anyone told us.\"\n\n[Maren joins your cause. They are waiting for you at the Community Room.]"
           ],
           "recoveredItems": [
-            { "name": "Store Key", "tileFrame": 8, "category": "key", "keyId": "store-front" },
-            { "name": "Supply Manifest", "tileFrame": 7, "category": "document", "content": "Hand-written stock count.\nSection 3 still sealed.\nGenerator fuel: 4 cans — basement, east wall.\nNote: don't trust the east corridor after dark." }
+            {
+              "name": "Store Key",
+              "tileFrame": 8,
+              "category": "key",
+              "keyId": "store-front"
+            },
+            {
+              "name": "Supply Manifest",
+              "tileFrame": 7,
+              "category": "document",
+              "content": "Hand-written stock count.\nSection 3 still sealed.\nGenerator fuel: 4 cans — basement, east wall.\nNote: don't trust the east corridor after dark."
+            }
           ]
         }
       ]
@@ -403,8 +422,8 @@
       "name": "Your Apartment",
       "mapKey": "protag-house",
       "tilemapPath": "assets/tilemaps/protag-house.json",
-      "width": 20,
-      "height": 15,
+      "width": 22,
+      "height": 21,
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
@@ -432,6 +451,7 @@
           "x": 248,
           "y": 144,
           "type": "sign",
+          "tileFrame": 7,
           "text": "Flashlight: Pick it up, press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nDrop it (Q) and another can use it.\nIt keeps the afflicted at bay."
         },
         {
