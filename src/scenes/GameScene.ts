@@ -740,7 +740,7 @@ export class GameScene extends Phaser.Scene {
 
   private createItemSprite(id: string, tileFrame: number, x: number, y: number): void {
     const sprite = this.add.sprite(x, y, 'tileset-sprites', tileFrame);
-    sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
+    sprite.setScale(GAME_CONFIG.WORLD_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
     this.tweens.add({
       targets: sprite,
@@ -755,7 +755,7 @@ export class GameScene extends Phaser.Scene {
 
   private createSignSprite(id: string, tileFrame: number, x: number, y: number): void {
     const sprite = this.add.sprite(x, y, 'tileset-sprites', tileFrame);
-    sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
+    sprite.setScale(GAME_CONFIG.WORLD_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
     this.itemSprites.set(id, sprite);
   }
@@ -779,8 +779,14 @@ export class GameScene extends Phaser.Scene {
 
   private setupCamera(): void {
     const room = this.roomManager.getCurrentRoomDef();
-    const roomW = room.width * GAME_CONFIG.TILE_SIZE;
-    const roomH = room.height * GAME_CONFIG.TILE_SIZE;
+    // Use the actual loaded tilemap dimensions — roomDef.width/height can be
+    // mutated by resizeMap() and may not match the real tilemap after editing.
+    const map = this.roomManager.getMap();
+    const roomW = (map ? map.width : room.width) * GAME_CONFIG.TILE_SIZE;
+    const roomH = (map ? map.height : room.height) * GAME_CONFIG.TILE_SIZE;
+
+    this.physics.world.setBounds(0, 0, roomW, roomH);
+
     const cam = this.cameras.main;
 
     const fitsW = roomW <= GAME_CONFIG.WIDTH;

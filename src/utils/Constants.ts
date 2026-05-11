@@ -1,10 +1,11 @@
 export const GAME_CONFIG = {
   WIDTH: 320,
   HEIGHT: 240,
-  ZOOM: 1,
   TILE_SIZE: 16,
-  ASSET_SCALE: 4, // 16 * 4 = 64px upscaled assets
-  ENTITY_SCALE: 1.5, // Scale multiplier for characters
+  ASSET_SCALE: 4,        // 16 * 4 = 64px upscaled assets
+  WORLD_SCALE: 1 / 4,   // brings 64px assets down to 16px world units (= 1 / ASSET_SCALE)
+  ENTITY_SCALE: 1.5,    // scale multiplier for characters relative to a tile
+  ENTITY_WORLD_SCALE: 1.5 / 4, // entity sprite scale in world space (= ENTITY_SCALE / ASSET_SCALE)
   DEBUG: false,
 } as const;
 

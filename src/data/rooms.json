@@ -422,13 +422,13 @@
       "name": "Your Apartment",
       "mapKey": "protag-house",
       "tilemapPath": "assets/tilemaps/protag-house.json",
-      "width": 22,
+      "width": 24,
       "height": 21,
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
       "playerSpawn": {
-        "x": 248,
+        "x": 192,
         "y": 184
       },
       "doors": [

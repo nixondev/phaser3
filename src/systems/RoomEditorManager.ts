@@ -154,7 +154,7 @@ export class RoomEditorManager {
       .setScrollFactor(0)
       .setDepth(DEPTH.UI + 201)
       .setVisible(false)
-      .setScale(1.5 / GAME_CONFIG.ASSET_SCALE); // 1.5x tile size for better visibility
+      .setScale(GAME_CONFIG.ENTITY_WORLD_SCALE); // 1.5x tile size for better visibility
 
     this.mapOutline = this.scene.add.graphics();
     this.mapOutline.setDepth(DEPTH.UI + 198).setVisible(false);
@@ -1105,7 +1105,7 @@ export class RoomEditorManager {
       tileheight: map.tileHeight,
       tilesets: map.tilesets.map(ts => ({
         columns: ts.columns,
-        firstgid: ts.firstgid,
+        firstgid: 1,
         image: ts.name + ".png",
         imageheight: ts.image ? (ts.image.getSourceImage() as any).height : 512,
         imagewidth: ts.image ? (ts.image.getSourceImage() as any).width : 512,

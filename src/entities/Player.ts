@@ -21,7 +21,8 @@ export class Player extends Entity {
     // Fix scaling distortion by using integer-friendly scale if possible
     // this.setScale is already called in Entity.ts constructor.
     // However, if the user sees distortion, we might want to ensure it's not anti-aliased.
-    //this.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+//     this.texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
   }
 
   private createAnimations(): void {

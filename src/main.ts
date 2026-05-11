@@ -13,11 +13,11 @@ const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: GAME_CONFIG.WIDTH,
   height: GAME_CONFIG.HEIGHT,
-  zoom: GAME_CONFIG.ZOOM,
+  zoom: 1,
   parent: 'game-container',
-  pixelArt: true,
+  pixelArt: false,
   antialias: false,
-  roundPixels: true,
+  roundPixels: false,
   physics: {
     default: 'arcade',
     arcade: {
@@ -28,7 +28,7 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, PauseScene, EditorScene],
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.NO_CENTER,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
   },
 };
 

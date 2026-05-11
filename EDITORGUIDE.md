@@ -312,6 +312,28 @@ new position directly to `src/data/rooms.json`. A toast will confirm:
 On release, a small snippet with the new `x` / `y` copies to clipboard
 with the path to update in `rooms.json`. Apply manually.
 
+### Move an existing door
+
+Door zones are shown as **cyan crosshair squares** when the editor is
+active (enable the Visual debug overlay with **V** if you don't see
+them).
+
+1. **Left-click and drag** the cyan crosshair on the door you want to
+   move. The zone snaps to the tile grid while you drag.
+2. Release the mouse button to drop it.
+
+On release the editor copies the full updated room JSON entry to the
+clipboard and shows a toast:
+*"Door moved. Replace `"<roomId>"` entry in rooms.json."*
+
+Open `src/data/rooms.json`, find the `"<roomId>": { … }` entry,
+select it entirely, and paste. Save. Refresh the browser.
+
+> **Note:** moving a door updates its `x`, `y`, `direction`, and
+> `spawnX`/`spawnY` automatically. The paired door in the *target*
+> room is **not** touched — only move the side you intend to
+> reposition. Press **Esc** while dragging to cancel without changes.
+
 ---
 
 ## Audio tweaks (live mixing)

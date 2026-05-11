@@ -60,7 +60,7 @@ export class RoomManager {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');
     }
 
-    const visualScale = 1 / GAME_CONFIG.ASSET_SCALE;
+    const visualScale = GAME_CONFIG.WORLD_SCALE;
     ground.setScale(visualScale);
     collision.setScale(visualScale);
     above.setScale(visualScale);
@@ -250,7 +250,7 @@ export class RoomManager {
       throw new Error('Failed to create blank tilemap layers during resize');
     }
 
-    const visualScale = 1 / GAME_CONFIG.ASSET_SCALE;
+    const visualScale = GAME_CONFIG.WORLD_SCALE;
     ground.setScale(visualScale);
     collision.setScale(visualScale);
     above.setScale(visualScale);

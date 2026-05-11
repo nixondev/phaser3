@@ -242,8 +242,8 @@ export class DebugManager {
     
     const pointer = this.scene.input.activePointer;
     const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-    const tileX = Math.floor(worldPoint.x / (GAME_CONFIG.TILE_SIZE / GAME_CONFIG.ASSET_SCALE));
-    const tileY = Math.floor(worldPoint.y / (GAME_CONFIG.TILE_SIZE / GAME_CONFIG.ASSET_SCALE));
+    const tileX = Math.floor(worldPoint.x / GAME_CONFIG.TILE_SIZE);
+    const tileY = Math.floor(worldPoint.y / GAME_CONFIG.TILE_SIZE);
     
     let gids = '';
     const map = this.roomManager.getMap();

@@ -214,7 +214,7 @@ export class EditorScene extends Phaser.Scene {
     for (const inter of room.interactables ?? []) {
       const tileFrame = (inter as any).tileFrame ?? (inter as any).item?.tileFrame ?? 0;
       const sprite = this.add.sprite(inter.x, inter.y, 'tileset-sprites', tileFrame);
-      sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
+      sprite.setScale(GAME_CONFIG.WORLD_SCALE);
       sprite.setDepth(DEPTH.ENTITIES);
       sprite.setData('def', inter);
       sprite.setData('kind', 'interactable');
@@ -225,7 +225,7 @@ export class EditorScene extends Phaser.Scene {
       // Frame 10 (skeleton remains) is a serviceable NPC stand-in until we have
       // dedicated afflicted art available in the editor.
       const sprite = this.add.sprite(aff.x, aff.y, 'tileset-sprites', 10);
-      sprite.setScale(1 / GAME_CONFIG.ASSET_SCALE);
+      sprite.setScale(GAME_CONFIG.WORLD_SCALE);
       sprite.setDepth(DEPTH.ENTITIES);
       sprite.setData('def', aff);
       sprite.setData('kind', 'afflicted');
