@@ -3,6 +3,7 @@ import { SCENES, GAME_CONFIG, CAMERA_CONFIG, DEPTH, INTERACT_CONFIG, USE_MIDI_MU
 import { Player } from '@entities/Player';
 import { Afflicted } from '@entities/Afflicted';
 import { Flashlight } from '@systems/Flashlight';
+import { DarknessOverlay } from '@systems/DarknessOverlay';
 import { InputManager } from '@systems/InputManager';
 import { RoomManager } from '@systems/RoomManager';
 import { TransitionManager } from '@systems/TransitionManager';
@@ -11,6 +12,7 @@ import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef } from '@/types';
 import { debug } from '@utils/Debug';
+import { WeatherManager } from '@systems/WeatherManager';
 
 const CLINIC_DOOR_X     = 160;
 const CLINIC_DOOR_Y     = 304;
@@ -32,13 +34,13 @@ export class GameScene extends Phaser.Scene {
   private cureCooldown = false;  // prevents multi-afflicted same-frame double-trigger
   private lockedDoorCooldown = 0;
   private itemSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
-  private darknessLayer?: Phaser.GameObjects.RenderTexture;
 
   // Afflicted
   private afflictedGroup!: Phaser.Physics.Arcade.Group;
 
   // Flashlight (persistent across rooms — always available)
   private flashlight!: Flashlight;
+  private darknessOverlay!: DarknessOverlay;
 
   // Inventory
   private inventoryMode = false;
@@ -49,6 +51,8 @@ export class GameScene extends Phaser.Scene {
 
   // Standing sprites for inactive roster members present in the current room
   private parkedBodies: Map<string, Phaser.GameObjects.Sprite> = new Map();
+
+  private weatherManager!: WeatherManager;
 
   constructor() {
     super(SCENES.GAME);
@@ -67,6 +71,8 @@ export class GameScene extends Phaser.Scene {
     this.rsm = RoomStateManager.getInstance();
     this.afflictedGroup = this.physics.add.group();
     this.flashlight = new Flashlight(this);
+    this.darknessOverlay = new DarknessOverlay(this);
+    this.weatherManager = new WeatherManager(this);
 
     // Always hand AudioManager the new scene (keeps volume control working).
     // Stop title MP3 before starting in-game music.
@@ -76,8 +82,10 @@ export class GameScene extends Phaser.Scene {
     const startRoom = this.roomManager.getStartRoom();
     this.roomManager.loadRoom(startRoom);
     this.rsm.visitRoom(startRoom);
+    this.weatherManager.updateForRoom(startRoom);
 
     const roomDef = this.roomManager.getCurrentRoomDef();
+    this.darknessOverlay.setEnabled(roomDef.dark === true);
 
     if (USE_MIDI_MUSIC) {
       const music = MusicManager.getInstance();
@@ -89,6 +97,8 @@ export class GameScene extends Phaser.Scene {
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, () => {
       if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
+      this.weatherManager.destroy();
+      this.darknessOverlay.destroy();
     });
 
     this.events.on('character-switch-request', (id: string) => {
@@ -102,7 +112,6 @@ export class GameScene extends Phaser.Scene {
 
     this.setupCollisions();
     this.setupCamera();
-    this.setupLighting();
     this.createWorldItemSprites();
     this.spawnAfflicted();
     this.refreshParkedBodies();
@@ -124,6 +133,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.weatherManager.update(delta);
     if (this.isTransitioning) return;
     if (this.lockedDoorCooldown > 0) this.lockedDoorCooldown--;
 
@@ -134,7 +144,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     const input = this.inputManager.getState();
-    this.updateLighting();
 
     // Flashlight toggle — only if active character carries the flashlight item
     const hasFlashlight = this.rsm.hasItemWithKeyId('flashlight');
@@ -179,6 +188,13 @@ export class GameScene extends Phaser.Scene {
     const facingAngle = this.player.getFacingAngle();
     const origin = this.player.getFlashlightOrigin();
     this.flashlight.update(origin.x, origin.y, facingAngle, delta);
+
+    const cam = this.cameras.main;
+    this.darknessOverlay.update(
+      this.player.x - cam.scrollX,
+      this.player.y - cam.scrollY,
+      this.flashlight,
+    );
 
     // Update afflicted AI
     this.afflictedGroup.getChildren().forEach((child) => {
@@ -646,11 +662,12 @@ export class GameScene extends Phaser.Scene {
         this.rsm.visitRoom(target.roomId);
         this.setupCollisions();
         this.setupCamera();
-        this.setupLighting();
         this.createWorldItemSprites();
         this.spawnAfflicted();
         doSwitch();
         this.refreshParkedBodies();
+        this.weatherManager.updateForRoom(target.roomId);
+        this.darknessOverlay.setEnabled(this.roomManager.getCurrentRoomDef().dark === true);
         if (USE_MIDI_MUSIC) MusicManager.getInstance().playRoomMusic(target.roomId);
         this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
       }).then(() => { this.isTransitioning = false; });
@@ -807,29 +824,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private setupLighting(): void {
-    if (this.darknessLayer) {
-      this.darknessLayer.destroy();
-      this.darknessLayer = undefined;
-    }
-
-    const roomDef = this.roomManager.getCurrentRoomDef();
-    if (roomDef.dark) {
-      const roomW = roomDef.width * GAME_CONFIG.TILE_SIZE;
-      const roomH = roomDef.height * GAME_CONFIG.TILE_SIZE;
-      
-      this.darknessLayer = this.add.renderTexture(0, 0, roomW, roomH);
-      this.darknessLayer.setDepth(DEPTH.LIGHTING);
-    }
-  }
-
-  private updateLighting(): void {
-    if (!this.darknessLayer) return;
-
-    this.darknessLayer.clear();
-    this.darknessLayer.fill(0x000000, 0.95);
-    this.flashlight.renderMask(this.darknessLayer);
-  }
 
   // ── Door transitions ────────────────────────────────────────────────────
 
@@ -889,10 +883,11 @@ export class GameScene extends Phaser.Scene {
       this.player.setPosition(spawn.x, spawn.y);
       this.setupCollisions();
       this.setupCamera();
-      this.setupLighting();
       this.createWorldItemSprites();
       this.spawnAfflicted();
       this.refreshParkedBodies();
+      this.weatherManager.updateForRoom(doorDef.targetRoom);
+      this.darknessOverlay.setEnabled(this.roomManager.getCurrentRoomDef().dark === true);
 
       if (USE_MIDI_MUSIC) {
         MusicManager.getInstance().playRoomMusic(doorDef.targetRoom);

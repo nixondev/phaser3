@@ -91,10 +91,19 @@ export class Flashlight {
     this.drawCone(this.maskGraphics, originX, originY, facingAngle, RANGE * 0.7, HALF_ANGLE * 0.5);
   }
 
-  /** Renders the current flashlight mask into a RenderTexture to create a "reveal" effect. */
-  renderMask(target: Phaser.GameObjects.RenderTexture): void {
+  /** Erases the flashlight cone from a screen-space RenderTexture.
+   *  Pass screen-space coordinates so no scroll math is needed.
+   */
+  renderMaskScreenSpace(target: Phaser.GameObjects.RenderTexture, screenX: number, screenY: number): void {
     if (!this.on) return;
-    target.draw(this.maskGraphics, 0, 0, 1, Phaser.BlendModes.ERASE);
+    this.maskGraphics.clear();
+    this.maskGraphics.fillStyle(0xffffff, 0.3);
+    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE * 1.2, HALF_ANGLE * 1.4);
+    this.maskGraphics.fillStyle(0xffffff, 0.7);
+    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE, HALF_ANGLE);
+    this.maskGraphics.fillStyle(0xffffff, 1.0);
+    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE * 0.7, HALF_ANGLE * 0.5);
+    target.erase(this.maskGraphics);
   }
 
   private drawCone(

@@ -19,7 +19,9 @@ export const DEPTH = {
   ENTITIES: 10,
   PLAYER: 20,
   ABOVE: 30,
+  HIDDEN: 31,   // reserved — things the flashlight will reveal
   LIGHTING: 35,
+  WEATHER: 37,  // above darkness and flashlight beam, always visible
   UI: 40,
   TRANSITION: 50,
 } as const;

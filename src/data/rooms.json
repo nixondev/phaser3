@@ -10,6 +10,7 @@
       "music": "bgm-main",
       "reverb": "Large Long Echo Hall",
       "reverbMix": 0.45,
+      "dark": true,
       "playerSpawn": {
         "x": 768,
         "y": 944
@@ -427,6 +428,7 @@
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
+      "weather": "rain-mild",
       "playerSpawn": {
         "x": 192,
         "y": 184
@@ -953,7 +955,6 @@
       "width": 40,
       "height": 10,
       "reverb": "sewer",
-      "dark": true,
       "playerSpawn": {
         "x": 40,
         "y": 80

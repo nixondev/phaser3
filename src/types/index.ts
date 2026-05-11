@@ -87,6 +87,8 @@ export interface RoomDefinition {
   reverb?: string;
   reverbMix?: number;
   dark?: boolean;
+  weather?: 'rain-mild' | 'rain-hard' | 'dripping';
+  drips?: Array<{ x: number; y: number }>;
 }
 
 export interface RoomsData {
