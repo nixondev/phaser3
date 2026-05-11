@@ -5,6 +5,7 @@
       "name": "WARDEN",
       "mapKey": "city-street",
       "tilemapPath": "assets/tilemaps/city-street.json",
+      "weather": "rain-hard",
       "width": 96,
       "height": 72,
       "music": "bgm-main",
