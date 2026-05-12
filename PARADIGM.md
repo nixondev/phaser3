@@ -88,9 +88,10 @@ requires adding a new noun — it requires arranging existing ones.
 ### Tiles
 
 - Three layers per room: Ground, Collision, Above.
-- Painted via the F2 editor.
+- Painted via the editor (press `?` on title).
 - Collision tiles block movement. Above tiles render over the player.
-- Tiles can change at room-load based on world flags (Phase 5).
+- Tiles can change at room-load based on world flags — see `flagConditions`
+  on `RoomDefinition` in `AUTHORING.md`.
 
 ### Interactables (E-targets)
 
@@ -99,13 +100,13 @@ Every E-target is an interactable. Types include:
 - **Sign** — shows a fixed string when E'd.
 - **Item pickup** — adds an item to the active character's inventory.
 - **Recharge** — refills flashlight battery.
-- **Lock** — refuses passage / state change unless `requires` is met.
-- **Container / planter** (Phase 3) — has a slot that holds an item;
-  contents may transform over time or via state.
 - **Generic interactable** — the universal shape: `requires` + `produces`.
+  Can represent locks, generators, containers, levers, dispensers — any
+  interaction that needs conditions and side-effects.
 
-The runtime resolver (Phase 1) reduces all of these to one function:
-`tryInteract(target, party, worldState) → { ok, effects[] }`.
+The runtime resolver (`InteractionResolver.ts`) reduces all of these to
+`checkRequires → consumeRequires → applyProduces`. Full field reference
+in `AUTHORING.md`.
 
 ### Items
 
@@ -217,18 +218,19 @@ in the associated one). `curedClue` is shown in the cure dialog.
 `backstory` pages are shown E-by-E; the final page triggers the full
 recovery, roster addition, and item handover.
 
-### World flags (Phase 5)
+### World flags
 
-A `Set<string>` (or `Map<string, value>`) on `RoomStateManager`. Set or
-cleared by interaction effects. Read by:
+A `Set<string>` on `RoomStateManager`. Set and cleared by `produces`
+effects. Flags survive room transitions and save/load.
 
-- Door `requires` ("if `bridge_repaired` is set, this door's requires
-  is empty")
-- Interactable `requires` ("only respond if `generator_on`")
-- Tilemap layers ("if `passage_open`, remove this collision tile")
-- Entity spawns ("if `cleared_for_market`, spawn this NPC")
+Read by:
+- Interactable `requires: [{type:'flag', value:'...'}]` — gates the
+  interaction on flag state
+- Room `flagConditions` — applies tile / door / interactable mutations
+  at room-load time when the flag is set
 
-Flags are how the past edits the present.
+Flags are how the past edits the present. Every cure, every powered
+machine, every discovered passage is a flag.
 
 ---
 
@@ -358,6 +360,22 @@ is active. To any other character, the tile appears inert.
 > forces the player to sweep rooms with different characters to find
 > hidden seams.*
 
+### 12. Inter-character conversation
+
+```
+resident_A.conversationRequires = resident_B_id
+// resident_B must be present in the same room (active or parked body)
+pressing E on resident_A while resident_B is in the same room
+→ unique dialog unavailable in solo interaction
+→ may produce world flags, item drops, or new dialog trees on both residents
+```
+
+Two recovered residents in the same room remember something together that neither can surface alone. The player must position both characters in the same space — which may require cross-room switches and deliberate routing — to trigger the conversation.
+
+> *This is the social equivalent of the two-body succession pattern (#5). Where #5 is about actions in sequence, #12 is about presence in the same place at the same time. The puzzle is in knowing which two people need to meet, and getting them both there.*
+
+The mechanic uses no new verb. E on a resident checks for `conversationRequires` the same way a lock checks `requires`. If the condition is met, the richer dialog fires. If not, the standard solo dialog fires — the player may not even know a richer version exists until they try again with the right company.
+
 ---
 
 ## How a path is constructed
@@ -412,31 +430,26 @@ something that isn't here, it's a ROADMAP item, not a content task.
 npm run new-room <id> [width] [height]
 ```
 
-Creates the rooms.json stub + default tilemap. Reload, walk in.
+Creates the rooms.json stub + default tilemap + music dir. Refresh,
+click the room in the editor's left panel to visit it instantly.
 
-### Editor (F2)
+### Editor (press `?` on title)
 
-- **Tile painting** (1/2/3 layers, Q/E to cycle, L-click paint, R-click
-  erase, Alt/M-click eyedropper).
+- **Tile painting** (1/2/3 layers, Q/E to cycle, P palette, L-click
+  paint, R-click erase, Alt/M-click eyedropper, Ctrl+Z undo).
 - **Resize map** (Shift+Arrow expand, Ctrl+Shift+Arrow shrink).
-- **Place interactable** (`I` + click — snippet to clipboard).
-- **Pair two doors** (`O` → pick target room with `,` `.` and Enter
-  → click in source → auto-warp → click in target — two snippets to
-  clipboard).
-- **Place afflicted** (`N` + click — snippet to clipboard).
-- **Drag afflicted** to reposition (snippet on release).
-- **Save tilemap** (`X` — full JSON to clipboard, paste manually).
+- **Place interactable** (`I` + click — snippet to clipboard; add
+  `requires`, `produces`, `consumed` in `rooms.json`).
+- **Pair two doors** (`O` → pick target room → click in source →
+  auto-warp → click in target — two snippets to clipboard).
+- **Place afflicted** (`N` + click, Q/E cycles variant — snippet).
+- **Drag afflicted** to reposition (auto-saves position in dev).
+- **Save tilemap** (`X` — auto-saves in dev, clipboard fallback).
+- **Inspect object** — click any placeholder sprite; Properties panel
+  in the right sidebar shows its full JSON with a Copy button.
+- **Warp picker** — right-panel button or F4; **Audit** — top-bar button.
 
-### Debug (F1, F3, F4, F5)
-
-- **F1** — info HUD (FPS, room id, player coords, cursor coords, tile
-  GIDs under cursor).
-- **F3** — visual overlays (collision in red, doors in cyan,
-  interactables in yellow, afflicted radii in magenta).
-- **F4** — warp picker (Up/Down + Enter to teleport between rooms).
-- **F5** — map overview (room graph copied + console + stats toast).
-
-### Audio (live mixing while debug or editor is on)
+### Audio (live mixing in editor)
 
 - **R** cycles reverb profile.
 - **`[`** / **`]`** adjust reverb wet mix.
@@ -444,8 +457,9 @@ Creates the rooms.json stub + default tilemap. Reload, walk in.
 
 ### Saving content
 
-Editor → clipboard → you paste. No background writes. Git is the safety
-net. Workflow: edit, paste, save, reload, `git diff`, commit.
+Editor → clipboard → you paste into `rooms.json` or the tilemap file.
+No background writes in non-dev builds. Git is the safety net.
+Workflow: edit → paste → save → reload → `git diff` → commit.
 
 ---
 
@@ -497,6 +511,10 @@ Use them sparingly for the first.
 exists to give the player tools and knowledge. The exit gates on
 those tools and that knowledge. If you design the exit first you'll
 work backward and end up with a tree.
+
+**The endings should be designed last and discovered first.** Don't author the ending states until the full puzzle chain exists and you can walk it. But plant the flags that gate them from the beginning — every gun use, every cure, every cave room entered should set a flag. The endings are just readers of those flags. If the flags exist, the endings can be written at any time.
+
+**The game never tells the player there are multiple endings.** No hint, no achievement, no new game plus unlock. A player who gets the escape-alone ending and puts the game down has had a complete experience. A player who replays and discovers the shape changes has had a different complete experience. Both are valid. The game doesn't prefer one over the other — it just reflects what you did.
 
 ---
 

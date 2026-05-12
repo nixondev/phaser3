@@ -34,6 +34,7 @@ export const SCENES = {
   UI: 'UI',
   PAUSE: 'Pause',
   EDITOR: 'Editor',
+  DOCUMENT_READER: 'DocumentReader',
 } as const;
 
 export const ROOM_CONFIG = {

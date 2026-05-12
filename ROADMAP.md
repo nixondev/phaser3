@@ -132,44 +132,62 @@ both reference it.
   (`weather` field), rendered via screen-space Graphics. Extends to new types with one
   class + one switch case.
 - **Darkness + flashlight**: `dark: true` on a room enables a full-screen RenderTexture
-  darkness overlay. Flashlight (F key) cuts a cone through it. Small ambient circle always
-  visible around the player. Depth stack: LIGHTING=35 (darkness), beam glow=36,
-  WEATHER=37 (always above darkness).
+  darkness overlay. The flashlight is a **pickup item** (category `tool`, keyId `flashlight`,
+  tileFrame 50). Toggling it (F key) only works if the active character carries the item;
+  dropping it extinguishes it. Another character can pick it up and use it. The flashlight
+  cuts a cone through darkness; a small ambient circle is always visible around the player.
+  Depth stack: LIGHTING=35 (darkness), beam glow=36, WEATHER=37 (always above darkness).
 - `associatedRoom` spawn gating: uncured afflicted are invisible in their associated room;
   cured afflicted only appear there.
-- Editor: paint, layer isolation, drag afflicted, resize, save-to-disk
-  via dev endpoints. Tile palette (P), flood fill (F), rectangle (R),
-  undo/redo (Ctrl+Z), warp picker (F4), maze audit (F5), door pairer (O),
-  default stamp (T).
-- Debug HUD (F1) and visual overlays (F3).
+- **Dedicated EditorScene** (press `?` on the title screen). Gameplay is gameplay; editor
+  is editor — no in-game overlay modes. DOM panels (top bar, room list, layer/tool buttons,
+  keyboard cheatsheet, live status bar) wrap the Phaser canvas. Camera pan via middle-click
+  drag or WASD; Ctrl+Wheel zooms. Right-click erases tiles. Status bar shows current
+  layer/tile/tool/room dimensions every frame.
+- Editor primitives: paint, layer isolation, stamp tool (T), tile palette (P), flood fill (F),
+  rectangle tool (R), eyedropper (Alt+click or middle-click), resize (Shift+Arrow /
+  Ctrl+Shift+Arrow), undo/redo (Ctrl+Z / Ctrl+Shift+Z, up to 50 steps per session),
+  door pairer (O), warp picker (button or F4), save-to-clipboard (X / Save button),
+  map audit (Audit button), hot-reload (L / Reload button).
+- `npm run new-room <id> [w] [h]` CLI — creates the rooms.json stub, default tilemap,
+  and `public/music/<id>/` directory. Atomic.
 - Persistent dropped items per room.
-- `RoomStateManager` singleton tracking inventory, collected items,
-  unlocked doors, cured/recovered residents, dropped items, visited
-  rooms, fuel, character roster, active character, per-character inventories.
-- **Cure flow**: auto-cure on collision if cure item in inventory; cure
-  item usable from inventory menu on adjacent afflicted.
-- **Cure clue dialog**: `curedClue` in afflicted def is shown in the cure
-  message, hinting where to find them after recovery.
-- **Home-room teleport**: cured/recovered afflicted with `associatedRoom`
-  only spawn in that room, disappearing from their original location.
-- **Recovery conversation**: multi-page `backstory[]` paged via E; final
-  page transitions to recovered, hands two `recoveredItems` into the
-  character's inventory.
-- **Character roster + switching**: recovered residents join a roster.
-  Keys `1`/`2`/`3`/`4` (or avatar bar click) switch the active character.
-  Switching saves the outgoing position, swaps inventories, and
-  teleports control (cross-room if needed).
-- **Avatar bar**: bottom-left HUD shows portrait icons for every roster
-  member. Active character highlighted in yellow. Clickable.
-- **Parked bodies**: inactive roster members present in the current room
-  render as static portrait sprites at their last position, so the player
-  can see where they left each character.
-- **Door unlock on cure**: curing an afflicted with an `associatedRoom`
-  automatically unlocks any door in the world that leads to that room,
-  so the player can follow the clue immediately.
-- **Two authored characters**: Kai (Former Lab Technician, house-b,
-  Lab Keycard + Compound Sample) and Maren (Local Shopkeeper, house-c,
-  Store Key + Supply Manifest).
+- `RoomStateManager` singleton: inventory, collected items, unlocked doors,
+  cured/recovered residents, dropped items, visited rooms, fuel, character roster,
+  active character, per-character inventories, and **world flags** (`setFlag/clearFlag/hasFlag`).
+- **Interaction resolver** (`InteractionResolver.ts`) — `checkRequires`, `consumeRequires`,
+  `applyProduces`. Any interactable in `rooms.json` can now declare `requires` and `produces`
+  to drive item consumption, flag changes, door unlocks, and item drops — no code per puzzle.
+- **Save/load** — full snapshot (flags, roster, inventories) to `localStorage` via
+  `SaveManager`. Auto-saves on door transition, pickup, cure, recovery. MenuScene shows
+  "C — Continue"; PauseScene has "N — New Game".
+- **Cure flow**: auto-cure on collision if cure item in inventory; cure item usable from
+  inventory menu on adjacent afflicted.
+- **Cure clue dialog**: `curedClue` in afflicted def shown in the cure message.
+- **Home-room teleport**: cured/recovered afflicted with `associatedRoom` only spawn
+  in that room, disappearing from their original location.
+- **Recovery conversation**: multi-page `backstory[]` paged via E; final page transitions
+  to recovered, hands two `recoveredItems` into the character's inventory.
+- **Character roster + switching**: recovered residents join a roster. Keys `1`/`2`/`3`/`4`
+  (or avatar bar click) switch the active character. Switching saves outgoing position,
+  swaps inventories, and teleports control (cross-room if needed).
+- **Avatar bar**: bottom-left HUD shows portrait icons for every roster member. Active
+  character highlighted in yellow. Clickable.
+- **Parked bodies**: inactive roster members in the current room render as static portrait
+  sprites at their last position.
+- **Door unlock on cure**: curing an afflicted with `associatedRoom` auto-unlocks any door
+  leading to that room.
+- **Two authored characters**: Kai (Former Lab Technician, house-b, Lab Keycard + Compound
+  Sample) and Maren (Local Shopkeeper, house-c, Store Key + Supply Manifest).
+- **Multi-tileset support**: core tileset (128 tiles, always loaded) + optional
+  room-specific tilesets declared as `"tilesets": ["<name>"]` on any room. Each
+  extra tileset is a PNG at `public/assets/tilemaps/<name>.png`. RoomManager loads
+  all declared tilesets and passes them to `createLayer`. The editor palette shows
+  all tilesets with labelled sections. Items/interactables reference room tiles with
+  `"tilesetKey": "<name>"` + a local `tileFrame`. `TilesetResolver.ts` resolves
+  `(tileFrame, tilesetKey)` → `{key, frame}` for all sprite-rendering paths.
+- Core tileset: 128 tiles in an 8×16 grid (512×1024 PNG, 64px source / 16px display).
+  Procedurally generated via `npm run regenerate-tiles`; composed by `npm run build-tiles`.
 
 ---
 
@@ -180,118 +198,95 @@ blockout* at speed without touching the interaction engine.
 
 **Shipped:**
 
-- **Dedicated EditorScene** launched from the title screen via **F1**.
-  Replaces the in-game F1/F2/F3 overlay model — gameplay is gameplay,
-  editor is editor. DOM panels (top bar, room list, layer/tool
-  buttons, keyboard cheatsheet, status bar) wrap the Phaser canvas.
-  Camera pan via right-click-drag or WASD; Ctrl+Wheel zooms.
-  RoomEditorManager and DebugManager reused unchanged via stub
-  scene-coupling points.
+- **Dedicated EditorScene** launched from the title screen via **`?`**.
+  Gameplay and editor are fully separate scenes — no in-game toggle
+  modes, no F1/F2/F3 overlays. DOM panels (top bar, room list,
+  layer/tool buttons, cheatsheet, live status bar) wrap the Phaser
+  canvas. Camera pan via middle-click drag or WASD; Ctrl+Wheel zooms;
+  right-click erases tiles. `RoomEditorManager` and `DebugManager`
+  reused via stub scene-coupling; `InputManager` not used in editor
+  (avoids JustDown flag conflicts on shared keys).
 - `npm run new-room <id> [w] [h]` CLI script — creates the rooms.json
   stub, default tilemap (perimeter walls + floor), and the
-  `public/music/<id>/` directory (with a `.gitkeep`, ready for
-  `track.mid` / `instruments.sf2` overrides). Atomic.
-- F4 warp picker — Up/Down to select a room, Enter to teleport (full
-  transition), Esc to cancel. Player movement is suspended while the
-  picker is open.
-- Door pairing — `O` opens the target-room picker (`,` / `.` cycle,
-  Enter confirms), then two clicks (one in each room) emit a paired
-  pair of door snippets with cross-referenced ids, inferred
-  directions, and sensible spawn points. Auto-warps between rooms
-  in the middle of the flow.
-- F5 map overview — dumps the full room graph to clipboard + console,
-  shows summary stats on screen ([OK]/[TODO]/[BROKEN]/[ONEWAY] door
-  counts, unreachable rooms, orphan rooms). Audits the maze.
-- Unwired-door visual flag — in the F3 overlay, doors with TODO or
-  missing targetRoom/targetDoor now render in red instead of cyan.
-  Spot the unfinished portals at a glance as you walk the city.
+  `public/music/<id>/` directory. Atomic.
+- Warp picker — button in UI or F4 shortcut. Up/Down to select a room,
+  Enter to teleport (full transition), Esc to cancel. Player movement
+  suspended while open.
+- Door pairing — `O` opens the target-room picker (Up/Down, Enter),
+  then two clicks (one in each room) emit a paired pair of door
+  snippets with cross-referenced ids, inferred directions, and sensible
+  spawn points. Auto-warps between rooms mid-flow.
+- Map audit — Audit button. Dumps the full room graph to clipboard +
+  console, shows summary stats ([OK]/[TODO]/[BROKEN]/[ONEWAY] door
+  counts, unreachable rooms, orphan rooms).
 - Tile palette UI (`P`) — clickable thumbnail grid of every tileset
-  frame, top-right of the viewport. Select with a click; selection
-  highlights with a yellow outline; Q/E and eyedropper still work
-  and the highlight tracks all selection sources.
-- Default-room stamp (`T`) — re-baselines the active room with the
+  frame. Select with click; Q/E and eyedropper still track selection.
+- Default-room stamp (`T`) — re-baselines the active room with
   `npm run new-room` content (floor everywhere on Ground, walls on
-  the Collision perimeter, Above cleared). Useful for starting over
-  on a room without losing its `rooms.json` entry or door wiring.
+  Collision perimeter, Above cleared).
+- Undo/redo — Ctrl+Z / Ctrl+Shift+Z, up to 50 steps. History cleared
+  on room switch.
+- NPC afflicted placement (`N`) — Q/E cycles through variant types
+  (walker, bloater, crawler, husk, spitter, brute, ashrot, veinhost).
+- Live status bar — shows current layer · tile index · tool ·
+  room dimensions every frame in the DOM footer.
 
 **Next:** Phase 1 — tighten and unify the interaction primitive.
 
 ---
 
-## Phase 1 — Tighten and unify the interaction primitive
+## Phase 1 — Tighten and unify the interaction primitive (DONE)
 
-Once the town is laid out, the game loop is the universal `[E]` +
-item-on-target rule. Get it airtight before anything else.
-
-- Fold the parallel `interactable` / `dropped` / `afflicted` branches
-  in `GameScene.checkInteractables` into a single resolver:
-  *what is the nearest E-target, and what does pressing E do to it?*
-- Standardize the "*nothing happens*" feedback. Same short string
-  whatever the target. Centralized.
-- Generalize `requiredKey` / `requiredKeys` into a `requires: string[]`.
-  Single-item locks are just a 1-element list.
-- Mark items as **consumed-on-use** vs. **not consumed** on the item
-  definition, not on the lock.
-- Treat dropped items as a special case of interactable (response =
-  "pick up"). One target schema for everything.
-
-After this, every interaction in the game is the same shape.
+**Shipped:**
+- `handleInteractable()` unified dispatcher — routes through resolver when
+  `requires`/`produces` are present, falls back to legacy type-switch.
+- Dropped items and afflicted remain separate target types but resolve
+  through the same priority/distance loop in `checkInteractables`.
+- "Nothing reacts." feedback when E pressed with nothing in range.
+- Door `requiredKey` removed; all locks use `requiredKeys: string[]` only.
+- `consumedOnUse` flag on `ItemDef`; `consumed` flag on `InteractableDef`.
+- Document reader (`DocumentReaderScene`) launched from inventory for
+  `category: 'document'` items.
 
 ---
 
-## Phase 2 — Rich `requires` and `produces`
+## Phase 2 — Rich `requires` and `produces` (DONE)
 
-Direct extension of Phase 1. Every interactable gets:
+**Shipped:**
+- `RequireCondition` — `type: 'item'|'character'|'flag'`, `value`, optional `consume`.
+- `ProduceEffect` — `type: 'setFlag'|'clearFlag'|'unlockDoor'|'dropItem'`.
+- `InteractableDef` extended with `requires?`, `produces?`, `consumed?`.
+- `InteractionResolver.ts` — `checkRequires`, `consumeRequires`, `applyProduces`.
+  Pure functions; GameScene handles sprite side-effects after resolution.
+- `consumed` interactables disappear after one successful interaction via
+  `rsm.collectItem` + sprite removal.
+- Dropped-item produces spawn world sprites immediately in the same frame.
 
-- **`requires`**: a list of conditions, ALL of which must be true.
-  Each condition is one of:
-  - an item id in the active character's inventory
-  - the active character being a specific roster member
-  - a world-state flag being set
-- **`visibilityRequires`**: (Optional) a list of conditions (same types as `requires`). If present, the interactable (and its `[E]` prompt) is only active and visible when these are met.
-- **`produces`**: a list of effects that fire on a successful E.
-  Each effect is one of:
-  - consume an item (or several)
-  - set/clear a world flag
-  - drop an item into the world at a position
-  - transform the target's own state (the door becomes "unlocked",
-    the planter becomes "planted")
-
-This is one function: `tryInteract(target, party, worldState) ->
-{ ok, effects[] }`. Everything past this phase is a use of it.
+**Still outstanding:**
+- `visibilityRequires` — hide interactable entirely when conditions not met.
+  Add to Phase 6 authoring tools when puzzle design needs it.
+- **Inter-character conversation — SHIPPED.** `conversationRequires`, `conversationDialog`, and `conversationProduces` on `AfflictedDef`. Pressing E on a recovered resident while the named roster member is present in the same room (active or parked body) triggers the unique multi-page dialog. Partner absent → default solo response, no indication a richer version exists. `conversationProduces` apply once per session on first completion. Full field reference in `AUTHORING.md`.
 
 ---
 
-## Phase 3 — Item states and entity holds
+## Phase 3 — Item states and entity holds (PARTIAL)
 
-The piece that makes long puzzle chains possible.
+**Shipped:**
+- `holds?: ItemDef[]` on `AfflictedDef`. Items listed in `holds` are
+  dropped into the world at the afflicted's position the moment they
+  are cured (collision auto-cure or inventory cure). Enables the
+  "holding puzzle" pattern (#9) — hide an item inside an NPC without
+  the player knowing until they cure them.
 
-- **Items have a `state` field** (default `'default'`). State
-  transitions are defined as a small list on the item definition.
-  Each transition: from state X, when trigger Y, go to state Z.
-  Triggers include:
-  - time elapsed since entering this state
-  - the item's container changing state
-  - the item's holder dying / changing state
-  - a world flag being set
-  - the player re-entering the room with the item present
-- A transformed item may also drop new items (a sprout drops a potato,
-  the original seed is consumed) or set world flags.
-- **Entities can hold items.** Afflicted, animals, machines all get
-  a `holds: ItemDef[]` field. On state change (cure, feed, kill,
-  power-on), the entity can release `holds` into the world.
-- **Containers are interactables with a slot.** A planter is an
-  interactable whose `requires` is "an item with category seed" and
-  whose `produces` is "stick the item in this slot." That slot's
-  contents then run their own state machine.
-- **The simulation needs to keep ticking when you're not in the
-  room.** When a room is loaded, run any item-state transitions
-  that should have already fired based on elapsed time. (Cheap: store
-  `enteredStateAt` timestamps; on room load, advance any state whose
-  trigger has been met.)
+**Still outstanding — item state machines:**
+- Full `state` field + transition list on `ItemDef`.
+- Simulation ticking on room load (advance state transitions that
+  should have fired while player was away).
+- Container puzzle pattern (#8) — an interactable that accepts an item
+  and holds it while its state machine runs.
 
-After this phase, "plant a seed, leave, come back, feed the result to
-something, that something dies and drops a key" is buildable as data.
+Build item state machines when the first puzzle actually needs
+time-based or holder-state-based item transformation.
 
 ---
 
@@ -308,63 +303,49 @@ gaps to address organically during Phase 8 content authoring:
 - Drop-and-pickup is the only hand-off; no trade verb.
 
 **Still outstanding (not blocking):**
-- Save/load (Phase 7) doesn't yet serialize roster or character
-  inventories — will be wired when Phase 7 ships.
+- Save/load shipped (Phase 7). Roster, per-character inventories, and
+  world flags all serialized.
 - Characters left in a different room don't have a visual indicator
   on the map (low priority until Phase 5 world flags exist).
 
 ---
 
-## Phase 5 — World flags and persistent room changes
+## Phase 5 — World flags and persistent room changes (PARTIAL)
 
-Without this, "you cured them" is a checkbox, not a felt thing.
+**Shipped:**
+- `worldFlags: Set<string>` on `RoomStateManager` with `setFlag`, `clearFlag`,
+  `hasFlag`, `getFlags`. Serialized and restored with save data.
+- `produces: setFlag/clearFlag` effects wire flags from any interaction.
+- `requires: [{type:'flag', value:'...'}]` gates interactions on flag state.
 
-- Add a `worldFlags: Set<string>` (or `Map<string, value>`) to
-  `RoomStateManager`.
-- `produces` effects can set/clear flags.
-- Door zones, interactables, tilemap layers, and entity spawns can
-  read flags at room-load time (and live, where it's cheap):
-  - "if `bridge_repaired`, this collision tile is removed"
-  - "if `generator_on`, this door's `requires` is empty"
-  - "if `passage_open`, spawn this new interactable"
-- Flag-driven changes happen on the `RoomManager.loadRoom` path that
-  already places door zones from `rooms.json`.
+**Still outstanding — flag-driven room mutations:**
+- Tilemap-layer changes on room load ("if `bridge_repaired`, remove collision tile X,Y").
+- Door `requires` driven by flags at room-load time.
+- Interactable visibility gated by flags (`visibilityRequires`).
+
+These need a `flagConditions` field on `RoomDefinition` and a pass inside
+`RoomManager.loadRoom` that reads flags and mutates the live tilemap.
+Build when the first puzzle actually needs it.
 
 ---
 
-## Phase 6 — Puzzle authoring tools
+## Phase 6 — Puzzle authoring tools (PARTIAL)
 
-This is what makes content cheap. Every Phase 8 puzzle chain should
-be authorable in the editor without leaving the running game. (The
-*town-building* tools live in Phase 0; this phase adds the
-puzzle-piece tools that need the engine work from Phases 1–5.)
+**Shipped:**
+- **Properties inspector** — click any interactable or afflicted
+  placeholder sprite in the editor canvas; right panel shows the
+  object's full JSON with a Copy button. Read + manual-edit workflow.
+- **NPC variant cycling** — Q/E while armed (`N`) cycles afflicted
+  variants before placing.
 
-- **Place / edit interactables.** Click an empty tile, pick a target
-  type from a dropdown, fill `requires`, fill `produces`, fill text,
-  save.
-- **Place / move doors.** Drag a rectangle, pick target room and
-  target door from existing options.
-- **Place afflicted / animals / NPCs.** Click to drop, fill name,
-  role, holds, state machine.
-- **Place containers / planters.** Same shape as interactables,
-  with a slot that can be pre-populated.
-- **Define item state machines.** A small editor for item
-  definitions: states, triggers, transitions, what each transition
-  produces.
-- **Toggle / inspect world flags.** A list view with toggles, so a
-  flag-gated puzzle can be tested without playing through to it.
-- **Tile palette UI.** Replace Q/E cycling with a clickable thumbnail
-  grid. Single biggest UX win for tile painting.
-- **Test-from-here.** A key in editor mode sets the next respawn
-  point at the cursor.
-- **State snapshot/restore.** F5 saves a full session snapshot
-  (roster + active char + inventories + flags + visited + door state +
-  item-state timestamps); F9 restores. Critical for testing late-chain
-  state without redoing prerequisites.
-
-All of these write back through the existing dev endpoints
-(`/__editor/save-tilemap`, `/__editor/save-object`) or simple
-extensions of them.
+**Still outstanding:**
+- In-editor form for `requires` / `produces` (currently JSON text edit).
+- World flag list/toggle panel (see current flags, force-set/clear for
+  testing without playing through to them).
+- Test-from-here — set next player spawn at cursor for mid-chain testing.
+- State snapshot/restore — save a full session state (flags, inventory,
+  roster) and restore on demand; critical for testing late-chain puzzles
+  without re-running prerequisites.
 
 ---
 
@@ -377,7 +358,8 @@ positive and immediate.
   from inventory shows its `content` field full-screen until E.
 - **`serialize()` / `deserialize()` on `RoomStateManager`.** Wire to
   `localStorage`. Save on door transition or inventory change. Single
-  slot for now.
+  slot for now. Must include roster and per-character inventories
+  (currently omitted).
 
 ---
 
@@ -395,7 +377,13 @@ any chain the design wants.
 
 - **The one gun / one bullet.** A single firearm placed in the world, findable before the cure mechanic is understood. If used on an afflicted, that resident is permanently gone. No mechanical punishment — the game remembers via a world flag and absent recovery content. Requires: item with `category: tool`, a `worldFlag` set on use, and the afflicted's `associatedRoom` content simply never becoming available.
 - **Spectra-vision adapter.** A flashlight attachment found in the facility or cave area. Activates a secondary flashlight mode that reveals hidden interactables, boundary markers, and environmental lore invisible in normal mode. Implemented as a `tool` category item that gates a `visibilityRequires` condition on a new class of interactables. No new verb — same E + item grammar.
-- **Fuel acquisition chain.** Empty fuel cans + environmental sources (leaking pipes, storage drums) = filled cans. Uses the container puzzle pattern (#8): place an empty can item at a source interactable, wait one event-tick or re-enter the room, retrieve a filled can. Sources are fixed geography — finding them is part of the puzzle. Multiple generators need fuel; routing fuel to the right generator at the right time is a two-body or loadout puzzle.
+- **Fuel acquisition chain.** Empty fuel cans + environmental sources (leaking pipes, storage drums) = filled cans. Uses the container puzzle pattern: place an empty can item at a source interactable, wait one event-tick or re-enter the room, retrieve a filled can. Sources are fixed geography — finding them is part of the puzzle. Multiple generators need fuel; routing fuel to the right generator at the right time is a two-body or loadout puzzle.
+- **Multiple endings — no announcement.** The ending that plays is determined entirely by world state at the moment the exit is used: which residents were recovered, which were killed with the gun, whether the caves were descended, whether the contained thing was resolved. No ending selection screen. No grade. The player experiences one ending per run and may not know others exist. Flagged ending states:
+  - `escaped_alone` — exit used, fewer than half of recoverable residents cured
+  - `escaped_with_hope` — exit used, majority recovered, outside rescue made possible via a specific flag
+  - `escaped_understanding` — exit used, all recoverable residents cured, caves fully explored, spectra-vision reading complete
+  - `resolved` — fourth ending, requires all of the above plus a specific action in the containment chamber
+  - World flags set by gun use gate endings by absence — missing residents mean missing knowledge mean certain flags never get set. The game never explains the connection.
 
 ---
 
@@ -404,15 +392,17 @@ any chain the design wants.
 - **Master-key has no source.** Place one (Phase 8 content), drop the
   requirement on most of those doors (Phase 1 cleanup), or document
   them as deliberately gated for later content.
-- **GameScene is ~920 lines doing everything.** Extract things only
-  when a phase actually needs to. Phase 1 will likely pull out the
-  interaction resolver.
+- **GameScene is large and does too much.** Extract things only when a
+  phase actually needs to. Phase 1 will likely pull out the interaction
+  resolver.
 - **Editor edits don't survive HMR.** Vite re-evaluates `rooms.json`
-  on hot-reload and resets the in-memory clone. Workflow: save, then
-  full-reload page. Acceptable.
+  on hot-reload and resets the in-memory clone. Workflow: save (X),
+  then full-reload page. Acceptable.
 - **Reverb hot-swap can click.** Cosmetic; address whenever audio
   comes back into focus.
-- **F3 overlay redraws every frame.** Cheap today; cache later.
+- **Save format is v1.** If the save schema changes (new fields added to
+  `RoomStateManager`), bump `SAVE_KEY` in `SaveManager.ts` so stale saves
+  don't break deserialization.
 
 ---
 

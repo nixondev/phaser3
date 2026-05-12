@@ -13,6 +13,9 @@ import { MusicManager } from '@systems/MusicManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef } from '@/types';
 import { debug } from '@utils/Debug';
 import { WeatherManager } from '@systems/WeatherManager';
+import { SaveManager } from '@utils/SaveManager';
+import { checkRequires, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
+import { resolveTileSprite } from '@utils/TilesetResolver';
 
 const CLINIC_DOOR_X     = 160;
 const CLINIC_DOOR_Y     = 304;
@@ -48,6 +51,10 @@ export class GameScene extends Phaser.Scene {
 
   // Recovery conversation paging — tracks which backstory page each cured resident is on
   private recoveryPage: Map<string, number> = new Map();
+  // Inter-character conversation paging — keyed by npc id
+  private conversationPage: Map<string, number> = new Map();
+  // Tracks which npc conversations have had their produces applied (session-only)
+  private conversedWith: Set<string> = new Set();
 
   // Standing sprites for inactive roster members present in the current room
   private parkedBodies: Map<string, Phaser.GameObjects.Sprite> = new Map();
@@ -112,6 +119,7 @@ export class GameScene extends Phaser.Scene {
 
     this.setupCollisions();
     this.setupCamera();
+    applyFlagConditions(roomDef, this.rsm, this.roomManager);
     this.createWorldItemSprites();
     this.spawnAfflicted();
     this.refreshParkedBodies();
@@ -315,12 +323,14 @@ export class GameScene extends Phaser.Scene {
       if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
       this.cameras.main.shake(200, 0.006);
       this.emitInventoryChanged();
+      this.dropHeldItems(afflicted);
       this.dialogOpen = true;
       const clue = afflicted.getCuredClue();
       const msg = clue
         ? `The ${item.name} shattered on impact.\n${afflicted.getName()} slumps against the wall.\n\n${clue}`
         : `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.\nThey seem to need some time alone.`;
       this.events.emit('dialog-open', msg);
+      SaveManager.save(this.rsm);
       return;
     }
 
@@ -426,6 +436,7 @@ export class GameScene extends Phaser.Scene {
           nearest.setStatus('cured');
           const associatedRoom = nearest.getAssociatedRoom();
           if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
+          this.dropHeldItems(nearest);
           this.exitInventory();
           this.dialogOpen = true;
           const clue = nearest.getCuredClue();
@@ -449,9 +460,20 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    if (item.category === 'document') {
+      this.exitInventory();
+      this.scene.launch(SCENES.DOCUMENT_READER, { title: item.name, content: item.content ?? '' });
+      return;
+    }
+
+    // Generic tool/fuel/component — show the item's text if available, then consume if flagged.
     this.exitInventory();
     this.dialogOpen = true;
-    this.events.emit('dialog-open', "You can't use that here.");
+    this.events.emit('dialog-open', item.content ? item.content : "Nothing to use this on right now.");
+    if (item.consumedOnUse) {
+      this.rsm.removeFromInventory(slot);
+      this.emitInventoryChanged();
+    }
   }
 
   private dropInventoryItem(slot: number): void {
@@ -467,7 +489,8 @@ export class GameScene extends Phaser.Scene {
     const dropX = this.player.x;
     const dropY = this.player.y + 12;
     this.rsm.addDroppedItem(roomId, { item, x: dropX, y: dropY, instanceId });
-    this.createItemSprite(instanceId, item.tileFrame, dropX, dropY);
+    const rd = resolveTileSprite(item.tileFrame, item.tilesetKey);
+    this.createItemSprite(instanceId, rd.key, rd.frame, dropX, dropY);
   }
 
   private exitInventory(): void {
@@ -534,18 +557,7 @@ export class GameScene extends Phaser.Scene {
       this.events.emit('show-interact-prompt');
       if (input.action) {
         if (nearestType === 'interactable' && nearestInteractable) {
-          if (nearestInteractable.type === 'item') {
-            this.handleItemPickup(nearestInteractable);
-          } else if (nearestInteractable.type === 'recharge') {
-            this.flashlight.recharge();
-            this.dialogOpen = true;
-            this.events.emit('dialog-open', nearestInteractable.text);
-            this.events.emit('hide-interact-prompt');
-          } else {
-            this.dialogOpen = true;
-            this.events.emit('dialog-open', nearestInteractable.text);
-            this.events.emit('hide-interact-prompt');
-          }
+          this.handleInteractable(nearestInteractable);
         } else if (nearestType === 'dropped' && nearestDropped) {
           this.handleDroppedItemPickup(nearestDropped);
         } else if (nearestType === 'afflicted' && nearestAfflicted) {
@@ -553,6 +565,87 @@ export class GameScene extends Phaser.Scene {
         }
       }
     } else {
+      this.events.emit('hide-interact-prompt');
+      if (input.action) {
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', 'Nothing reacts.');
+      }
+    }
+  }
+
+  /**
+   * Unified interactable handler. Routes through the requires/produces resolver
+   * when those fields are present; falls back to legacy type-switch otherwise.
+   */
+  private handleInteractable(inter: InteractableDef): void {
+    const hasRequires = inter.requires !== undefined;
+    const hasProduces = inter.produces !== undefined && inter.produces.length > 0;
+
+    if (hasRequires || hasProduces) {
+      // Resolver path ──────────────────────────────────────────────────────
+      const conditions = inter.requires ?? [];
+      const result = checkRequires(conditions, this.rsm);
+
+      if (!result.met) {
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', result.message);
+        this.events.emit('hide-interact-prompt');
+        return;
+      }
+
+      // Conditions met — consume items, apply effects, show text
+      consumeRequires(conditions, this.rsm);
+      const newDropped = applyProduces(
+        inter.produces ?? [],
+        this.rsm,
+        this.rsm.getCurrentRoom(),
+      );
+
+      // If item-type pickup, also give the item
+      if (inter.type === 'item' && inter.item) {
+        const slot = this.rsm.addToInventory(inter.item);
+        if (slot < 0) {
+          this.dialogOpen = true;
+          this.events.emit('dialog-open', 'Inventory is full!\nDrop something first. (TAB)');
+          return;
+        }
+        this.rsm.collectItem(inter.id);
+        const sprite = this.itemSprites.get(inter.id);
+        if (sprite) { sprite.destroy(); this.itemSprites.delete(inter.id); }
+      }
+
+      // Mark consumed interactables as collected so they disappear
+      if (inter.consumed) {
+        this.rsm.collectItem(inter.id);
+        const sprite = this.itemSprites.get(inter.id);
+        if (sprite) { sprite.destroy(); this.itemSprites.delete(inter.id); }
+      }
+
+      // Spawn world sprites for any dropped items
+      for (const dropped of newDropped) {
+        const r = resolveTileSprite(dropped.item.tileFrame, dropped.item.tilesetKey);
+        this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
+      }
+
+      this.dialogOpen = true;
+      this.events.emit('dialog-open', inter.text);
+      this.events.emit('hide-interact-prompt');
+      this.emitInventoryChanged();
+      SaveManager.save(this.rsm);
+      return;
+    }
+
+    // Legacy path — no requires/produces ────────────────────────────────
+    if (inter.type === 'item') {
+      this.handleItemPickup(inter);
+    } else if (inter.type === 'recharge') {
+      this.flashlight.recharge();
+      this.dialogOpen = true;
+      this.events.emit('dialog-open', inter.text);
+      this.events.emit('hide-interact-prompt');
+    } else {
+      this.dialogOpen = true;
+      this.events.emit('dialog-open', inter.text);
       this.events.emit('hide-interact-prompt');
     }
   }
@@ -610,6 +703,7 @@ export class GameScene extends Phaser.Scene {
         this.events.emit('hide-interact-prompt');
         this.events.emit('roster-changed', this.rsm.getRoster());
         this.events.emit('inventory-changed', this.rsm.getInventory());
+        SaveManager.save(this.rsm);
       } else {
         // Still in conversation — show current page, advance counter
         this.dialogOpen = true;
@@ -618,10 +712,46 @@ export class GameScene extends Phaser.Scene {
         this.recoveryPage.set(id, page + 1);
       }
     } else if (status === 'recovered') {
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', `${name}\n"I'm ready when you are."`);
-      this.events.emit('hide-interact-prompt');
+      const requiredPartnerId = afflicted.getConversationRequires();
+      const convDialog = afflicted.getConversationDialog();
+
+      if (requiredPartnerId && convDialog.length > 0 && this.isRosterMemberPresent(requiredPartnerId)) {
+        // Inter-character conversation path
+        const page = this.conversationPage.get(id) ?? 0;
+        const isLast = page >= convDialog.length - 1;
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', convDialog[page]);
+        this.events.emit('hide-interact-prompt');
+
+        if (isLast) {
+          this.conversationPage.delete(id);
+          if (!this.conversedWith.has(id)) {
+            this.conversedWith.add(id);
+            const produces = afflicted.getConversationProduces();
+            if (produces.length > 0) {
+              applyProduces(produces, this.rsm, this.rsm.getCurrentRoom());
+              this.emitInventoryChanged();
+              SaveManager.save(this.rsm);
+            }
+          }
+        } else {
+          this.conversationPage.set(id, page + 1);
+        }
+      } else {
+        // Solo response — partner not present or no conversation defined
+        this.dialogOpen = true;
+        this.events.emit('dialog-open', `${name}\n"I'm ready when you are."`);
+        this.events.emit('hide-interact-prompt');
+      }
     }
+  }
+
+  /** Returns true if the roster member with the given id is in the current room
+   *  (either as the active character or as a parked body). */
+  private isRosterMemberPresent(rosterId: string): boolean {
+    if (rosterId === this.rsm.getActiveCharacterId()) return true;
+    const state = this.rsm.getCharacterState(rosterId);
+    return state?.roomId === this.roomManager.getCurrentRoomId();
   }
 
   public switchToCharacter(targetId: string): void {
@@ -696,6 +826,7 @@ export class GameScene extends Phaser.Scene {
     this.events.emit('dialog-open', inter.text);
     this.events.emit('hide-interact-prompt');
     this.events.emit('inventory-changed', this.rsm.getInventory());
+    SaveManager.save(this.rsm);
   }
 
   private handleDroppedItemPickup(dropped: DroppedItemState): void {
@@ -710,9 +841,26 @@ export class GameScene extends Phaser.Scene {
     if (sprite) { sprite.destroy(); this.itemSprites.delete(dropped.instanceId); }
     this.events.emit('hide-interact-prompt');
     this.events.emit('inventory-changed', this.rsm.getInventory());
+    SaveManager.save(this.rsm);
   }
 
   // ── World item sprites ──────────────────────────────────────────────────
+
+  /** Drop any `holds` items from an afflicted entity into the world at their position. */
+  private dropHeldItems(afflicted: Afflicted): void {
+    const roomId = this.rsm.getCurrentRoom();
+    for (const item of afflicted.getHolds()) {
+      const dropped = {
+        item,
+        x: afflicted.x,
+        y: afflicted.y + 8,
+        instanceId: `holds-${item.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      };
+      this.rsm.addDroppedItem(roomId, dropped);
+      const r = resolveTileSprite(item.tileFrame, item.tilesetKey);
+      this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
+    }
+  }
 
   private unlockDoorsToRoom(targetRoomId: string): void {
     const allRooms = RoomManager.getRoomsData().rooms;
@@ -748,19 +896,23 @@ export class GameScene extends Phaser.Scene {
     this.itemSprites.clear();
     const roomDef = this.roomManager.getCurrentRoomDef();
     for (const inter of roomDef.interactables || []) {
+      if (inter.consumed && this.rsm.isItemCollected(inter.id)) continue;
       if (inter.type === 'item' && inter.item && !this.rsm.isItemCollected(inter.id)) {
-        this.createItemSprite(inter.id, inter.item.tileFrame, inter.x, inter.y);
-      } else if ((inter.type === 'sign' || inter.type === 'recharge') && inter.tileFrame !== undefined) {
-        this.createSignSprite(inter.id, inter.tileFrame, inter.x, inter.y);
+        const r = resolveTileSprite(inter.item.tileFrame, inter.item.tilesetKey);
+        this.createItemSprite(inter.id, r.key, r.frame, inter.x, inter.y);
+      } else if (inter.tileFrame !== undefined && inter.type !== 'item') {
+        const r = resolveTileSprite(inter.tileFrame, inter.tilesetKey);
+        this.createSignSprite(inter.id, r.key, r.frame, inter.x, inter.y);
       }
     }
     for (const dropped of this.rsm.getDroppedItems(this.rsm.getCurrentRoom())) {
-      this.createItemSprite(dropped.instanceId, dropped.item.tileFrame, dropped.x, dropped.y);
+      const r = resolveTileSprite(dropped.item.tileFrame, dropped.item.tilesetKey);
+      this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
     }
   }
 
-  private createItemSprite(id: string, tileFrame: number, x: number, y: number): void {
-    const sprite = this.add.sprite(x, y, 'tileset-sprites', tileFrame);
+  private createItemSprite(id: string, textureKey: string, frame: number, x: number, y: number): void {
+    const sprite = this.add.sprite(x, y, textureKey, frame);
     sprite.setScale(GAME_CONFIG.WORLD_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
     this.tweens.add({
@@ -774,8 +926,8 @@ export class GameScene extends Phaser.Scene {
     this.itemSprites.set(id, sprite);
   }
 
-  private createSignSprite(id: string, tileFrame: number, x: number, y: number): void {
-    const sprite = this.add.sprite(x, y, 'tileset-sprites', tileFrame);
+  private createSignSprite(id: string, textureKey: string, frame: number, x: number, y: number): void {
+    const sprite = this.add.sprite(x, y, textureKey, frame);
     sprite.setScale(GAME_CONFIG.WORLD_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
     this.itemSprites.set(id, sprite);
@@ -834,35 +986,20 @@ export class GameScene extends Phaser.Scene {
   private handleDoorTransition(doorDef: DoorDefinition): void {
     if (this.isTransitioning || this.dialogOpen) return;
 
-    // Check for keys
-    const isLocked = (doorDef.requiredKey && !this.rsm.isDoorUnlocked(doorDef.id)) ||
-                     (doorDef.requiredKeys && doorDef.requiredKeys.length > 0 && !this.rsm.isDoorUnlocked(doorDef.id));
+    // Check for keys — unified requiredKeys[] schema (requiredKey removed)
+    const keys = doorDef.requiredKeys ?? [];
+    const isLocked = keys.length > 0 && !this.rsm.isDoorUnlocked(doorDef.id);
 
     if (isLocked) {
       let keySlot = -1;
       let usedKeyId = '';
-
-      // Check single key
-      if (doorDef.requiredKey) {
-        keySlot = this.rsm.findKeyForDoor(doorDef.requiredKey);
-        usedKeyId = doorDef.requiredKey;
-      }
-
-      // Check multiple keys if single key not found
-      if (keySlot < 0 && doorDef.requiredKeys) {
-        for (const kid of doorDef.requiredKeys) {
-          keySlot = this.rsm.findKeyForDoor(kid);
-          if (keySlot >= 0) {
-            usedKeyId = kid;
-            break;
-          }
-        }
+      for (const kid of keys) {
+        keySlot = this.rsm.findKeyForDoor(kid);
+        if (keySlot >= 0) { usedKeyId = kid; break; }
       }
 
       if (keySlot >= 0) {
-        if (usedKeyId !== 'skeleton-key') {
-          this.rsm.removeFromInventory(keySlot);
-        }
+        if (usedKeyId !== 'skeleton-key') this.rsm.removeFromInventory(keySlot);
         this.rsm.unlockDoor(doorDef.id);
         this.events.emit('door-unlocked');
         this.events.emit('inventory-changed', this.rsm.getInventory());
@@ -887,6 +1024,7 @@ export class GameScene extends Phaser.Scene {
       this.player.setPosition(spawn.x, spawn.y);
       this.setupCollisions();
       this.setupCamera();
+      applyFlagConditions(this.roomManager.getCurrentRoomDef(), this.rsm, this.roomManager);
       this.createWorldItemSprites();
       this.spawnAfflicted();
       this.refreshParkedBodies();
@@ -903,7 +1041,10 @@ export class GameScene extends Phaser.Scene {
       }
 
       this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
-    }).then(() => { this.isTransitioning = false; });
+    }).then(() => {
+      this.isTransitioning = false;
+      SaveManager.save(this.rsm);
+    });
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────

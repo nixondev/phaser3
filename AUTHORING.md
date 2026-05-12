@@ -1,36 +1,29 @@
-# WARDEN — Authoring a Room
+# WARDEN — Authoring Guide
 
-This is the practical guide for building a room. The editor handles
-the spatial work; you finalize text and rules in `src/data/rooms.json`.
-Every save is manual: editor copies JSON to your clipboard, you paste
-into the named file.
+Practical reference for building content. The editor handles spatial
+work; all rules and text live in `src/data/rooms.json`. Every save is
+manual: editor copies JSON to your clipboard, you paste into the file.
 
 Companion docs:
-- `EDITORGUIDE.md` — short how-tos for someone learning the editor.
+- `EDITORGUIDE.md` — keyboard shortcuts and the hands-on editor workflow.
   If you're new, start there.
-- `CLAUDE.md` — design intent (the "why").
 - `PARADIGM.md` — the design grammar; what kinds of puzzles the engine
-  supports and how to compose them. Read this before designing a
-  puzzle path.
-- `ROADMAP.md` — the build sequence; what's shipped, what's next.
+  supports and how to compose them. Read this before designing puzzle paths.
+- `ROADMAP.md` — what's shipped, what's next.
 
-This file is the recipe — keys, files, hands-on flow.
+---
 
-## Authoring philosophy
+## Philosophy
 
-Two ideas underpin the workflow:
+**The editor is a separate scene, not an overlay.** Press `?` on the
+title screen to enter it. Gameplay is gameplay; authoring is authoring.
+There is no protagonist in the editor — your mouse cursor is the cursor.
 
-1. **The protagonist is your cursor.** Authoring happens *inside* the
-   running game. F4 warps the protag between rooms, F2 turns on the
-   editor, the same body you'll play with is the body you build with.
-   You aren't editing a game from the outside; you're walking through
-   it as you make it.
-2. **You are the gatekeeper of the repo.** The editor never writes to
-   disk silently. Every save copies JSON to your clipboard with a
-   destination path; you paste, save, reload. Slower than auto-save by
-   ~5 seconds per save, but every change is yours on purpose. Git is
-   the safety net — `git diff` before committing, `git checkout <file>`
-   to revert any individual file.
+**You own every write.** The editor never modifies files silently.
+Every save copies JSON to your clipboard with a destination path; you
+paste, save, reload. Slower than auto-save by five seconds, but every
+change is intentional. `git diff` before committing, `git checkout
+<file>` to revert anything.
 
 ---
 
@@ -40,216 +33,285 @@ Two ideas underpin the workflow:
 npm run new-room <id> [width] [height]
 ```
 
-- `id` — lowercase, alphanumeric, dashes (e.g. `attic-3b`)
-- `width` / `height` — tiles, default 20×15
+- `id` — lowercase, alphanumeric, dashes (e.g. `attic-3b`).
+- `width` / `height` — tiles, default 20×15.
 
-This appends a stub to `src/data/rooms.json`, writes a default
-tilemap at `public/assets/tilemaps/<id>.json` (perimeter walls + floor,
-empty Above layer), and creates `public/music/<id>/` with a `.gitkeep`
-so the room's audio override slot is ready (drop `track.mid` /
-`instruments.sf2` in later, or leave it empty to use the global
-fallbacks). PreloadScene auto-registers every room in `rooms.json`,
-so no source-code edit is needed. Reload the dev server or refresh
-the page and the room is live.
+Creates a `rooms.json` stub, a default tilemap (perimeter walls + floor),
+and `public/music/<id>/` for audio overrides. Refresh the browser and
+the room is live. Click its name in the editor's left panel to visit it.
 
-To get into a brand-new room before any door is wired: F1 to open the
-debug HUD, then Shift+Click teleports the player to the cursor — but
-that only works within the current room. The cleanest path is to wire
-a door from an existing room first (see "Place a door" below). For a
-quick check, you can also temporarily set `"startRoom": "<id>"` in
-`rooms.json` and reload.
+To get a room running before any door connects it, temporarily set
+`"startRoom": "<id>"` in `rooms.json` and reload.
 
 ---
 
-## Start the editor
+## Room definition fields
 
-```bash
-npm run dev
-```
-
-In the browser:
-
-| Key | Does |
-|-----|------|
-| **F1** | Info HUD (FPS, room id, coords, tile GID under cursor) |
-| **F2** | Toggle live editor |
-| **F3** | Visual debug overlays (collision, doors, interactable radii) |
-| **F4** | Warp picker — Up/Down to choose a room, Enter to teleport, Esc to cancel |
-| **F5** | Map overview — copies the room graph to clipboard, shows summary stats on screen, dumps full report to console |
-
-When F2 is on you'll see the yellow **map outline** and the **editor HUD**
-at the bottom of the screen. The HUD shows current layer, current tile
-index, map dimensions, and active placement mode.
-
----
-
-## Paint tiles
-
-| Key | Does |
-|-----|------|
-| **1 / 2 / 3** | Active layer = Ground / Collision / Above (others dim) |
-| **Q / E** | Cycle selected tile index down / up |
-| **L-Click** | Paint selected tile on active layer |
-| **R-Click** | Erase tile on active layer |
-| **M-Click** or **Alt + L-Click** | Eyedropper — pick the tile under cursor |
-
-The selected tile's preview shows next to the HUD. Index `0` is empty
-(eraser).
-
----
-
-## Resize the room
-
-| Key | Does |
-|-----|------|
-| **Shift + Arrow** | Expand the room by one tile on that edge |
-| **Ctrl + Shift + Arrow** | Shrink the room by one tile on that edge |
-
-Right/Down expand keeps existing data anchored top-left. Left/Up
-shifts existing data right/down to make room. After resize, the
-camera briefly pans to show you the changed edge, then returns.
-
-The map outline updates immediately. The HUD shows the new
-dimensions (`Map: 21x15`).
-
----
-
-## Save the tilemap
-
-Press **X**.
-
-Toast appears: *"Tilemap copied. Paste into:
-`public/assets/tilemaps/<roomId>.json`"*
-
-Workflow:
-
-1. Open the named file in your editor.
-2. `Cmd+A` to select all, `Cmd+V` to paste, `Cmd+S` to save.
-3. Reload the page in the browser to confirm.
-
-If something looks wrong, `git checkout public/assets/tilemaps/<roomId>.json`
-to restore.
-
----
-
-## Place an interactable (E-targets)
-
-An interactable is anything the player can press E on — a sign, a
-container, a planter, a lock, a piece of equipment.
-
-1. In editor mode, press **`I`** to arm placement. HUD shows
-   `ARMED: INTERACTABLE`.
-2. Click a tile. Toast appears with the JSON snippet copied to
-   clipboard.
-3. Esc cancels without placing.
-
-Snippet looks like:
+All rooms live in `src/data/rooms.json` under a `"rooms"` object keyed
+by room id.
 
 ```json
 {
-  "id": "inter-a3k9q",
-  "x": 152,
-  "y": 88,
-  "type": "sign",
-  "tileFrame": 12,
-  "text": "TODO: edit me",
-  "requires": []
+  "id": "basement",
+  "name": "Basement",
+  "mapKey": "basement",
+  "tilemapPath": "assets/tilemaps/basement.json",
+  "width": 20,
+  "height": 15,
+  "playerSpawn": { "x": 160, "y": 120 },
+  "reverb": "indoor",
+  "reverbMix": 0.4,
+  "dark": true,
+  "weather": "dripping",
+  "doors": [...],
+  "interactables": [...],
+  "afflicted": [...],
+  "flagConditions": [...]
 }
 ```
 
-Paste it into `src/data/rooms.json` under `rooms.<roomId>.interactables`
-(append to the array). Then edit:
+| Field | Description |
+|-------|-------------|
+| `reverb` | `city`, `indoor`, `sewer`, `hospital`, `substation` |
+| `reverbMix` | 0..1 wet mix (default 0.3) |
+| `dark` | `true` → full darkness overlay; flashlight required |
+| `weather` | `rain-mild`, `rain-hard`, `dripping` |
+| `flagConditions` | Applied at room load — see **World flags** section |
 
-- **`tileFrame`** — the tileset frame to render. Pick something
-  visible so the player can find it. The `tileFrame` is the value
-  *minus 1* of what you'd see in the F1 cursor inspector (Phaser uses
-  0-indexed sprite frames).
-- **`type`** — `sign` (just text), `item` (pickable), `recharge`
-  (refills flashlight), or your own (lock, planter, container — once
-  the engine grows).
-- **`text`** — the dialog string shown when interaction succeeds.
-- **`requires`** — list of conditions to interact (item ids,
-  character ids, world flags). Empty array = always works.
-- **`item`** — if `type` is `item`, fill its definition.
-
-Reload to see it in the room.
+Live-test reverb with **R** in the editor; adjust wet mix with **[** / **]**.
 
 ---
 
-## Pair two doors (the portal that connects them)
+## Doors
 
-Doors come in pairs — one in each room, pointing at each other. The
-editor handles the cross-references for you. Three keystrokes plus
-two clicks:
-
-1. Press **`O`** while in the source room. A centered picker appears
-   listing every other room.
-2. Use **Up** / **Down** to highlight the target room. Press **Enter**
-   to confirm. The picker closes; the editor HUD now shows
-   `pair: click source door (target=<id>)`.
-3. Click the tile where the door should sit in the *source* room.
-   The clipboard now holds the source room's **full updated JSON
-   entry** (`"<source-id>": { ... }`) with the new door appended to
-   its `doors[]`. Toast confirms. Editor warps you to the target
-   room.
-4. Click the tile where the matching door should sit in the *target*
-   room. Clipboard now holds the target room's full updated entry
-   in the same shape. Both fragments are also logged to the console
-   so you can scroll back and grab the source one if you've moved
-   on from the clipboard.
-
-   Both doors already have:
-   - matching `targetRoom` / `targetDoor` ids cross-referenced
-   - `direction` inferred from which edge of the room you clicked
-     nearest (top→up, bottom→down, left→left, right→right)
-   - sensible `spawnX/Y` (one tile inside each room, in front of the
-     door)
-   - size **16×16** (single tile). For a 2-tile-wide opening, run the
-     pair flow twice with adjacent clicks; you'll get two square doors
-     side-by-side.
-
-5. In `src/data/rooms.json`, find each room's `"<id>": {...}` entry
-   and replace it with the matching clipboard fragment. Save. Reload
-   the browser, and the portal is live.
-
-Direction was guessed from the click — if you placed a door in the
-middle of the room, its direction may be off. Edit it in the JSON.
-
-Press **Esc** at any phase (room picker, source click, target click)
-to abandon the pair without writing anything.
-
----
-
-## Place an afflicted / NPC
-
-1. Press **`N`** to arm. HUD shows `ARMED: AFFLICTED`.
-2. Click a tile.
-3. Toast copies the snippet.
-
-Snippet:
+Doors come in pairs — one in each room, pointing at each other. Use the
+editor's **O** key flow to auto-generate both snippets (see EDITORGUIDE.md).
 
 ```json
 {
-  "id": "aff-h4n7d",
-  "name": "TODO",
-  "role": "TODO",
-  "x": 152,
-  "y": 88,
+  "id": "basement-exit",
+  "x": 160, "y": 0,
+  "width": 16, "height": 16,
+  "targetRoom": "ground-floor",
+  "targetDoor": "ground-floor-basement",
+  "direction": "up",
+  "spawnX": 160, "spawnY": 24,
+  "requiredKeys": ["master-key"]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `direction` | `up`, `down`, `left`, `right` — which edge the player enters from |
+| `spawnX/Y` | Where the player appears after walking through |
+| `requiredKeys` | Array of item `keyId` strings. Any one match unlocks the door. |
+
+The key is consumed on use (unless it's `"skeleton-key"`, which is
+infinite-use). Leave `requiredKeys` out or empty for an open door.
+
+---
+
+## Interactables (E-targets)
+
+Every interactable is something the player can press E on.
+
+### Minimal sign
+
+```json
+{
+  "id": "notice-board",
+  "x": 64, "y": 48,
+  "type": "sign",
+  "tileFrame": 12,
+  "text": "Evacuation route sealed by order of District Authority."
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes | Unique string within the room |
+| `x`, `y` | yes | World pixel position (tile×16) |
+| `type` | yes | `sign`, `item`, `recharge`, or any string for generic |
+| `tileFrame` | no | Tileset frame rendered in the world. Required for anything visible. |
+| `text` | yes | Dialog shown when E is pressed and all `requires` are met |
+| `requires` | no | Conditions; omit or `[]` for always-works |
+| `produces` | no | Effects fired on success |
+| `consumed` | no | `true` → disappears after one successful interaction |
+
+### Item pickup
+
+```json
+{
+  "id": "lab-keycard-pickup",
+  "x": 80, "y": 96,
+  "type": "item",
+  "tileFrame": 8,
+  "text": "A keycard. Facility authority level.",
+  "item": {
+    "name": "Lab Keycard",
+    "tileFrame": 8,
+    "category": "key",
+    "keyId": "lab-door"
+  }
+}
+```
+
+When E'd, the item is added to the active character's inventory. The
+sprite disappears and the interactable is marked collected.
+
+### Recharge station
+
+```json
+{
+  "id": "bedside-charger",
+  "x": 200, "y": 184,
+  "type": "recharge",
+  "tileFrame": 39,
+  "text": "Charging dock. Flashlight topped up."
+}
+```
+
+Refills the flashlight battery to 100% when E'd.
+
+---
+
+## `requires` — conditions for interaction
+
+`requires` is an array of conditions. **All** must be true for the
+interaction to succeed. If any fail, the player sees "Something here,
+but not like this." — confirming the target is real without revealing
+what's needed.
+
+```json
+"requires": [
+  { "type": "item",      "value": "fuel-can", "consume": true },
+  { "type": "character", "value": "kai" },
+  { "type": "flag",      "value": "power_restored" }
+]
+```
+
+| `type` | `value` | `consume` |
+|--------|---------|-----------|
+| `"item"` | item `keyId` or `name` | `true` → remove from inventory on success |
+| `"character"` | roster character `id` | — |
+| `"flag"` | world flag name | — |
+
+`requires: []` or omitting `requires` entirely means the interaction
+always works.
+
+---
+
+## `produces` — effects on success
+
+`produces` is an array of effects applied after all conditions are met,
+in order.
+
+```json
+"produces": [
+  { "type": "setFlag",   "value": "generator_on" },
+  { "type": "unlockDoor","value": "utility-inner" },
+  { "type": "dropItem",  "value": "empty-can", "x": 120, "y": 80,
+    "item": { "name": "Empty Can", "tileFrame": 5, "category": "component" } }
+]
+```
+
+| `type` | `value` | Extra fields |
+|--------|---------|--------------|
+| `"setFlag"` | flag name | — |
+| `"clearFlag"` | flag name | — |
+| `"unlockDoor"` | door `id` | — |
+| `"dropItem"` | arbitrary key | `x`, `y` (world coords), `item` (ItemDef) |
+
+`produces` can be combined freely. A generator might set a flag AND
+unlock a door AND drop an empty can.
+
+### Full example — a generator
+
+```json
+{
+  "id": "generator-main",
+  "x": 112, "y": 96,
+  "type": "machine",
+  "tileFrame": 23,
+  "text": "The generator roars. Power restored.",
+  "consumed": true,
+  "requires": [
+    { "type": "item", "value": "fuel-can", "consume": true }
+  ],
+  "produces": [
+    { "type": "setFlag",   "value": "power_restored" },
+    { "type": "unlockDoor","value": "lab-inner" },
+    { "type": "dropItem",  "value": "empty-can", "x": 128, "y": 96,
+      "item": { "name": "Empty Can", "tileFrame": 5, "category": "component" } }
+  ]
+}
+```
+
+The player walks up with a fuel can, presses E: can is consumed,
+generator disappears (`consumed: true`), `power_restored` flag is set,
+`lab-inner` door unlocks, an empty can appears in the world.
+
+---
+
+## Items
+
+Items live inside interactable `item` fields, in afflicted `recoveredItems`
+or `holds` fields, or as `DroppedItemState` entries in `droppedItems`.
+
+```json
+{
+  "name": "Fuel Can",
+  "tileFrame": 49,
+  "category": "fuel",
+  "keyId": "fuel-can",
+  "consumedOnUse": true
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Display name in inventory |
+| `tileFrame` | Tileset frame (0-indexed). Match the frame you'd see in the editor. |
+| `category` | `key`, `cure`, `fuel`, `document`, `tool`, `component` |
+| `keyId` | Used in `requiredKeys` on doors and `value` in item requires |
+| `content` | Text shown in the document reader (category: document only) |
+| `consumedOnUse` | `true` → removed from inventory when used from the inventory menu |
+
+### Document items
+
+A document item opens a full-screen reader when E'd from inventory.
+Multi-page content: separate pages with `\n---\n` in the `content` string.
+
+```json
+{
+  "name": "Evacuation Memo",
+  "tileFrame": 7,
+  "category": "document",
+  "content": "All residents report to assembly points by 06:00.\n---\nDo not use corridor B. Route sealed pending inspection."
+}
+```
+
+---
+
+## Afflicted / NPC fields
+
+Minimal snippet (just a wandering NPC):
+
+```json
+{
+  "id": "wanderer-1",
+  "name": "Unknown Resident",
+  "role": "Unnamed",
+  "x": 200, "y": 160,
   "behaviorLoop": "wander"
 }
 ```
 
-Paste under `rooms.<roomId>.afflicted`. Edit `name` and `role`. Reload.
-
-### Full afflicted fields
-
-The minimal snippet above starts the NPC wandering with no cure
-recovery. For a curable character that joins the roster, fill in the
-optional fields:
+Full curable character that joins the roster:
 
 ```json
 {
-  "id": "unique-id",
+  "id": "kai",
   "name": "Kai",
   "role": "Former Lab Technician",
   "x": 400, "y": 500,
@@ -259,12 +321,16 @@ optional fields:
   "playerVariant": "ranger",
 
   "associatedRoom": "house-b",
-  "curedClue": "Short mumble shown in the cure dialog — hints where to find them.",
+  "curedClue": "...mumbles about the north block...",
+
+  "holds": [
+    { "name": "Security Badge", "tileFrame": 8, "category": "key", "keyId": "security-badge" }
+  ],
 
   "backstory": [
-    "First dialog page (E press 1).",
-    "Second page (E press 2).",
-    "Final page — recovery triggers here, items handed over."
+    "First dialog page shown when E is pressed after cure.",
+    "Second page.",
+    "Final page — triggers full recovery and item handover."
   ],
   "recoveredItems": [
     { "name": "Lab Keycard", "tileFrame": 8, "category": "key", "keyId": "lab-door" },
@@ -273,92 +339,233 @@ optional fields:
 }
 ```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `variant` | no | Afflicted sprite to use (`walker`, `bloater`, `crawler`, `husk`, `spitter`, `brute`, `ashrot`, `veinhost`). Default: `walker`. |
-| `playerVariant` | no | Player sprite to swap to on cure (`ranger`, `rogue`, `mystic`, `drifter`, `scavenger`, `warden`, `ashwalker`). If omitted, no sprite swap occurs. |
-| `associatedRoom` | no | Room ID where they appear after being cured. They disappear from their original room once cured and only spawn here. |
-| `curedClue` | no | Short line shown at the bottom of the cure dialog. Should hint at `associatedRoom` without naming it. |
-| `backstory` | no | Array of dialog pages. Player presses E once per page. Final page triggers full recovery: status → `recovered`, character joins roster, `recoveredItems` placed in their inventory. |
-| `recoveredItems` | no | Two items (by convention) placed in the character's personal inventory on recovery. Standard `ItemDef` format. |
+| Field | Description |
+|-------|-------------|
+| `variant` | Afflicted sprite: `walker`, `bloater`, `crawler`, `husk`, `spitter`, `brute`, `ashrot`, `veinhost` |
+| `playerVariant` | Player sprite on character switch (omit for no swap) |
+| `associatedRoom` | Room where they reappear after cure (disappear from original room) |
+| `curedClue` | Short line in the cure dialog — hints where to find them |
+| `holds` | Items **dropped into the world at their position when cured** |
+| `backstory` | Array of dialog pages (E × n). Final page triggers recovery + item handover |
+| `recoveredItems` | Items placed in their personal inventory on recovery (by convention: two) |
 
-The same entry should appear in **both** the original room (as
-`wandering`) and the `associatedRoom` (so they respawn there after
-cure). The `associatedRoom` copy only needs `id`, `name`, `role`,
-`x`, `y`, `behaviorLoop`, `variant`, `playerVariant`, and
-`associatedRoom` — the engine reads all fields from both defs.
+### Inter-character conversation
 
-To **reposition** an existing afflicted (instead of placing a new one):
-in editor mode, just click and drag them. On release, a snippet with
-just the new `x` and `y` is copied to clipboard, and the toast tells
-you which entry in `rooms.json` to update.
-
----
-
-## Set up the room's atmosphere
-
-### Audio
-
-In `rooms.json`, on the room object:
+A recovered resident can have a unique conversation that only triggers when a
+specific other recovered resident is also in the same room. This uses three
+optional fields on the afflicted def:
 
 ```json
 {
-  "id": "your-room",
-  "reverb": "indoor",
-  "reverbMix": 0.4
+  "id": "kai",
+  ...
+  "conversationRequires": "maren",
+  "conversationDialog": [
+    "Kai glances at Maren. \"You remember the east maintenance shaft?\"\nMaren nods slowly.",
+    "\"There's a route through the utility tunnels. We mapped it together.\nNeither of us could have held onto that alone.\""
+  ],
+  "conversationProduces": [
+    { "type": "setFlag", "value": "kai_maren_talked" }
+  ]
 }
 ```
 
-Reverb profiles: `city`, `indoor`, `sewer`, `hospital`, `substation`.
-`reverbMix` is 0..1 (default 0.3 if omitted).
+| Field | Description |
+|-------|-------------|
+| `conversationRequires` | `id` of the roster member that must be present in the same room |
+| `conversationDialog` | Multi-page dialog shown when the partner is present (E advances pages) |
+| `conversationProduces` | Effects applied once when the conversation reaches its final page |
 
-Reverb takes effect on the next door transition into this room. Test
-with **R** in editor mode (cycles through profiles live) and **`[`** /
-**`]`** (changes wet mix). Whatever you settle on, write back to
-`rooms.json`.
+**"Present in room"** means either the active character or a parked body whose last known room matches the current one. If the player switches to Maren and walks to Kai, or leaves Maren parked here and approaches Kai as another character, the condition is met.
 
-### Weather and darkness
+If the partner is absent, pressing E on the resident shows the default solo response (`"I'm ready when you are."`). The player gets no indication that a richer version exists — they discover it by bringing the right people together.
 
-```json
-{
-  "id": "your-room",
-  "weather": "rain-hard",
-  "dark": true
-}
-```
+`conversationProduces` fire only on the **first** completion of the conversation (per session). Subsequent re-readings show the full dialog again but do not re-apply effects. Use `setFlag` / `clearFlag` in produces — `dropItem` will not duplicate on re-read but is better placed elsewhere.
 
-| Field | Values | Effect |
-|-------|--------|--------|
-| `weather` | `"rain-mild"`, `"rain-hard"`, `"dripping"` | Enables weather overlay for the room. `dripping` also reads a `drips` array (world-space drip positions). |
-| `dark` | `true` / omit | Covers the room with a darkness overlay; only the player's ambient circle and flashlight cone are visible. |
+The same NPC should appear in **both** the original room (wandering) and
+`associatedRoom` (as a cured spawn destination). The `associatedRoom`
+copy only needs `id`, `name`, `role`, `x`, `y`, `behaviorLoop`,
+`variant`, `playerVariant`, and `associatedRoom` — the engine reads full
+fields from all defs and uses the most complete one.
 
-Both fields are read on every door transition — no code change needed,
-just edit `rooms.json`.
+### Entity holds
 
-**Important workflow note:** `rooms.json` is a static import in the
-Vite bundle. If you add a **brand-new field** (`weather`, `dark`, etc.)
-to a room definition for the first time, the dev server's cached bundle
-won't pick it up. You must:
+`holds` items drop into the world the moment the afflicted is cured —
+whether by automatic collision or by using a cure item from inventory.
+The items appear at the afflicted's position.
 
-1. `Ctrl+C` to stop the dev server.
-2. `npm run dev` to restart.
-3. Hard-refresh the browser (`Ctrl+Shift+R`).
-
-Changing an existing field's value (e.g. tweaking `reverbMix`) hot-reloads normally.
+This is how you hide an item inside an NPC without the player knowing
+it's there until they cure them.
 
 ---
 
-## Quick global keys (debug + audio)
+## World flags
 
-These are active when F1 (debug) or F2 (editor) is on:
+World flags are named booleans stored globally for the run. They're set
+and cleared by `produces` effects and survive room transitions and save/load.
 
-- **L** — hot-reload the current room from disk.
-- **U** — unlock all doors in this room.
-- **C** — cure all afflicted in this room.
-- **R** — cycle reverb profile.
-- **`[`** / **`]`** — decrease / increase reverb wet mix.
-- **`-`** / **`+`** — decrease / increase master volume.
-- **Shift + Click** — teleport player to cursor.
+### Setting and reading flags
+
+**Set** a flag via a produce effect on any interactable:
+```json
+"produces": [{ "type": "setFlag", "value": "bridge_repaired" }]
+```
+
+**Gate** any interactable on a flag:
+```json
+"requires": [{ "type": "flag", "value": "bridge_repaired" }]
+```
+
+**Gate** a door on a flag by adding a dummy item requirement that
+references a flag check — or, more directly, set `requiredKeys` to an
+item that only exists after the flag is set (a "phantom key" dropped by
+a produces effect).
+
+### Flag-driven room mutations — `flagConditions`
+
+`flagConditions` on a room definition apply tile / door / interactable
+changes **at room load time** whenever the named flag is set. This makes
+the world physically change based on what the player has done.
+
+```json
+"flagConditions": [
+  {
+    "flag": "bridge_repaired",
+    "effects": [
+      { "type": "removeTile",       "layer": "Collision", "x": 10, "y": 7 },
+      { "type": "removeTile",       "layer": "Collision", "x": 10, "y": 8 },
+      { "type": "unlockDoor",       "doorId": "city-east-passage" },
+      { "type": "hideInteractable", "interactableId": "broken-bridge-sign" }
+    ]
+  }
+]
+```
+
+| `type` | Effect | Fields |
+|--------|--------|--------|
+| `removeTile` | Removes a tile from the tilemap layer | `layer`, `x`, `y` (tile coords) |
+| `setTile` | Paints a tile | `layer`, `x`, `y`, `tileIndex` |
+| `unlockDoor` | Marks a door as unlocked | `doorId` |
+| `hideInteractable` | Marks interactable as collected so it disappears | `interactableId` |
+
+`x` / `y` are **tile coordinates** (not pixel coordinates). Divide pixel
+positions by 16 to get tile coordinates.
+
+`flagConditions` are re-evaluated every time the player enters the room,
+so the world always reflects the current flag state.
+
+---
+
+## Room-specific tilesets
+
+By default every room uses the shared core tileset (`tileset.png`, 128 tiles).
+If a room needs its own unique tiles — custom furniture, bio-material, machinery —
+declare a room-specific tileset.
+
+### Add the tileset image
+
+Drop a PNG at `public/assets/tilemaps/<name>.png`. Use the same 8-column,
+64×64-pixel-per-tile format as the core tileset. Name it with dashes
+(e.g. `clinic-tiles.png`, `lab-equipment.png`).
+
+### Declare it in rooms.json
+
+```json
+{
+  "id": "clinic",
+  "tilesets": ["clinic-tiles"],
+  ...
+}
+```
+
+PreloadScene loads every tileset declared here at startup.
+
+### Add it to the Tiled tilemap
+
+In Tiled, open the room's tilemap. Add `clinic-tiles.png` as a second tileset.
+Tiled assigns it `firstgid: 129` (immediately after the core's 128 tiles).
+Paint with those tiles and export the Tiled JSON. The Tiled JSON will now list
+two tilesets; RoomManager loads both automatically.
+
+### Paint and reference
+
+In the editor, the palette shows both tilesets — the core section first with a
+label, then the room-specific section. The eyedropper, Q/E cycling, and
+undo/redo all work across both.
+
+For items and interactables whose sprite comes from the room tileset, add
+`tilesetKey`:
+
+```json
+{
+  "id": "cabinet",
+  "type": "item",
+  "tileFrame": 3,
+  "tilesetKey": "clinic-tiles",
+  "text": "Medical cabinet.",
+  "item": {
+    "name": "Antiseptic",
+    "tileFrame": 3,
+    "tilesetKey": "clinic-tiles",
+    "category": "cure"
+  }
+}
+```
+
+`tileFrame` is always the **local 0-indexed frame** within that tileset.
+Omitting `tilesetKey` (or setting it to `"tileset"`) uses the core tileset —
+all existing content is unaffected.
+
+---
+
+## Save / Load
+
+The game auto-saves to `localStorage` at these points:
+- After every door transition
+- After picking up any item
+- After curing an afflicted
+- After recovery completes
+
+The title screen shows **"Press C to Continue"** when a save exists.
+**SPACE/ENTER** starts a fresh run (clearing the save). In the pause
+menu, **N** starts a new game from mid-session.
+
+As an author, this means your playtests persist between browser refreshes.
+Clear manually with **N** in the pause menu when you want a clean state.
+
+---
+
+## Quick reference — editor shortcuts
+
+| Key | Action |
+|-----|--------|
+| **1 / 2 / 3** | Switch layer (Ground / Collision / Above) |
+| **Q / E** | Cycle tile index |
+| **P** | Toggle tile palette |
+| **F** | Flood fill tool |
+| **R** | Rectangle tool |
+| **Esc** | Reset to paint tool / cancel armed action |
+| **Ctrl+Z** | Undo |
+| **Ctrl+Shift+Z** | Redo |
+| **L-click** | Paint |
+| **R-click** | Erase |
+| **Mid-click / Alt+L-click** | Eyedropper |
+| **Shift+Arrow** | Expand room edge |
+| **Ctrl+Shift+Arrow** | Shrink room edge |
+| **X** | Save tilemap |
+| **O** | Pair two doors |
+| **I** | Place interactable |
+| **N** | Place NPC (Q/E to change variant) |
+| **T** | Stamp baseline |
+| **L** | Reload room from disk |
+| **U** | Unlock all doors in room |
+| **C** | Cure all afflicted in room |
+| **R** | Cycle reverb |
+| **[ / ]** | Adjust reverb mix |
+| **- / +** | Adjust master volume |
+| **WASD / Arrows** | Pan camera |
+| **Mid-drag** | Pan camera |
+| **Ctrl+Wheel** | Zoom |
 
 ---
 
@@ -366,56 +573,33 @@ These are active when F1 (debug) or F2 (editor) is on:
 
 For a brand-new room:
 
-1. `npm run new-room <id>` — creates the rooms.json stub, the default
-   tilemap with perimeter walls, and registers the asset. Reload.
-2. Drop into the room — wire a door from somewhere existing, or
-   temporarily set `"startRoom": "<id>"` in `rooms.json`.
-3. F2 editor on. Paint Ground tiles. Paint Collision walls. Paint
-   Above-layer details (lamps, decals, decorations).
-4. Press **X**, paste tilemap into
-   `public/assets/tilemaps/<roomId>.json`.
-5. **`O`** + click for each door. Paste each into `rooms.json`.
-6. **`I`** + click for each E-target. Paste into `rooms.json`.
-   Set `tileFrame`, `text`, and `requires` for each.
-7. **`N`** + click for each afflicted. Set `name` and `role`.
-8. Add `reverb` (and optional `reverbMix`) to the room object. Add
-   `weather` and/or `dark` if the room needs them.
-9. Reload, walk through, fix anything that didn't render or interact
-   right. If you added a new field like `weather` or `dark` for the
-   first time, restart the dev server and hard-refresh first.
-10. `git diff` to review. `git commit` when satisfied.
-
----
-
-## Safety net
-
-You always have git. If you paste over the wrong file, paste broken
-JSON, or just want to throw away a session's work:
-
-```bash
-git checkout <file>          # Revert one file to last commit
-git checkout .               # Revert all uncommitted changes (careful)
-git diff                     # See what changed since last commit
-git status                   # See which files are modified
-```
-
-Commit often with terrible messages — every commit is a place future
-you can land back on.
+1. `npm run new-room <id>` in the terminal.
+2. Refresh. Press `?`. Click `<id>` in the left panel.
+3. Paint Ground (1), Collision walls (2), Above details (3).
+4. **X** — save tilemap.
+5. **O** — wire a door from an existing room. Paste both snippets into `rooms.json`.
+6. **I** — place each interactable. Paste snippets. Edit `tileFrame`,
+   `type`, `text`, `requires`, `produces`.
+7. **N** — place each NPC. Paste snippets. Edit `name`, `role`,
+   `variant`, `holds`, `backstory`, `recoveredItems`.
+8. Set `reverb`, `reverbMix`, `dark`, `weather` on the room object.
+9. Add `flagConditions` if the room should change based on world flags.
+10. **Audit** in the top bar — fix `[TODO]` / `[BROKEN]` doors.
+11. `git diff`, `git commit`.
 
 ---
 
 ## What the editor does NOT do (yet)
 
-These are things you'll do directly in `rooms.json`:
+You'll do these directly in `rooms.json`:
 
-- Edit text on an existing interactable.
-- Change an interactable's `requires`, `tileFrame`, or `type`.
+- Edit text, `requires`, `produces`, `tileFrame` on an existing
+  interactable (use the **Properties** inspector in the right panel
+  to read the current JSON, then edit manually).
 - Re-link a door's `targetRoom` / `targetDoor`.
-- Define item state machines or world flags (engine doesn't support
-  these yet — see `ROADMAP.md` Phase 3 and Phase 5).
-- Edit afflicted `backstory`, `curedClue`, `recoveredItems` — text-edit
-  directly in `rooms.json`.
+- Define afflicted backstory and item state machines (text-edit in JSON).
+- Item state machine simulation (type definitions exist; full simulation
+  engine not yet built — see `ROADMAP.md` Phase 3).
 
-The editor stays focused on placement and layout. Everything else is
-text editing in the JSON, with reload to verify. That's the deal:
-spatial work is visual; rules and content are text.
+The editor stays focused on placement and layout. Rules and content are
+text. That's the deal.

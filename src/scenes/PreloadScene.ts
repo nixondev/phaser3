@@ -77,9 +77,24 @@ export class PreloadScene extends Phaser.Scene {
     }
 
     const roomsData = RoomManager.getRoomsData();
+    const extraTilesets = new Set<string>();
     for (const room of Object.values(roomsData.rooms)) {
       debug('Queuing tilemap:', room.mapKey, room.tilemapPath);
       this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath);
+      for (const ts of room.tilesets ?? []) extraTilesets.add(ts);
+    }
+
+    // Load room-specific tilesets as both image (for tilemaps) and
+    // spritesheet (for world/UI sprites). Convention: PNG lives at
+    // assets/tilemaps/<name>.png, spritesheet key is <name>-sprites.
+    for (const ts of extraTilesets) {
+      const path = `assets/tilemaps/${ts}.png`;
+      this.load.image(ts, path);
+      this.load.spritesheet(`${ts}-sprites`, path, {
+        frameWidth: upscale,
+        frameHeight: upscale,
+      });
+      debug('Queuing room tileset:', ts, path);
     }
 
     // Title screen always uses MP3; in-game music uses MIDI when flag is on

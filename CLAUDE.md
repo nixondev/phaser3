@@ -2,14 +2,15 @@
 
 Companion docs (read in the right context):
 - This file (`CLAUDE.md`) — design intent and architecture reference.
-- `EDITORGUIDE.md` — short how-tos for the in-game editor (start here
-  if you're new to the tools).
+- `EDITORGUIDE.md` — short how-tos for the editor (start here if you're
+  new to the tools).
+- `AUTHORING.md` — practical recipes for the editor and the full
+  rooms.json field reference (requires, produces, flags, holds, etc.).
 - `PARADIGM.md` — design grammar: what puzzle patterns the engine
-  supports and how to compose paths from them. Reach for this when
-  designing a specific puzzle.
-- `ROADMAP.md` — build sequence: what's shipped, what to build next.
-- `AUTHORING.md` — practical recipes for the in-game editor and
-  rooms.json authoring loop.
+  supports and how to compose paths from them. Read before designing.
+- `ROADMAP.md` — build sequence: what's shipped, what's next.
+- `TESTING.md` — editor and game test checklists. Run this after any
+  significant authoring or engine change.
 
 ## Project Overview
 
@@ -53,6 +54,13 @@ Retro pixel-art aesthetic at 320×240 resolution with 3× zoom.
    - Battery management is the moment-to-moment tension of the game.
    - The arc from survival tool → world reader is intentional. The same object that kept the afflicted away eventually reveals what the afflicted are.
    - The spectra-vision adapter does not replace the repel function. It adds a reading mode. The player must choose when to use each.
+
+7. **Characters remember together what they can't remember alone**
+   - Recovered residents can have conversations with each other that neither could have with the protagonist alone.
+   - These conversations surface memories, realizations, or information that only emerges from two specific people being in the same room and talking.
+   - Example: the lab technician and the maintenance worker together remember an access route or a procedure that neither recalls independently.
+   - This mechanic rewards curing multiple residents and positioning them together — another dimension of the multi-body puzzle language.
+   - Mechanically: pressing E on a recovered resident while another specific recovered resident is in the same room triggers a different dialog tree than pressing E on them alone. No new verb. Same grammar.
 
 ---
 
@@ -203,21 +211,55 @@ Reverb is **data-driven from `src/data/rooms.json`**. Each room may declare:
 ---
 
 ### Asset & Tileset Workflow
-The project uses a hybrid workflow for environment tiles:
-- **Individual Source Tiles**: Source images for tiles are stored in `assets_src/tiles/` as individual PNGs (e.g., `00_pavement.png`, `01_brick_wall.png`).
-- **Composer Script**: `npm run build-tiles` (or `node scripts/build-tiles.cjs`) combines these individual files into the final `public/assets/tilemaps/tileset.png` used by Phaser. It places tiles based on the numeric prefix in their filename. It uses transparency ([0,0,0,0]) as the default background for empty areas.
-- **Tilemap Generation**: `npm run generate-assets` (or `node scripts/generate-assets.cjs`) creates the Tiled-compatible JSON files for rooms but DOES NOT overwrite the `tileset.png` (this behavior is protected to preserve custom/high-fidelity art).
-- **Migration**: To extract a single `tileset.png` back into individual files, use `npm run migrate-tiles`.
-- **Regeneration**: `npm run regenerate-tiles` creates procedural source tiles with transparency support.
+
+The project supports a **core tileset** shared by all rooms plus **room-specific tilesets** loaded on demand. All tilesets follow the same format: 8-column PNG grids of 64×64 tiles at `public/assets/tilemaps/<name>.png`.
+
+#### Core tileset pipeline (`tileset.png`)
+- **Individual Source Tiles**: Source images in `assets_src/tiles/` as individual PNGs named with a numeric prefix (`00_pavement.png`, `01_brick_wall.png`, …).
+- **Composer**: `npm run build-tiles` combines them into `public/assets/tilemaps/tileset.png` (8×16 grid, 128 tiles). Tile slot = numeric prefix.
+- **Regeneration**: `npm run regenerate-tiles` recreates procedural source tiles.
+- **Migration**: `npm run migrate-tiles` extracts `tileset.png` back into individual files.
+- **Generation**: `npm run generate-assets` creates Tiled JSON stubs but does NOT overwrite the PNG.
+
+#### Adding a tile to the core tileset
+1. Add a 64×64 PNG to `assets_src/tiles/` with the desired slot prefix (e.g. `51_new_floor.png`).
+2. `npm run build-tiles` — recomposes `tileset.png`.
+3. The tile is available immediately in the editor palette and via `tileFrame: 51`.
+
+#### Room-specific tilesets
+Any room can declare additional tilesets alongside the core. Each is loaded automatically at startup.
+
+**rooms.json:**
+```json
+{
+  "id": "clinic",
+  "tilesets": ["clinic-tiles"],
+  ...
+}
+```
+
+**Requirements:**
+- PNG at `public/assets/tilemaps/clinic-tiles.png` (same 8-col 64px format).
+- The room's Tiled JSON must list `clinic-tiles` as a second tileset with the correct `firstgid` (core ends at 128, so room tileset starts at 129).
+- In Tiled: add the PNG as a tileset, paint with it, export the JSON.
+
+**Referencing room-specific tiles in items/interactables:**
+```json
+{ "tileFrame": 3, "tilesetKey": "clinic-tiles" }
+```
+Omit `tilesetKey` to use the core tileset (all existing content is unaffected).
+
+**`TilesetResolver.ts`** (`src/utils/TilesetResolver.ts`) — maps `(tileFrame, tilesetKey)` → `{key, frame}` for sprite rendering. Used by GameScene world sprites, UIScene inventory icons, EditorScene placeholders.
+
+#### Tileset conventions
+- `tileFrame` = 0-indexed local frame within the tileset (not the Tiled GID).
+- Tiled GID = `firstgid + tileFrame`. The engine handles this automatically.
+- Core tileset: `firstgid: 1`, frames 0–127, GIDs 1–128.
+- First room tileset: `firstgid: 129`, frames 0–N, GIDs 129–128+N.
+- The editor palette shows all tilesets for the current room with labelled sections.
 
 #### Visual Notes
-- **Maintenance Tunnel**: The "black rectangle" often seen in narrow rooms like the `substation-tunnel` is the `Exterior Wall` (GID 2). Because the room is narrow and the camera centers on the player, these dark boundary walls are prominent. To change their look, edit `assets_src/tiles/01_exterior_wall.png`.
-
-#### Adding a New Tile
-1. Add a 64x64 PNG to `assets_src/tiles/`.
-2. Name it starting with the desired index (e.g., `50_new_floor.png`).
-3. Run `npm run build-tiles`.
-4. Update `scripts/generate-assets.cjs` if the tile needs to be procedurally placed in rooms.
+- **Maintenance Tunnel**: The "black rectangle" in narrow rooms like `substation-tunnel` is `Exterior Wall` (GID 2). Edit `assets_src/tiles/01_exterior_wall.png` to change its look.
 
 
 ---
@@ -569,22 +611,24 @@ This allows linear production while preserving puzzle-box breadth.
 
 ## Tilemap Conventions
 
-- Tiled JSON format, 16×16 tiles
-- Shared tileset `tileset.png`
-- Layer named `Collision` is used for physics collisions
-- Layer named `Above` renders above the player (depth 30)
-- `mapKey` in `rooms.json` must match the key used in `PreloadScene` when loading the tilemap
+- Tiled JSON format, 16×16 tiles displayed (64×64 source).
+- Every room must have three layers: `Ground`, `Collision`, `Above`.
+- `Collision` layer drives physics collision (`setCollisionByExclusion([-1])`).
+- `Above` renders over the player (depth 30).
+- `mapKey` in `rooms.json` must match the key passed to `PreloadScene`.
+- Multiple tilesets per room are supported — see **Asset & Tileset Workflow** above.
 
-### Current tileset direction
+### Core tileset contents
 
-The expanded tileset now supports a stronger city blockout language, including:
-- dark pavement / cracked pavement / overgrowth / rubble
-- exterior wall / barricade / reinforced wall / locked gate
-- street lamps / benches / trash / crates / cameras / dead screens
-- manholes / generators / electrical panels
-- door frames / dark windows / memorial marker
-
-This should be used to make the outer city feel like a sealed, abruptly abandoned civic machine rather than an empty prototype arena.
+128 tiles in an 8×16 grid. Covers the city blockout language:
+- Pavement / cracked pavement / overgrown / rubble
+- Exterior wall / interior wall / locked gate / barricade / reinforced wall
+- Floor tiles (indoor, carpet, metal, sewer)
+- Street furniture (lamp, bench, trash, crates, camera, dead screen)
+- Infrastructure (manhole, generator, electrical panel, pipe H/V, grating)
+- Signage (door frame, dark window, memorial marker)
+- Nature (bush, dead tree, 3×3 large tree)
+- Items (document, fuel canister, flashlight, flashlight charger)
 
 ---
 
@@ -706,9 +750,12 @@ This section captures only what's still genuinely undecided.
 
 ### Still open
 
-- **Final exit logic.** Code fragments? Derivation from multiple
-  truths? One gate with branching consequences? Will be answered by
-  the late-game design when it arrives.
+- **Final exit logic — partially resolved.** The exit is a single physical location. What varies is the *state the player arrives in* — who they saved, what they understand, whether they went into the caves. These determine which ending plays. Endings are not announced or graded. The game never tells the player there are multiple endings. Confirmed ending shapes:
+  - **Escape alone.** Exit found, minimal understanding, some or all residents unrecovered. The city stays sealed. You got out.
+  - **Escape with hope.** Enough residents recovered, exit opened in a way that makes outside rescue possible. You didn't just escape — you made return possible.
+  - **Escape with understanding.** Caves descended, the thing seen, spectra-vision read, all recoverable residents cured. The ending reflects complete knowledge of what Warden was and what happened. Not a better escape mechanically — a complete one.
+  - **Stay.** A fourth ending for a player who understands everything and chooses resolution over escape. What resolution means for the thing in the caves is a late-game authoring decision.
+  - The gun is the primary differentiator. Residents killed with the gun cannot contribute their knowledge or their keys. Enough absences make certain endings unreachable. The game never explains why.
 - **Soft-doom states.** How clearly should the game signal that a run
   is still informative but no longer winning? Not blocking anything.
 - **Run-reset escalation.** Whether/when the game ever becomes

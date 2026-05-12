@@ -23,6 +23,8 @@ export class EditorUI {
   private statusEl!: HTMLDivElement;
   private currentRoomEl!: HTMLSpanElement;
   private resizeObserver?: ResizeObserver;
+  private propsLabel!: HTMLElement;
+  private propsTextarea!: HTMLTextAreaElement;
 
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;
@@ -49,6 +51,15 @@ export class EditorUI {
     this.roomListEl = this.root.querySelector('#editor-room-list') as HTMLDivElement;
     this.statusEl = this.root.querySelector('#editor-status') as HTMLDivElement;
     this.currentRoomEl = this.root.querySelector('#editor-current-room') as HTMLSpanElement;
+    this.propsLabel = this.root.querySelector('#editor-props-label') as HTMLElement;
+    this.propsTextarea = this.root.querySelector('#editor-props-json') as HTMLTextAreaElement;
+
+    this.root.querySelector<HTMLButtonElement>('#editor-props-copy')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(this.propsTextarea.value).then(
+        () => this.setStatus('Copied to clipboard.'),
+        () => this.setStatus('Clipboard unavailable — copy manually.'),
+      );
+    });
 
     this.populateRoomList();
     this.wireButtons();
@@ -82,10 +93,24 @@ export class EditorUI {
     if (this.currentRoomEl) this.currentRoomEl.textContent = roomId;
     this.highlightActiveRoom(roomId);
     this.setStatus(`Loaded ${roomId}`);
+    this.clearProperties();
   }
 
   public setStatus(text: string): void {
     if (this.statusEl) this.statusEl.textContent = text;
+  }
+
+  public showProperties(label: string, json: string): void {
+    if (this.propsLabel) this.propsLabel.textContent = label;
+    if (this.propsTextarea) {
+      this.propsTextarea.value = json;
+      this.propsTextarea.closest<HTMLElement>('#editor-props-panel')!.style.display = 'block';
+    }
+  }
+
+  public clearProperties(): void {
+    const panel = this.root.querySelector<HTMLElement>('#editor-props-panel');
+    if (panel) panel.style.display = 'none';
   }
 
   public destroy(): void {
@@ -198,6 +223,12 @@ export class EditorUI {
       <main id="editor-center"></main>
 
       <aside id="editor-rightpanel">
+        <div id="editor-props-panel" style="display:none">
+          <h3>Properties — <span id="editor-props-label" style="color:#d4c87a;text-transform:none;letter-spacing:0"></span></h3>
+          <textarea id="editor-props-json" spellcheck="false" autocomplete="off"></textarea>
+          <button class="btn" id="editor-props-copy" style="margin:4px 6px 6px;width:calc(100% - 12px)">Copy JSON</button>
+          <div style="border-top:1px dashed #333;margin:0 0 4px"></div>
+        </div>
         <h3>Layer</h3>
         <div class="row">
           <button class="btn layer-btn" data-layer-key="1">1 Ground</button>
@@ -257,6 +288,13 @@ export class EditorUI {
         z-index: 1000;
       }
       #editor-overlay button { font-family: inherit; font-size: inherit; }
+      #editor-props-json {
+        display: block; width: calc(100% - 12px); height: 130px;
+        margin: 0 6px; resize: vertical;
+        background: #111; color: #ccddcc; border: 1px solid #333;
+        font-family: ui-monospace, monospace; font-size: 10px;
+        line-height: 1.4; padding: 4px; box-sizing: border-box;
+      }
       #editor-overlay h3 {
         margin: 8px 6px 4px; font-size: 10px; letter-spacing: 0.05em;
         text-transform: uppercase; color: #8b8;

@@ -3,6 +3,7 @@ import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import { InputState } from '@/types';
+import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 export class RoomEditorManager {
   private scene: Phaser.Scene;
@@ -593,16 +594,22 @@ export class RoomEditorManager {
     }
   }
 
-  /** Build the thumbnail grid lazily on first reveal so the tilemap is loaded. */
+  /** Build the thumbnail grid lazily on first reveal so the tilemap is loaded.
+   *  Shows all tilesets available in the current room, separated by a label bar.
+   *  Each tile's palette index equals its GID (what putTileAt expects). */
   private buildPalette(): void {
     const map = this.roomManager.getMap();
-    const tileset = map?.tilesets?.[0];
-    const tileCount = tileset?.total ?? 64;
+    const tilesets = map?.tilesets ?? [];
     const T = this.paletteThumb;
     const cols = this.paletteCols;
-    const rows = Math.ceil(tileCount / cols);
-    this.paletteWidth = cols * T + 2;   // +2 for border padding
-    this.paletteHeight = rows * T + 2;
+    const frameSize = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
+    const scale = T / frameSize;
+
+    // Total rows across all tilesets (each tileset gets a label row + tile rows)
+    let totalRows = 0;
+    for (const ts of tilesets) totalRows += 1 + Math.ceil(ts.total / cols); // 1 label row
+    this.paletteWidth = cols * T + 2;
+    this.paletteHeight = totalRows * T + 2;
 
     const bg = this.scene.add.graphics();
     bg.fillStyle(0x000000, 0.85);
@@ -611,48 +618,69 @@ export class RoomEditorManager {
     bg.strokeRect(0, 0, this.paletteWidth, this.paletteHeight);
     this.paletteContainer.add(bg);
 
-    // Native frame size from the spritesheet config: TILE_SIZE * ASSET_SCALE = 64.
-    const frameSize = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
-    const scale = T / frameSize;
+    let currentRow = 0;
 
-    const bgRect = new Phaser.Geom.Rectangle(0, 0, this.paletteWidth, this.paletteHeight);
+    for (const ts of tilesets) {
+      const spritesheetKey = tilesetSpritesheetKey(ts.name);
 
-    for (let i = 0; i < tileCount; i++) {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = 1 + col * T + Math.floor(T / 2);
-      const y = 1 + row * T + Math.floor(T / 2);
-      const thumb = this.scene.add.sprite(x, y, 'tileset-sprites', i);
-      thumb.setScale(scale).setScrollFactor(0);
-      thumb.setInteractive({ useHandCursor: true });
-      
-      thumb.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-        const col = i % this.paletteCols;
-        const row = Math.floor(i / this.paletteCols);
-        
-        if (pointer.button === 0) { // Left click
-          this.paletteSelectionStart = { x: col, y: row };
-          this.paletteSelectionEnd = { x: col, y: row };
-          this.updateMultiTileSelection();
-        }
-      });
+      // Label bar for this tileset
+      const labelY = 1 + currentRow * T + Math.floor(T / 2);
+      const label = this.scene.add.text(1 + Math.floor(T / 2), labelY,
+        ts.name, {
+          fontSize: '6px', color: '#ffff88', fontFamily: 'monospace',
+          backgroundColor: '#00000088', padding: { x: 2, y: 1 },
+        }).setScrollFactor(0).setOrigin(0, 0.5);
+      this.paletteContainer.add(label);
+      currentRow++;
 
-      thumb.on('pointerover', (pointer: Phaser.Input.Pointer) => {
-        if (pointer.leftButtonDown() && this.paletteSelectionStart) {
-          const col = i % this.paletteCols;
-          const row = Math.floor(i / this.paletteCols);
-          this.paletteSelectionEnd = { x: col, y: row };
-          this.updateMultiTileSelection();
-        }
-      });
+      // Tile thumbnails for this tileset
+      for (let local = 0; local < ts.total; local++) {
+        const gid = ts.firstgid + local;   // GID used by putTileAt
+        const col = local % cols;
+        const row = Math.floor(local / cols);
+        const x = 1 + col * T + Math.floor(T / 2);
+        const y = 1 + (currentRow + row) * T + Math.floor(T / 2);
 
-      this.paletteContainer.add(thumb);
+        const thumb = this.scene.add.sprite(x, y, spritesheetKey, local);
+        thumb.setScale(scale).setScrollFactor(0);
+        thumb.setInteractive({ useHandCursor: true });
+
+        thumb.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+          if (pointer.button !== 0) return;
+          // Map GID back to palette grid coordinates for multi-tile selection.
+          // For simplicity, single-tile selection when using non-core tilesets.
+          const paletteCol = local % this.paletteCols;
+          const paletteRow = Math.floor(local / this.paletteCols);
+          this.paletteSelectionStart = { x: paletteCol, y: paletteRow };
+          this.paletteSelectionEnd = { x: paletteCol, y: paletteRow };
+          // Directly set selection to this GID
+          this.selectedTileIndex = gid;
+          this.selectedTiles = [[gid]];
+          this.updatePreview();
+          this.updatePaletteHighlight();
+        });
+
+        thumb.on('pointerover', (pointer: Phaser.Input.Pointer) => {
+          if (pointer.leftButtonDown() && this.paletteSelectionStart) {
+            const paletteCol = local % this.paletteCols;
+            const paletteRow = Math.floor(local / this.paletteCols);
+            this.paletteSelectionEnd = { x: paletteCol, y: paletteRow };
+            this.updateMultiTileSelection();
+          }
+        });
+
+        this.paletteContainer.add(thumb);
+      }
+      currentRow += Math.ceil(ts.total / cols);
     }
 
-    this.scene.input.on('pointerup', () => {
-      this.paletteSelectionStart = null;
-    });
+    // Fallback: if no tilesets on map, show empty palette
+    if (tilesets.length === 0) {
+      this.paletteWidth = cols * T + 2;
+      this.paletteHeight = T + 2;
+    }
 
+    this.scene.input.on('pointerup', () => { this.paletteSelectionStart = null; });
     this.paletteHighlight.setScrollFactor(0).setDepth(DEPTH.UI + 211);
     this.paletteBuilt = true;
   }
@@ -1395,21 +1423,26 @@ export class RoomEditorManager {
       this.tilePreview.setVisible(false);
       return;
     }
-    
     this.tilePreview.setVisible(true);
-    
-    // In Phaser Tilemaps, index 0 is usually empty, and index 1 is the first tile (frame 0).
-    // We adjust for the 0-indexed spritesheet frames.
-    if (this.selectedTileIndex > 0) {
-      this.tilePreview.setFrame(this.selectedTileIndex - 1);
+
+    const gid = this.selectedTileIndex;
+    if (gid > 0) {
+      // Resolve which tileset owns this GID and compute local frame.
+      const map = this.roomManager.getMap();
+      const tilesets = map?.tilesets ?? [];
+      let owningTs = tilesets[0];
+      for (const ts of tilesets) {
+        if (ts.firstgid <= gid) owningTs = ts;
+      }
+      const localFrame = owningTs ? gid - owningTs.firstgid : gid - 1;
+      const key = tilesetSpritesheetKey(owningTs?.name ?? 'tileset');
+      this.tilePreview.setTexture(key, localFrame);
       this.tilePreview.setAlpha(1);
     } else {
-      this.tilePreview.setAlpha(0.3); // Eraser/Empty preview
-      this.tilePreview.setFrame(0); 
+      this.tilePreview.setTexture('tileset-sprites', 0);
+      this.tilePreview.setAlpha(0.3);
     }
 
-    // Position preview next to the "TOOL: X" part of the text
-    // The first line is roughly 160px wide now with TOOL: prefix
     this.tilePreview.setPosition(this.editorText.x + 185, this.editorText.y + 6);
   }
 

@@ -14,18 +14,20 @@ export interface DoorDefinition {
   direction: string;
   spawnX: number;
   spawnY: number;
-  requiredKey?: string;
   requiredKeys?: string[];
 }
 
 export interface ItemDef {
   name: string;
   tileFrame: number;
+  /** Which tileset spritesheet to use. Omit for the core 'tileset'. */
+  tilesetKey?: string;
   spriteKey?: string;
   category: 'key' | 'component' | 'fuel' | 'cure' | 'document' | 'tool';
   keyId?: string;
   useTarget?: string;
   content?: string;
+  consumedOnUse?: boolean;
 }
 
 export interface DroppedItemState {
@@ -35,6 +37,22 @@ export interface DroppedItemState {
   instanceId: string;
 }
 
+/** One condition that must be true before an interaction can succeed. */
+export interface RequireCondition {
+  type: 'item' | 'character' | 'flag';
+  value: string;        // keyId for item, character id, or flag name
+  consume?: boolean;    // if true and type===item, remove from inventory on success
+}
+
+/** One effect that fires after a successful interaction. */
+export interface ProduceEffect {
+  type: 'setFlag' | 'clearFlag' | 'unlockDoor' | 'dropItem';
+  value: string;        // flag name / door id / item keyId
+  x?: number;          // world position for dropItem
+  y?: number;
+  item?: ItemDef;       // item definition for dropItem
+}
+
 export interface InteractableDef {
   id: string;
   x: number;
@@ -42,7 +60,12 @@ export interface InteractableDef {
   type: string;
   text: string;
   item?: ItemDef;
-  tileFrame?: number; // if set, render a static sprite at this position (for sign-type objects in the world)
+  tileFrame?: number;
+  /** Which tileset spritesheet for the tileFrame sprite. Omit for the core 'tileset'. */
+  tilesetKey?: string;
+  requires?: RequireCondition[];
+  produces?: ProduceEffect[];
+  consumed?: boolean;
 }
 
 export type AfflictedStatus = 'wandering' | 'agitated' | 'frightened' | 'cured' | 'recovered';
@@ -62,6 +85,35 @@ export interface AfflictedDef {
   curedClue?: string;
   backstory?: string[];
   recoveredItems?: ItemDef[];
+  /** Items dropped into the world at the afflicted's position when cured. */
+  holds?: ItemDef[];
+  /**
+   * If set, pressing E on this recovered resident while the named roster member
+   * is also in the current room triggers `conversationDialog` instead of the
+   * default solo response. The named value is the other resident's `id`.
+   */
+  conversationRequires?: string;
+  /** Multi-page dialog shown when conversationRequires partner is present. */
+  conversationDialog?: string[];
+  /** Effects applied once when the conversation reaches its final page. */
+  conversationProduces?: ProduceEffect[];
+}
+
+/** One effect applied when a specific world flag is set, evaluated at room load. */
+export interface FlagEffect {
+  type: 'removeTile' | 'setTile' | 'unlockDoor' | 'hideInteractable';
+  layer?: 'Ground' | 'Collision' | 'Above';
+  x?: number;
+  y?: number;
+  tileIndex?: number;
+  doorId?: string;
+  interactableId?: string;
+}
+
+/** Evaluated at room load: if flag is set, apply effects to the live tilemap/state. */
+export interface FlagCondition {
+  flag: string;
+  effects: FlagEffect[];
 }
 
 export interface CharacterState {
@@ -89,6 +141,15 @@ export interface RoomDefinition {
   dark?: boolean;
   weather?: 'rain-mild' | 'rain-hard' | 'dripping';
   drips?: Array<{ x: number; y: number }>;
+  /** Applied at room load: if the flag is set, mutate the live tilemap/state. */
+  flagConditions?: FlagCondition[];
+  /**
+   * Additional tileset names for this room (beyond the core 'tileset').
+   * Each entry must have a matching PNG at `assets/tilemaps/<name>.png`.
+   * The tilemap JSON must list the same tilesets with correct firstgid values.
+   * Room-specific tiles use `tilesetKey: "<name>"` on items/interactables.
+   */
+  tilesets?: string[];
 }
 
 export interface RoomsData {

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Entity } from './Entity';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
-import { AfflictedDef, AfflictedStatus, ItemDef, Position } from '@/types';
+import { AfflictedDef, AfflictedStatus, ItemDef, ProduceEffect, Position } from '@/types';
 import { MusicManager } from '@systems/MusicManager';
 import { Direction } from './Direction';
 
@@ -36,6 +36,10 @@ export class Afflicted extends Entity {
   private curedClue: string | null;
   private backstory: string[];
   private recoveredItems: ItemDef[];
+  private holds: ItemDef[];
+  private conversationRequires: string | null;
+  private conversationDialog: string[];
+  private conversationProduces: ProduceEffect[];
 
   constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
     const variant = def.variant || 'walker';
@@ -54,8 +58,12 @@ export class Afflicted extends Entity {
     this.playerVariant  = def.playerVariant || null;
     this.associatedRoom = def.associatedRoom || null;
     this.curedClue      = def.curedClue || null;
-    this.backstory      = def.backstory || [];
-    this.recoveredItems = def.recoveredItems || [];
+    this.backstory           = def.backstory || [];
+    this.recoveredItems      = def.recoveredItems || [];
+    this.holds               = def.holds || [];
+    this.conversationRequires = def.conversationRequires || null;
+    this.conversationDialog  = def.conversationDialog || [];
+    this.conversationProduces = def.conversationProduces || [];
     this.origin         = { x: def.x, y: def.y };
 
     this.setDepth(DEPTH.ENTITIES);
@@ -336,5 +344,9 @@ export class Afflicted extends Entity {
   getAssociatedRoom(): string | null    { return this.associatedRoom; }
   getCuredClue():      string | null    { return this.curedClue;      }
   getBackstory():      string[]         { return this.backstory;      }
-  getRecoveredItems(): ItemDef[]        { return this.recoveredItems; }
+  getRecoveredItems():      ItemDef[]        { return this.recoveredItems;       }
+  getHolds():               ItemDef[]        { return this.holds;                }
+  getConversationRequires():string | null    { return this.conversationRequires; }
+  getConversationDialog():  string[]         { return this.conversationDialog;   }
+  getConversationProduces():ProduceEffect[]  { return this.conversationProduces; }
 }

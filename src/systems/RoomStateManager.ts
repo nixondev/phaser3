@@ -16,6 +16,7 @@ export class RoomStateManager {
   private roster: CharacterState[] = [];
   private activeCharacterId = 'player';
   private characterInventories: Map<string, (ItemDef | null)[]> = new Map();
+  private worldFlags: Set<string> = new Set();
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -221,6 +222,13 @@ export class RoomStateManager {
     return this.characterInventories.get(id)!;
   }
 
+  // ── World flags (Phase 5) ───────────────────────────────────────────────
+
+  setFlag(name: string): void { this.worldFlags.add(name); }
+  clearFlag(name: string): void { this.worldFlags.delete(name); }
+  hasFlag(name: string): boolean { return this.worldFlags.has(name); }
+  getFlags(): Set<string> { return this.worldFlags; }
+
   // ── Tutorial ────────────────────────────────────────────────────────────
 
   isTutorialShown(): boolean {
@@ -229,6 +237,46 @@ export class RoomStateManager {
 
   setTutorialShown(shown: boolean): void {
     this.tutorialShown = shown;
+  }
+
+  // ── Persistence ─────────────────────────────────────────────────────────
+
+  serialize(): object {
+    return {
+      visitedRooms: [...this.visitedRooms],
+      currentRoom: this.currentRoom,
+      collectedItems: [...this.collectedItems],
+      unlockedDoors: [...this.unlockedDoors],
+      curedResidents: [...this.curedResidents],
+      recoveredResidents: [...this.recoveredResidents],
+      poweredDevices: [...this.poweredDevices],
+      generatorFuel: this.generatorFuel,
+      inventory: this.inventory,
+      droppedItems: [...this.droppedItems.entries()],
+      tutorialShown: this.tutorialShown,
+      roster: this.roster,
+      activeCharacterId: this.activeCharacterId,
+      characterInventories: [...this.characterInventories.entries()],
+      worldFlags: [...this.worldFlags],
+    };
+  }
+
+  loadFrom(data: Record<string, any>): void {
+    this.visitedRooms = new Set(data.visitedRooms ?? []);
+    this.currentRoom = data.currentRoom ?? '';
+    this.collectedItems = new Set(data.collectedItems ?? []);
+    this.unlockedDoors = new Set(data.unlockedDoors ?? []);
+    this.curedResidents = new Set(data.curedResidents ?? []);
+    this.recoveredResidents = new Set(data.recoveredResidents ?? []);
+    this.poweredDevices = new Set(data.poweredDevices ?? []);
+    this.generatorFuel = data.generatorFuel ?? 0;
+    this.inventory = data.inventory ?? new Array(12).fill(null);
+    this.droppedItems = new Map(data.droppedItems ?? []);
+    this.tutorialShown = data.tutorialShown ?? false;
+    this.roster = data.roster ?? [];
+    this.activeCharacterId = data.activeCharacterId ?? 'player';
+    this.characterInventories = new Map(data.characterInventories ?? []);
+    this.worldFlags = new Set(data.worldFlags ?? []);
   }
 
   // ── Reset ───────────────────────────────────────────────────────────────
@@ -248,6 +296,7 @@ export class RoomStateManager {
     this.roster = [];
     this.activeCharacterId = 'player';
     this.characterInventories.clear();
+    this.worldFlags.clear();
   }
 }
 

@@ -1,6 +1,7 @@
 ﻿import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, INVENTORY_CONFIG } from '@utils/Constants';
 import { ItemDef, CharacterState } from '@/types';
+import { resolveTileSprite } from '@utils/TilesetResolver';
 
 const COLS = INVENTORY_CONFIG.COLS;
 const ROWS = INVENTORY_CONFIG.ROWS;
@@ -129,9 +130,12 @@ export class UIScene extends Phaser.Scene {
       const item = this.currentInventory[i];
       if (item) {
         const bg = this.slotBgs[i];
-        this.slotIcons[i] = item.spriteKey
-          ? this.add.sprite(bg.x, bg.y, item.spriteKey).setDisplaySize(SS - 4, SS - 4)
-          : this.add.sprite(bg.x, bg.y, 'tileset-sprites', item.tileFrame).setDisplaySize(SS - 4, SS - 4);
+        if (item.spriteKey) {
+          this.slotIcons[i] = this.add.sprite(bg.x, bg.y, item.spriteKey).setDisplaySize(SS - 4, SS - 4);
+        } else {
+          const r = resolveTileSprite(item.tileFrame, item.tilesetKey);
+          this.slotIcons[i] = this.add.sprite(bg.x, bg.y, r.key, r.frame).setDisplaySize(SS - 4, SS - 4);
+        }
       }
     }
   }

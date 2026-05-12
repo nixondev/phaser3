@@ -8,6 +8,7 @@ import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { InputState } from '@/types';
 import { EditorUI } from './EditorUI';
+import { resolveTileSprite } from '@utils/TilesetResolver';
 
 const PAN_SPEED = 4 * GAME_CONFIG.TILE_SIZE; // tiles/sec * px/tile
 const MIN_ZOOM = 0.5;
@@ -212,24 +213,31 @@ export class EditorScene extends Phaser.Scene {
     if (!room) return;
 
     for (const inter of room.interactables ?? []) {
-      const tileFrame = (inter as any).tileFrame ?? (inter as any).item?.tileFrame ?? 0;
-      const sprite = this.add.sprite(inter.x, inter.y, 'tileset-sprites', tileFrame);
+      const tileFrame = inter.tileFrame ?? inter.item?.tileFrame ?? 0;
+      const tilesetKey = inter.tilesetKey ?? inter.item?.tilesetKey;
+      const { key, frame } = resolveTileSprite(tileFrame, tilesetKey);
+      const sprite = this.add.sprite(inter.x, inter.y, key, frame);
       sprite.setScale(GAME_CONFIG.WORLD_SCALE);
       sprite.setDepth(DEPTH.ENTITIES);
       sprite.setData('def', inter);
       sprite.setData('kind', 'interactable');
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on('pointerdown', () => {
+        this.editorUI.showProperties(`interactable · ${inter.id}`, JSON.stringify(inter, null, 2));
+      });
       this.placeholderSprites.set(inter.id, sprite);
     }
 
     for (const aff of room.afflicted ?? []) {
-      // Frame 10 (skeleton remains) is a serviceable NPC stand-in until we have
-      // dedicated afflicted art available in the editor.
       const sprite = this.add.sprite(aff.x, aff.y, 'tileset-sprites', 10);
       sprite.setScale(GAME_CONFIG.WORLD_SCALE);
       sprite.setDepth(DEPTH.ENTITIES);
       sprite.setData('def', aff);
       sprite.setData('kind', 'afflicted');
-      // RoomEditorManager.logObjectSnippet looks for a getId() on the dragged sprite.
+      sprite.setInteractive({ useHandCursor: true });
+      sprite.on('pointerdown', () => {
+        this.editorUI.showProperties(`afflicted · ${aff.id}`, JSON.stringify(aff, null, 2));
+      });
       (sprite as any).getId = () => aff.id;
       (sprite as any).getName = () => aff.name;
       this.afflictedGroup.add(sprite);

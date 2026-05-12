@@ -47,14 +47,23 @@ export class RoomManager {
     debug('Loading room:', roomId);
 
     this.currentMap = this.scene.make.tilemap({ key: room.mapKey });
-    const tileset = this.currentMap.addTilesetImage('tileset', 'tileset');
-    if (!tileset) {
-      throw new Error('Failed to add tileset image');
+
+    // Always load the core tileset first, then any room-specific tilesets.
+    const coreTileset = this.currentMap.addTilesetImage('tileset', 'tileset');
+    if (!coreTileset) {
+      throw new Error('Failed to add core tileset image');
+    }
+    const tilesets: Phaser.Tilemaps.Tileset[] = [coreTileset];
+    for (const tsName of room.tilesets ?? []) {
+      const ts = this.currentMap.addTilesetImage(tsName, tsName);
+      if (ts) tilesets.push(ts);
+      else console.warn(`[RoomManager] Tileset "${tsName}" not found in tilemap "${room.mapKey}". ` +
+        `Add it to the Tiled JSON and ensure the PNG is at assets/tilemaps/${tsName}.png`);
     }
 
-    const ground = this.currentMap.createLayer('Ground', tileset, 0, 0);
-    const collision = this.currentMap.createLayer('Collision', tileset, 0, 0);
-    const above = this.currentMap.createLayer('Above', tileset, 0, 0);
+    const ground = this.currentMap.createLayer('Ground', tilesets, 0, 0);
+    const collision = this.currentMap.createLayer('Collision', tilesets, 0, 0);
+    const above = this.currentMap.createLayer('Above', tilesets, 0, 0);
 
     if (!ground || !collision || !above) {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');

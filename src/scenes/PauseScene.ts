@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
+import { RoomStateManager } from '@systems/RoomStateManager';
+import { SaveManager } from '@utils/SaveManager';
 
 export class PauseScene extends Phaser.Scene {
   private volumeText!: Phaser.GameObjects.Text;
@@ -61,8 +63,16 @@ export class PauseScene extends Phaser.Scene {
 
     this.updateVolumeUI();
 
+    this.add
+      .text(w / 2, h / 2 + 78, 'N — New Game  (clears save)', {
+        fontSize: '9px',
+        color: '#aa6666',
+        fontFamily: 'monospace',
+      })
+      .setOrigin(0.5);
+
     const hint = this.add
-      .text(w / 2, h / 2 + 85, 'Press ESC to resume', {
+      .text(w / 2, h / 2 + 92, 'Press ESC to resume', {
         fontSize: '10px',
         color: '#888888',
         fontFamily: 'monospace',
@@ -81,6 +91,15 @@ export class PauseScene extends Phaser.Scene {
     this.input.keyboard!.once('keydown-ESC', () => {
       this.scene.stop();
       this.scene.resume(SCENES.GAME);
+    });
+
+    this.input.keyboard!.once('keydown-N', () => {
+      SaveManager.clear();
+      RoomStateManager.getInstance().reset();
+      this.scene.stop(SCENES.UI);
+      this.scene.stop(SCENES.GAME);
+      this.scene.stop();
+      this.scene.start(SCENES.MENU);
     });
 
     this.input.keyboard!.on('keydown-MINUS', () => {
