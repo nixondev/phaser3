@@ -24,13 +24,6 @@ export class WeatherManager {
 
     const allRooms = RoomManager.getRoomsData().rooms;
     const roomDef = allRooms[roomId];
-    console.log('[WEATHER] updateForRoom called', {
-      roomId,
-      roomDefFound: !!roomDef,
-      weatherField: roomDef?.weather ?? 'NONE',
-      roomKeys: Object.keys(allRooms).slice(0, 5),
-      roomDefKeys: roomDef ? Object.keys(roomDef) : 'NO_DEF',
-    });
     if (!roomDef?.weather) return;
 
     switch (roomDef.weather) {
@@ -45,7 +38,6 @@ export class WeatherManager {
         break;
     }
 
-    console.log('[WEATHER] effect created:', this.current?.constructor.name ?? 'null');
     this.current?.show();
   }
 

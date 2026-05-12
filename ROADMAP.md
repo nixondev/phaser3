@@ -128,7 +128,15 @@ both reference it.
 - 12-slot per-character inventory with category-aware items.
 - Afflicted state machine (wandering → agitated → frightened → cured → recovered).
 - Per-room reverb and music driven from `rooms.json`.
-- Flashlight + cone detection, dark rooms.
+- **Weather system**: `rain-mild`, `rain-hard`, `dripping` — data-driven from `rooms.json`
+  (`weather` field), rendered via screen-space Graphics. Extends to new types with one
+  class + one switch case.
+- **Darkness + flashlight**: `dark: true` on a room enables a full-screen RenderTexture
+  darkness overlay. Flashlight (F key) cuts a cone through it. Small ambient circle always
+  visible around the player. Depth stack: LIGHTING=35 (darkness), beam glow=36,
+  WEATHER=37 (always above darkness).
+- `associatedRoom` spawn gating: uncured afflicted are invisible in their associated room;
+  cured afflicted only appear there.
 - Editor: paint, layer isolation, drag afflicted, resize, save-to-disk
   via dev endpoints. Tile palette (P), flood fill (F), rectangle (R),
   undo/redo (Ctrl+Z), warp picker (F4), maze audit (F5), door pairer (O),
@@ -382,6 +390,12 @@ If you find yourself reaching for a code change to make a chain work,
 that's a sign Phases 0–6 missed a primitive. Stop, add the primitive,
 then come back. The editor + `rooms.json` should be able to express
 any chain the design wants.
+
+### Content items flagged for Phase 8
+
+- **The one gun / one bullet.** A single firearm placed in the world, findable before the cure mechanic is understood. If used on an afflicted, that resident is permanently gone. No mechanical punishment — the game remembers via a world flag and absent recovery content. Requires: item with `category: tool`, a `worldFlag` set on use, and the afflicted's `associatedRoom` content simply never becoming available.
+- **Spectra-vision adapter.** A flashlight attachment found in the facility or cave area. Activates a secondary flashlight mode that reveals hidden interactables, boundary markers, and environmental lore invisible in normal mode. Implemented as a `tool` category item that gates a `visibilityRequires` condition on a new class of interactables. No new verb — same E + item grammar.
+- **Fuel acquisition chain.** Empty fuel cans + environmental sources (leaking pipes, storage drums) = filled cans. Uses the container puzzle pattern (#8): place an empty can item at a source interactable, wait one event-tick or re-enter the room, retrieve a filled can. Sources are fixed geography — finding them is part of the puzzle. Multiple generators need fuel; routing fuel to the right generator at the right time is a two-body or loadout puzzle.
 
 ---
 

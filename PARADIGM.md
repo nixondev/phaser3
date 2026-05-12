@@ -83,7 +83,7 @@ requires adding a new noun — it requires arranging existing ones.
   target door; the matching door in the target room points back.
 - A door can have `requires`: items, characters, or world flags that
   must be true to pass.
-- Rooms can have reverb / music / dark properties (already wired).
+- Rooms can have reverb / music / weather / dark properties (already wired).
 
 ### Tiles
 
@@ -123,6 +123,24 @@ Items can be:
 - Dropped in a room (persists per `roomId`)
 - Held inside a container's slot
 - Held inside an entity (`holds` array on afflicted/animals/machines)
+
+- `tool` items may gate `visibilityRequires` conditions on interactables — meaning some targets are invisible and un-promptable until the right tool is in the active character's inventory. The spectra-vision adapter works this way: interactables tagged `visibilityRequires: [spectra_adapter]` are invisible in normal flashlight mode and only appear when the adapter is held.
+
+### Generators and fuel
+
+A generator is a machine entity with states `off → powered → depleted`. Powered state is temporary — it lasts for a fixed number of event-ticks (or until the player leaves and returns, whichever comes first). While powered, world flags set by the generator are active; doors or interactables reading those flags become passable.
+
+Fuel is an item with `category: fuel`. Using a fuel item on a generator transitions it from `off` to `powered`.
+
+**Fuel acquisition — the environmental source pattern:**
+```
+source_interactable.requires = [item with category: container, subcategory: empty]
+source_interactable.produces = [swap empty_can → fuel_can]
+```
+
+An empty container left at (or used on) a source — a leaking pipe, a storage drum, a residue pool — becomes a filled fuel container. The source is fixed geography. Finding sources, routing fuel to the right generator, and timing powered windows are all puzzle dimensions.
+
+> *This is a specialization of the container puzzle (#8). The container is the item; the source interactable is the "planter." The transformation trigger is immediate on E rather than time-based.*
 
 ### Item state machines (Phase 3)
 

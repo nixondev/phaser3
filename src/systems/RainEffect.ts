@@ -21,16 +21,6 @@ export class RainEffect implements WeatherEffect {
     this.graphics.setDepth(DEPTH.WEATHER);
     this.graphics.setVisible(false);
 
-    console.log('[RAIN] constructed', {
-      mode,
-      count,
-      depth: this.graphics.depth,
-      visible: this.graphics.visible,
-      scrollFactor: this.graphics.scrollFactorX,
-      W,
-      H,
-    });
-
     for (let i = 0; i < count; i++) {
       this.drops.push({
         x:     Math.random() * (W + 40) - 20,
@@ -40,23 +30,8 @@ export class RainEffect implements WeatherEffect {
     }
   }
 
-  private _loggedFirstFrame = false;
-
   update(delta: number): void {
     if (!this.running) return;
-    if (!this._loggedFirstFrame) {
-      this._loggedFirstFrame = true;
-      console.log('[RAIN] first update() frame', {
-        delta,
-        visible: this.graphics.visible,
-        depth: this.graphics.depth,
-        alpha: this.graphics.alpha,
-        x: this.graphics.x,
-        y: this.graphics.y,
-        scrollFactorX: this.graphics.scrollFactorX,
-        drops: this.drops.length,
-      });
-    }
     const dt    = Math.min(delta, 100) / 1000;
     const W     = GAME_CONFIG.WIDTH;
     const H     = GAME_CONFIG.HEIGHT;
@@ -86,12 +61,6 @@ export class RainEffect implements WeatherEffect {
   show(): void {
     this.running = true;
     this.graphics.setVisible(true);
-    console.log('[RAIN] show() called', {
-      visible: this.graphics.visible,
-      depth: this.graphics.depth,
-      active: this.graphics.active,
-      scene: this.graphics.scene?.sys.settings.key ?? 'NO_SCENE',
-    });
   }
 
   hide(): void {

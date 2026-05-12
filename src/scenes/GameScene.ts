@@ -134,6 +134,12 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     this.weatherManager.update(delta);
+    const cam = this.cameras.main;
+    this.darknessOverlay.update(
+      this.player.x - cam.scrollX,
+      this.player.y - cam.scrollY,
+      this.flashlight,
+    );
     if (this.isTransitioning) return;
     if (this.lockedDoorCooldown > 0) this.lockedDoorCooldown--;
 
@@ -188,13 +194,6 @@ export class GameScene extends Phaser.Scene {
     const facingAngle = this.player.getFacingAngle();
     const origin = this.player.getFlashlightOrigin();
     this.flashlight.update(origin.x, origin.y, facingAngle, delta);
-
-    const cam = this.cameras.main;
-    this.darknessOverlay.update(
-      this.player.x - cam.scrollX,
-      this.player.y - cam.scrollY,
-      this.flashlight,
-    );
 
     // Update afflicted AI
     this.afflictedGroup.getChildren().forEach((child) => {
@@ -265,6 +264,11 @@ export class GameScene extends Phaser.Scene {
 
       // Cured residents with an associatedRoom only appear in that room
       if (isCured && def.associatedRoom && def.associatedRoom !== currentRoomId) {
+        continue;
+      }
+
+      // Uncured residents never appear in their associatedRoom — that space is reserved for after the cure
+      if (!isCured && def.associatedRoom && def.associatedRoom === currentRoomId) {
         continue;
       }
 

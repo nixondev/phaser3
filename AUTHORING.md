@@ -295,7 +295,9 @@ you which entry in `rooms.json` to update.
 
 ---
 
-## Set up the room's audio
+## Set up the room's atmosphere
+
+### Audio
 
 In `rooms.json`, on the room object:
 
@@ -314,6 +316,35 @@ Reverb takes effect on the next door transition into this room. Test
 with **R** in editor mode (cycles through profiles live) and **`[`** /
 **`]`** (changes wet mix). Whatever you settle on, write back to
 `rooms.json`.
+
+### Weather and darkness
+
+```json
+{
+  "id": "your-room",
+  "weather": "rain-hard",
+  "dark": true
+}
+```
+
+| Field | Values | Effect |
+|-------|--------|--------|
+| `weather` | `"rain-mild"`, `"rain-hard"`, `"dripping"` | Enables weather overlay for the room. `dripping` also reads a `drips` array (world-space drip positions). |
+| `dark` | `true` / omit | Covers the room with a darkness overlay; only the player's ambient circle and flashlight cone are visible. |
+
+Both fields are read on every door transition — no code change needed,
+just edit `rooms.json`.
+
+**Important workflow note:** `rooms.json` is a static import in the
+Vite bundle. If you add a **brand-new field** (`weather`, `dark`, etc.)
+to a room definition for the first time, the dev server's cached bundle
+won't pick it up. You must:
+
+1. `Ctrl+C` to stop the dev server.
+2. `npm run dev` to restart.
+3. Hard-refresh the browser (`Ctrl+Shift+R`).
+
+Changing an existing field's value (e.g. tweaking `reverbMix`) hot-reloads normally.
 
 ---
 
@@ -347,9 +378,11 @@ For a brand-new room:
 6. **`I`** + click for each E-target. Paste into `rooms.json`.
    Set `tileFrame`, `text`, and `requires` for each.
 7. **`N`** + click for each afflicted. Set `name` and `role`.
-8. Add `reverb` (and optional `reverbMix`) to the room object.
+8. Add `reverb` (and optional `reverbMix`) to the room object. Add
+   `weather` and/or `dark` if the room needs them.
 9. Reload, walk through, fix anything that didn't render or interact
-   right.
+   right. If you added a new field like `weather` or `dark` for the
+   first time, restart the dev server and hard-refresh first.
 10. `git diff` to review. `git commit` when satisfied.
 
 ---

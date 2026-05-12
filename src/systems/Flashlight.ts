@@ -70,17 +70,9 @@ export class Flashlight {
     this.maskGraphics.clear();
     if (!this.on) return;
 
-    // Outer glow — wide, very faint
-    this.graphics.fillStyle(0xFFFFCC, 0.06);
+    // Subtle edge glow — just enough to hint the cone boundary
+    this.graphics.fillStyle(0xFFFFCC, 0.03);
     this.drawCone(this.graphics, originX, originY, facingAngle, RANGE * 1.15, HALF_ANGLE * 1.3);
-
-    // Main beam — normal range
-    this.graphics.fillStyle(0xFFFFCC, 0.16);
-    this.drawCone(this.graphics, originX, originY, facingAngle, RANGE, HALF_ANGLE);
-
-    // Bright core — narrow inner band
-    this.graphics.fillStyle(0xFFFFEE, 0.12);
-    this.drawCone(this.graphics, originX, originY, facingAngle, RANGE * 0.6, HALF_ANGLE * 0.45);
 
     // Prepare mask graphics (for RenderTexture erase)
     this.maskGraphics.fillStyle(0xffffff, 0.3);
@@ -97,9 +89,9 @@ export class Flashlight {
   renderMaskScreenSpace(target: Phaser.GameObjects.RenderTexture, screenX: number, screenY: number): void {
     if (!this.on) return;
     this.maskGraphics.clear();
-    this.maskGraphics.fillStyle(0xffffff, 0.3);
+    this.maskGraphics.fillStyle(0xffffff, 0.45);
     this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE * 1.2, HALF_ANGLE * 1.4);
-    this.maskGraphics.fillStyle(0xffffff, 0.7);
+    this.maskGraphics.fillStyle(0xffffff, 0.95);
     this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE, HALF_ANGLE);
     this.maskGraphics.fillStyle(0xffffff, 1.0);
     this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE * 0.7, HALF_ANGLE * 0.5);

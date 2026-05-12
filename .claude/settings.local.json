@@ -13,7 +13,8 @@
       "Bash(python3 -c ' *)",
       "Bash(dir \"C:\\\\Users\\\\flyki\\\\Music\\\\EchoThief\")",
       "Bash(git rm *)",
-      "Bash(rm -f public/assets/sprites/infected-*-2026*.png)"
+      "Bash(rm -f public/assets/sprites/infected-*-2026*.png)",
+      "Bash(dir \"C:\\\\Users\\\\flyki\\\\IdeaProjects\\\\claudeded\\\\*.md\" /b)"
     ]
   }
 }

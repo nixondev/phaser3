@@ -48,6 +48,12 @@ Retro pixel-art aesthetic at 320×240 resolution with 3× zoom.
    - Building shells, sealed gates, rooftops, tunnels, hidden passages, and future interiors all feed the same world-scale mechanism.
    - The final exit should feel like the culmination of many threads, not a detached final level.
 
+6. **The flashlight is the primary relationship**
+   - The flashlight is the player's only defense (repel), their only light source in dark rooms, and — once the spectra-vision adapter is found — their tool for reading the hidden infrastructure of the city.
+   - Battery management is the moment-to-moment tension of the game.
+   - The arc from survival tool → world reader is intentional. The same object that kept the afflicted away eventually reveals what the afflicted are.
+   - The spectra-vision adapter does not replace the repel function. It adds a reading mode. The player must choose when to use each.
+
 ---
 
 ## Commands
@@ -66,7 +72,7 @@ npm run migrate-tiles # Extract combined tileset into individual files
 
 ## Tech Stack
 
-- **Phaser 3** (v3.80.1) — game engine, arcade physics, tilemaps, scene management
+- **Phaser 3** (v3.90.0) — game engine, arcade physics, tilemaps, scene management
 - **TypeScript 5.4** — strict mode, ES2020 target
 - **Vite 5.4** — dev server and bundler
 - Assets: Tiled JSON tilemaps, PNG spritesheets (16×16 tiles)
@@ -109,6 +115,11 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/InputManager.ts` | Keyboard input; `getState()` for continuous, `getTapState()` for menus |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
 | `src/systems/MusicManager.ts` | MIDI music player — singleton; supports parallel proximity layers; reverb cycle |
+| `src/systems/WeatherManager.ts` | Creates and destroys weather effects on room transitions; data-driven from `rooms.json` |
+| `src/systems/RainEffect.ts` | Screen-space rain overlay (mild / hard modes) using Phaser Graphics |
+| `src/systems/DrippingEffect.ts` | World-space drip particles for cave/pipe rooms using Phaser Graphics |
+| `src/systems/DarknessOverlay.ts` | Full-screen RenderTexture darkness layer; erases ambient + flashlight cone each frame |
+| `src/systems/Flashlight.ts` | Cone detection, battery drain, glow rendering, screen-space RT mask for darkness |
 | `src/systems/DebugManager.ts` | F1 info HUD, F3 visual overlays, audio mixing & global debug shortcuts |
 | `src/systems/RoomEditorManager.ts` | F2 live tile/object editor: paint, layer isolation, drag, resize, save |
 | `src/lib/SpessaSynthPlayer.ts` | Wrapper for SpessaSynth MIDI/SF2 engine. |
@@ -259,6 +270,8 @@ State machine with 4 states:
 Each afflicted is defined in `rooms.json` with fields like: `id`, `name`, `role`, `x`, `y`, `behaviorLoop`.
 
 On room entry, `GameScene` spawns afflicted and checks `RoomStateManager` to set initial state.
+
+**`associatedRoom` spawn rule:** If an afflicted has an `associatedRoom` field, they are *excluded* from that room until they are cured. Once cured, they *only* appear in that room and vanish from their original location. This means the same afflicted entry can exist in both rooms in `rooms.json` — the engine gates visibility by cure state automatically.
 
 ---
 
@@ -454,8 +467,13 @@ Display:    320×240 @ 3× zoom, 16px tiles
 Player:     80 px/s speed, 8 fps animations
 Interact:   28px range
 Inventory:  2 rows × 6 cols, 14px slots
-Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, UI=40, TRANSITION=50
+Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, HIDDEN=31,
+            LIGHTING=35, WEATHER=37, UI=40, TRANSITION=50
 ```
+
+`HIDDEN` (31) is reserved for objects the flashlight will reveal.
+`LIGHTING` (35) is the darkness RenderTexture. `WEATHER` (37) sits above
+the darkness so rain/drips are always visible regardless of dark state.
 
 ---
 
@@ -516,6 +534,20 @@ That means:
 - **Outer city:** `city-street` — currently the main exterior puzzle field, sealed perimeter, building markers, future entrances, city landmarks
 - **Residential interiors:** currently centered on the protagonist house and a small set of early apartments / community spaces
 - **Future interiors:** can be added gradually without needing one-to-one exterior scale fidelity
+
+### Room atmosphere fields
+
+Each room in `rooms.json` may declare:
+
+| Field | Type | Effect |
+|-------|------|--------|
+| `weather` | `'rain-mild' \| 'rain-hard' \| 'dripping'` | Spawns the matching weather effect on room entry |
+| `drips` | `Array<{x,y}>` | Explicit drip positions for `dripping` mode; auto-scattered if omitted |
+| `dark` | `boolean` | Enables full-screen darkness overlay with ambient circle + flashlight cone cutout |
+| `reverb` | string | Room acoustic profile |
+| `reverbMix` | number 0..1 | Wet mix for reverb (default 0.3) |
+
+**Dev workflow note:** `rooms.json` is a static import resolved when the Vite dev server starts. Adding a *new* field (e.g. `dark`, `weather`) requires a server restart (`Ctrl+C` → `npm run dev`) and hard browser refresh (`Ctrl+Shift+R`) before the new field is visible at runtime. Changing *existing* values (coordinates, text) hot-reloads normally.
 
 ### Authoring rule
 
@@ -684,6 +716,9 @@ This section captures only what's still genuinely undecided.
 - **Final canonical solve route.** Specific story / characters /
   items / room geography. Will be authored when the tools support it
   end-to-end (Phase 8 in `ROADMAP.md`).
+- **The one gun / one bullet.** Where it is placed, whether the player can use it on an afflicted before they know curing is possible, and how that permanent outcome is handled narratively. The game should not flag this as a mistake in the moment. It simply is.
+- **Cave descent as win condition.** Whether reaching the exit requires descending to the containment chamber, or whether descent is optional depth. The answer affects the final convergence pattern (#10 in PARADIGM.md).
+- **What the contained thing is.** Geological, biological, or stranger. Undecided. Will be answered when the cave rooms are authored.
 
 ---
 
@@ -745,7 +780,9 @@ Resizing rebuilds the underlying Phaser tilemap (which is otherwise fixed-dimens
 2.  **Add to rooms.json**: Define the room in `src/data/rooms.json`.
     - Set `id`, `name`, `mapKey`, `tilemapPath`, `width`, `height`.
     - Set `reverb` (`city`/`indoor`/`sewer`/`hospital`/`substation`) and optional `reverbMix`.
+    - Optionally set `dark: true` for a darkness overlay, `weather` for rain/dripping effects.
     - Add `doors`, `interactables`, and `afflicted` as needed.
+    - **After adding any new field**, restart the dev server and hard-refresh the browser.
 3.  **Register Asset**: In `src/scenes/PreloadScene.ts`, add the `this.load.tilemapTiledJSON(room.mapKey, room.tilemapPath)` call.
 
 ### Adding an Item
@@ -778,3 +815,53 @@ Resizing rebuilds the underlying Phaser tilemap (which is otherwise fixed-dimens
 **City philosophy:** The city should feel larger than what is currently explorable. Placeholder shells, sealed entries, rooftop silhouettes, tunnels, and hidden passages should imply a wider mechanism that can be filled in over time.
 
 **Target feel:** A puzzle box that becomes elegant under mastery. First runs are exploratory and uncertain. Solved runs are sharp, deliberate, and surprisingly short.
+
+---
+
+## World Lore & Backstory
+
+This section is the canonical record of Warden's narrative foundation. It should inform all content authoring, environmental storytelling, and character dialog.
+
+### What Warden is
+
+Warden is a company town — part scientific facility, part mining/industrial operation — built around a containment site. The city's original purpose was to house, study, and contain something discovered beneath the ground. Over many generations, the town became self-sustaining: residents were born here, worked here, raised families here. The original mission faded from living memory into institutional habit. People worked at the facility because their parents did. Protocols were still followed — mostly, by rote — by technicians who had inherited procedures without inheriting context.
+
+The name predates anyone who can explain it. Nobody living in Warden knew why it was called that anymore. Finding out is part of what the player unravels.
+
+### What happened
+
+The thing in the caves beneath Warden was never gone. It was *managed*. Management lapsed — not through sabotage or malice, but through the slow erosion of understanding over generations. The contained thing expanded slightly past its boundary for the first time in decades. That was enough.
+
+The incident happened in a single room deep in the cave complex — the facility's primary containment chamber. The workers present when it broke containment were afflicted immediately and en masse. They did not die. They began to loop.
+
+The evacuation alarm sounded — the alarm that had been practiced for generations, the drill that most residents privately considered ceremonial. It worked. The city evacuated faithfully and completely, the outer gates were sealed by the people who fled.
+
+Except for the player, who is a very deep sleeper.
+
+### The afflicted
+
+The afflicted are not zombies. They are the facility workers and residents who were nearest the containment breach. They are still alive, still themselves in some fundamental sense — but locked in a behavioral loop they cannot escape unaided. Their patterns feel almost purposeful. They are disturbing because they seem *organized*, not feral.
+
+They can be cured. The player does not know this at the start.
+
+### The caves
+
+The cave system beneath Warden is the spine of the mystery. The surface town is the wreckage — empty homes, dead technology, afflicted wandering patterns. The caves are the answer. Every thread of the surface story points downward eventually.
+
+The player is not required to descend to finish the game, but the caves are where full understanding lives. A player who leaves without going down knows how to escape. A player who goes down knows *why*.
+
+### The flashlight adapter (spectra-vision)
+
+The spectra-vision adapter is not an invention — it is standard facility equipment. It was issued to personnel who understood what Warden was actually for, and used to read things invisible to the naked eye: resonance signatures, boundary conditions, the infrastructure of containment. The player finds one because someone who knew dropped it, or left it deliberately.
+
+With the adapter, the player can see what the original wardens could see. This recontextualizes every room already visited. Some of what it reveals concerns the afflicted directly.
+
+### The one gun
+
+Somewhere in Warden there is a gun with one bullet. It is findable before the player understands that the afflicted can be cured. If used on an afflicted resident, that is permanent. The game does not punish this mechanically. It remembers.
+
+### Open narrative questions (not yet decided)
+
+- What the thing in the caves actually is — geological, biological, or stranger.
+- Whether descending to the caves is required for the winning exit condition or strictly optional.
+- The exact nature of the final exit and what knowing the city's full history does or doesn't change about it.
