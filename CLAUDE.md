@@ -253,10 +253,11 @@ The long-term goal is that **world state is persistent, but player understanding
 
 ## Afflicted Entity (`src/entities/Afflicted.ts`)
 
-State machine with 4 states:
+State machine with 5 states:
 
 - **wandering** — drifts slowly near origin point, blue tint, gentle wobble. Emits proximity sound.
 - **agitated** — triggered at 40px player proximity, flees from player, red tint, fast wobble. Calms at 80px distance. Faster than wandering. Emits proximity sound.
+- **frightened** — triggered when the flashlight cone hits a wandering or agitated afflicted. They flee. Transitions back to wandering/agitated when out of cone.
 - **cured** — stands still, green tint. Interactable (E prompt). Proximity sound stops.
 - **recovered** — stands still, no tint. Interactable (repeat dialog / role delivery / character unlock logic). No proximity sound.
 
@@ -483,7 +484,7 @@ the darkness so rain/drips are always visible regardless of dark state.
 |-----|--------|
 | Arrow keys / WASD | Move |
 | E | Interact / use item / dismiss dialog |
-| F | Toggle Flashlight |
+| F | Toggle Flashlight (only if active character holds an item with `keyId: "flashlight"`) |
 | TAB | Toggle inventory |
 | Q | Drop selected inventory item |
 | ESC | Pause menu |
