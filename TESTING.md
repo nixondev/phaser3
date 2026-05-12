@@ -468,33 +468,6 @@ character inventories.
 
 ---
 
-## Save / Load
-
-42. Play until a door transition fires.
-
-**✓** `localStorage` now has `warden-save-v1`. Verify with browser
-devtools → Application → Local Storage.
-
-43. Hard-refresh the page (`Ctrl+Shift+R`). Title screen appears.
-
-**✓** *"Press C to Continue"* button is visible (green text). SPACE/ENTER
-still says "New Game".
-
-44. Press **C** → game loads directly into the room where the door
-    transition landed. Inventory is correct. Roster is correct. Visited
-    rooms are correct.
-
-45. Pick up an item. Refresh. Press **C** → item is NOT in inventory
-    (it was picked up after the last door save) ... actually this
-    depends on when auto-save fires. Confirm: picking up an item
-    triggers a save. So the item SHOULD be in inventory after C.
-
-46. Start a game. Open pause menu. Press **N** → *"New Game"* clears
-    save. Returns to title. Title no longer shows "Continue".
-
-47. Start a new game (Space/Enter). Play to a door transition. Press
-    **C** from the title after a refresh → resumes correctly.
-
 ---
 
 ## Regression after authoring
@@ -510,7 +483,7 @@ broke:
 - [ ] Flashlight toggles (with item in inventory)
 - [ ] Inventory opens and closes (Tab)
 - [ ] Pause menu opens and closes (Esc)
-- [ ] Title screen → Space → game → Esc → New Game → title (no crash)
+- [ ] Title screen → Space → game → Esc → resume → Esc again → title (no crash)
 
 ---
 
@@ -698,6 +671,5 @@ GAME
 [ ] flagConditions apply on room enter (tile removed / door unlocked)
 [ ] Entity holds drop at cure position
 [ ] Document reader opens from inventory, pages with E, closes with Esc
-[ ] Door save → refresh → C continues in correct room with correct state
-[ ] N in pause → title shows no Continue
+[ ] Refresh page → title shows no Continue button (no save game)
 ```

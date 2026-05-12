@@ -3,7 +3,6 @@ import { SCENES, GAME_CONFIG } from '@utils/Constants';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
-import { SaveManager } from '@utils/SaveManager';
 
 export class MenuScene extends Phaser.Scene {
   private started = false;
@@ -28,63 +27,22 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const hasSave = SaveManager.hasSave();
+    const prompt = this.add
+      .text(w / 2, h * 0.55, 'Press SPACE or ENTER', {
+        fontSize: '10px',
+        color: '#aaaaaa',
+        fontFamily: 'monospace',
+      })
+      .setOrigin(0.5);
 
-    if (hasSave) {
-      // Continue — restore saved state
-      const continueBtn = this.add
-        .text(w / 2, h * 0.50, 'Press C to Continue', {
-          fontSize: '10px',
-          color: '#88dd88',
-          fontFamily: 'monospace',
-        })
-        .setOrigin(0.5);
-
-      this.tweens.add({
-        targets: continueBtn,
-        alpha: 0.35,
-        duration: 700,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-
-      const newGameHint = this.add
-        .text(w / 2, h * 0.61, 'SPACE / ENTER — New Game', {
-          fontSize: '9px',
-          color: '#888888',
-          fontFamily: 'monospace',
-        })
-        .setOrigin(0.5);
-
-      this.tweens.add({
-        targets: newGameHint,
-        alpha: 0.3,
-        duration: 900,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-
-      this.input.keyboard!.on('keydown-C', () => this.continueGame());
-    } else {
-      const prompt = this.add
-        .text(w / 2, h * 0.55, 'Press SPACE or ENTER', {
-          fontSize: '10px',
-          color: '#aaaaaa',
-          fontFamily: 'monospace',
-        })
-        .setOrigin(0.5);
-
-      this.tweens.add({
-        targets: prompt,
-        alpha: 0.3,
-        duration: 800,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
-    }
+    this.tweens.add({
+      targets: prompt,
+      alpha: 0.3,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
 
     this.add
       .text(w / 2, h - 28, 'Arrow Keys / WASD to move', {
@@ -120,20 +78,10 @@ export class MenuScene extends Phaser.Scene {
     MusicManager.getInstance().resume();
   }
 
-  private continueGame(): void {
-    if (this.started) return;
-    this.resumeAudio();
-    this.started = true;
-    SaveManager.load(RoomStateManager.getInstance());
-    this.scene.start(SCENES.GAME);
-    this.scene.launch(SCENES.UI);
-  }
-
   private startGame(): void {
     if (this.started) return;
     this.resumeAudio();
     this.started = true;
-    SaveManager.clear();
     RoomStateManager.getInstance().reset();
     this.scene.start(SCENES.GAME);
     this.scene.launch(SCENES.UI);

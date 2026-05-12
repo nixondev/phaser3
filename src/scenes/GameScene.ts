@@ -13,7 +13,9 @@ import { MusicManager } from '@systems/MusicManager';
 import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef } from '@/types';
 import { debug } from '@utils/Debug';
 import { WeatherManager } from '@systems/WeatherManager';
-import { SaveManager } from '@utils/SaveManager';
+// SaveManager is intentionally not called — every run starts fresh.
+// The serialize/loadFrom infrastructure is preserved for future use.
+// import { SaveManager } from '@utils/SaveManager';
 import { checkRequires, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
 import { resolveTileSprite } from '@utils/TilesetResolver';
 
@@ -330,7 +332,7 @@ export class GameScene extends Phaser.Scene {
         ? `The ${item.name} shattered on impact.\n${afflicted.getName()} slumps against the wall.\n\n${clue}`
         : `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.\nThey seem to need some time alone.`;
       this.events.emit('dialog-open', msg);
-      SaveManager.save(this.rsm);
+
       return;
     }
 
@@ -631,7 +633,7 @@ export class GameScene extends Phaser.Scene {
       this.events.emit('dialog-open', inter.text);
       this.events.emit('hide-interact-prompt');
       this.emitInventoryChanged();
-      SaveManager.save(this.rsm);
+
       return;
     }
 
@@ -703,7 +705,7 @@ export class GameScene extends Phaser.Scene {
         this.events.emit('hide-interact-prompt');
         this.events.emit('roster-changed', this.rsm.getRoster());
         this.events.emit('inventory-changed', this.rsm.getInventory());
-        SaveManager.save(this.rsm);
+  
       } else {
         // Still in conversation — show current page, advance counter
         this.dialogOpen = true;
@@ -731,7 +733,7 @@ export class GameScene extends Phaser.Scene {
             if (produces.length > 0) {
               applyProduces(produces, this.rsm, this.rsm.getCurrentRoom());
               this.emitInventoryChanged();
-              SaveManager.save(this.rsm);
+        
             }
           }
         } else {
@@ -826,7 +828,7 @@ export class GameScene extends Phaser.Scene {
     this.events.emit('dialog-open', inter.text);
     this.events.emit('hide-interact-prompt');
     this.events.emit('inventory-changed', this.rsm.getInventory());
-    SaveManager.save(this.rsm);
+
   }
 
   private handleDroppedItemPickup(dropped: DroppedItemState): void {
@@ -841,7 +843,7 @@ export class GameScene extends Phaser.Scene {
     if (sprite) { sprite.destroy(); this.itemSprites.delete(dropped.instanceId); }
     this.events.emit('hide-interact-prompt');
     this.events.emit('inventory-changed', this.rsm.getInventory());
-    SaveManager.save(this.rsm);
+
   }
 
   // ── World item sprites ──────────────────────────────────────────────────
@@ -1043,7 +1045,7 @@ export class GameScene extends Phaser.Scene {
       this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
     }).then(() => {
       this.isTransitioning = false;
-      SaveManager.save(this.rsm);
+
     });
   }
 

@@ -518,21 +518,6 @@ all existing content is unaffected.
 
 ---
 
-## Save / Load
-
-The game auto-saves to `localStorage` at these points:
-- After every door transition
-- After picking up any item
-- After curing an afflicted
-- After recovery completes
-
-The title screen shows **"Press C to Continue"** when a save exists.
-**SPACE/ENTER** starts a fresh run (clearing the save). In the pause
-menu, **N** starts a new game from mid-session.
-
-As an author, this means your playtests persist between browser refreshes.
-Clear manually with **N** in the pause menu when you want a clean state.
-
 ---
 
 ## Quick reference — editor shortcuts

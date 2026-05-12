@@ -742,7 +742,9 @@ This section captures only what's still genuinely undecided.
   for now; harsher mode is a maybe-later.
 - Time semantics — **event-tick is universal**; exactly one bespoke
   session-active wall-clock deadline allowed.
-- Save/load — **full state snapshot** to localStorage, every save.
+- Save/load — **no save game**. Every run starts fresh; `rsm.reset()` fires
+  on game start. The serialize/loadFrom infrastructure exists but is not
+  wired — preserved in case the decision changes.
 - Feedback when E does nothing — **a generic hint-shaped string**
   confirming the target is real but never identifying the right item.
 - Visible-target rule — **every published interactable must render

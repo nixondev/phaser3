@@ -158,9 +158,10 @@ both reference it.
 - **Interaction resolver** (`InteractionResolver.ts`) — `checkRequires`, `consumeRequires`,
   `applyProduces`. Any interactable in `rooms.json` can now declare `requires` and `produces`
   to drive item consumption, flag changes, door unlocks, and item drops — no code per puzzle.
-- **Save/load** — full snapshot (flags, roster, inventories) to `localStorage` via
-  `SaveManager`. Auto-saves on door transition, pickup, cure, recovery. MenuScene shows
-  "C — Continue"; PauseScene has "N — New Game".
+- **Save/load infrastructure** — `RoomStateManager.serialize()` / `loadFrom()` and
+  `SaveManager` utility exist but are intentionally not wired. Every run starts fresh
+  with a full `rsm.reset()`. The infrastructure is preserved for future use if the
+  design decision changes.
 - **Cure flow**: auto-cure on collision if cure item in inventory; cure item usable from
   inventory menu on adjacent afflicted.
 - **Cure clue dialog**: `curedClue` in afflicted def shown in the cure message.
@@ -303,8 +304,8 @@ gaps to address organically during Phase 8 content authoring:
 - Drop-and-pickup is the only hand-off; no trade verb.
 
 **Still outstanding (not blocking):**
-- Save/load shipped (Phase 7). Roster, per-character inventories, and
-  world flags all serialized.
+- Save/load infrastructure exists (serialize/loadFrom/SaveManager) but is
+  not wired — by design. Every run starts fresh.
 - Characters left in a different room don't have a visual indicator
   on the map (low priority until Phase 5 world flags exist).
 

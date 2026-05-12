@@ -2,8 +2,6 @@ import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { RoomStateManager } from '@systems/RoomStateManager';
-import { SaveManager } from '@utils/SaveManager';
 
 export class PauseScene extends Phaser.Scene {
   private volumeText!: Phaser.GameObjects.Text;
@@ -52,7 +50,7 @@ export class PauseScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.volumeBar = this.add.graphics();
-    
+
     this.volumeText = this.add
       .text(w / 2, h / 2 + 55, '', {
         fontSize: '10px',
@@ -63,16 +61,8 @@ export class PauseScene extends Phaser.Scene {
 
     this.updateVolumeUI();
 
-    this.add
-      .text(w / 2, h / 2 + 78, 'N — New Game  (clears save)', {
-        fontSize: '9px',
-        color: '#aa6666',
-        fontFamily: 'monospace',
-      })
-      .setOrigin(0.5);
-
     const hint = this.add
-      .text(w / 2, h / 2 + 92, 'Press ESC to resume', {
+      .text(w / 2, h / 2 + 85, 'Press ESC to resume', {
         fontSize: '10px',
         color: '#888888',
         fontFamily: 'monospace',
@@ -87,49 +77,26 @@ export class PauseScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Keys
     this.input.keyboard!.once('keydown-ESC', () => {
       this.scene.stop();
       this.scene.resume(SCENES.GAME);
     });
 
-    this.input.keyboard!.once('keydown-N', () => {
-      SaveManager.clear();
-      RoomStateManager.getInstance().reset();
-      this.scene.stop(SCENES.UI);
-      this.scene.stop(SCENES.GAME);
-      this.scene.stop();
-      this.scene.start(SCENES.MENU);
-    });
-
-    this.input.keyboard!.on('keydown-MINUS', () => {
-      this.changeVolume(-0.1);
-    });
-
-    this.input.keyboard!.on('keydown-PLUS', () => {
-      this.changeVolume(0.1);
-    });
-
-    this.input.keyboard!.on('keydown-EQUALS', () => {
-      this.changeVolume(0.1);
-    });
+    this.input.keyboard!.on('keydown-MINUS', () => this.changeVolume(-0.1));
+    this.input.keyboard!.on('keydown-PLUS', () => this.changeVolume(0.1));
+    this.input.keyboard!.on('keydown-EQUALS', () => this.changeVolume(0.1));
   }
 
   private changeVolume(delta: number): void {
     const audio = AudioManager.getInstance();
-    const newVol = audio.getVolume() + delta;
-    audio.setVolume(newVol);
-    // Also update MusicManager/SpessaSynth master volume if needed
-    // MusicManager currently manages its own GainNodes but they are independent of Phaser's volume.
-    // However, if we resume the context on interaction, it helps with autoplay issues.
-    MusicManager.getInstance().resume(); 
+    audio.setVolume(audio.getVolume() + delta);
+    MusicManager.getInstance().resume();
     this.updateVolumeUI();
   }
 
   private updateVolumeUI(): void {
     const vol = AudioManager.getInstance().getVolume();
-    const percent = Math.round(vol * 100);
-    this.volumeText.setText(`Master Volume: ${percent}%`);
+    this.volumeText.setText(`Master Volume: ${Math.round(vol * 100)}%`);
 
     const w = GAME_CONFIG.WIDTH;
     const h = GAME_CONFIG.HEIGHT;
@@ -137,18 +104,11 @@ export class PauseScene extends Phaser.Scene {
     const y = h / 2 + 65;
 
     this.volumeBar.clear();
-    
-    // Background
     this.volumeBar.fillStyle(0x333333);
     this.volumeBar.fillRect(x, y, this.BAR_WIDTH, this.BAR_HEIGHT);
-    
-    // Progress
     this.volumeBar.fillStyle(0xffdd44);
     this.volumeBar.fillRect(x, y, this.BAR_WIDTH * vol, this.BAR_HEIGHT);
-    
-    // Border
     this.volumeBar.lineStyle(1, 0xffffff, 0.5);
     this.volumeBar.strokeRect(x, y, this.BAR_WIDTH, this.BAR_HEIGHT);
   }
-
 }
