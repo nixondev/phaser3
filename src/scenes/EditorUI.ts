@@ -10,7 +10,7 @@ import type { EditorScene } from './EditorScene';
  * destroy so MenuScene/GameScene render normally afterward.
  *
  * Buttons synthesize keyboard events to drive the existing key handlers in
- * RoomEditorManager and DebugManager â€” this keeps those managers untouched.
+ * RoomEditorManager and DebugManager — this keeps those managers untouched.
  */
 export class EditorUI {
   private root: HTMLDivElement;
@@ -169,7 +169,7 @@ export class EditorUI {
     const stamp = this.root.querySelector<HTMLButtonElement>('#editor-stamp');
     stamp?.addEventListener('click', () => synthesizeKey(84, 'KeyT'));
 
-    // Layer buttons â€” data-layer-key holds the digit ("1"/"2"/"3"); map to keyCode 49/50/51.
+    // Layer buttons — data-layer-key holds the digit ("1"/"2"/"3"); map to keyCode 49/50/51.
     this.root.querySelectorAll<HTMLButtonElement>('.layer-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const digit = btn.dataset.layerKey || '';
@@ -206,7 +206,7 @@ export class EditorUI {
         <span class="brand">WARDEN editor</span>
         <span class="sep">|</span>
         <span class="label">Room:</span>
-        <span id="editor-current-room" class="value">â€”</span>
+        <span id="editor-current-room" class="value">—</span>
         <span class="spacer"></span>
         <button id="editor-save" class="btn" title="Export tilemap to clipboard (X)">Save</button>
         <button id="editor-audit" class="btn" title="Audit room graph">Audit</button>
@@ -237,16 +237,16 @@ export class EditorUI {
         </div>
         <h3>Tools</h3>
         <div class="row col">
-          <button class="btn" id="editor-palette">P Â· Tile palette</button>
-          <button class="btn" id="editor-stamp">T Â· Stamp default room</button>
-          <button class="btn" id="editor-place-interactable">I Â· Place interactable</button>
-          <button class="btn" id="editor-place-npc">N Â· Place NPC</button>
-          <button class="btn" id="editor-pair-door">O Â· Pair doors</button>
+          <button class="btn" id="editor-palette">P · Tile palette</button>
+          <button class="btn" id="editor-stamp">T · Stamp default room</button>
+          <button class="btn" id="editor-place-interactable">I · Place interactable</button>
+          <button class="btn" id="editor-place-npc">N · Place NPC</button>
+          <button class="btn" id="editor-pair-door">O · Pair doors</button>
         </div>
         <h3>Views</h3>
         <div class="row col">
-          <button class="btn" id="editor-hud">H Â· HUD overlay</button>
-          <button class="btn" id="editor-visuals">V Â· Visual debug</button>
+          <button class="btn" id="editor-hud">H · HUD overlay</button>
+          <button class="btn" id="editor-visuals">V · Visual debug</button>
         </div>
         <h3>Cheatsheet</h3>
         <div class="cheats">
@@ -391,7 +391,7 @@ export class EditorUI {
  * KeyboardPlugin processes its event queue in a single batch on each Game
  * step. Inside that batch, `Key.onDown` sets `_justDown=true` and `Key.onUp`
  * sets it back to `false`. If both events are queued in the same frame, the
- * scene update reads `_justDown=false` and `JustDown(...)` returns false â€”
+ * scene update reads `_justDown=false` and `JustDown(...)` returns false —
  * the action never fires. Spacing the keyup out two animation frames keeps
  * the button click visible to one full editor update tick.
  *

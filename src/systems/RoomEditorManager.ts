@@ -211,7 +211,7 @@ export class RoomEditorManager {
            this.pairPhase === 'place-target';
   }
 
-  /** True when the live editor is open â€” GameScene uses this to suppress 1/2/3 char switching. */
+  /** True when the live editor is open — GameScene uses this to suppress 1/2/3 char switching. */
   isEditorActive(): boolean {
     return this.isActive;
   }
@@ -512,7 +512,7 @@ export class RoomEditorManager {
     return 'right';
   }
 
-  /** Always emit a single 16x16 door zone â€” one tile. Place two side-by-side
+  /** Always emit a single 16x16 door zone — one tile. Place two side-by-side
    *  in `rooms.json` if you want a 2-tile-wide opening. Direction only
    *  affects which side of the door the player lands on (`spawnX/Y`). */
   private buildDoorRect(tileX: number, tileY: number, direction: string, T: number)
@@ -714,40 +714,42 @@ export class RoomEditorManager {
       return;
     }
     this.paletteHighlight.clear();
-    
-    // Draw highlight for all selected tiles
+
     const T = this.paletteThumb;
-    const cols = this.selectedTiles[0].length;
-    const rows = this.selectedTiles.length;
-    
-    // We need to find the top-left tile's position in the palette grid
-    // Since we only track GIDs in selectedTiles, we should probably track the selection rect instead
-    // But for now, let's assume the first tile in selectedTiles is the one we use for positioning if it's a single tile,
-    // or we can just redraw based on the last known selection if we are in the middle of selecting.
-    
-    // Actually, let's just use a simpler way: find the range of indices
-    let minCol = 999, maxCol = -1, minRow = 999, maxRow = -1;
-    
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const gid = this.selectedTiles[r][c];
+    const map = this.roomManager.getMap();
+    const tilesets = map?.tilesets ?? [];
+
+    let minCol = 999, maxCol = -1, minVisRow = 999, maxVisRow = -1;
+
+    for (const rowData of this.selectedTiles) {
+      for (const gid of rowData) {
         if (gid <= 0) continue;
-        const i = gid - 1;
-        const col = i % this.paletteCols;
-        const row = Math.floor(i / this.paletteCols);
-        minCol = Math.min(minCol, col);
-        maxCol = Math.max(maxCol, col);
-        minRow = Math.min(minRow, row);
-        maxRow = Math.max(maxRow, row);
+
+        // Walk the same tileset list buildPalette() uses so label rows are
+        // included in the visual row calculation.
+        let currentRow = 0;
+        for (const ts of tilesets) {
+          if (gid >= ts.firstgid && gid < ts.firstgid + ts.total) {
+            const local = gid - ts.firstgid;
+            const col = local % this.paletteCols;
+            const visRow = currentRow + 1 + Math.floor(local / this.paletteCols); // +1 for label row
+            minCol = Math.min(minCol, col);
+            maxCol = Math.max(maxCol, col);
+            minVisRow = Math.min(minVisRow, visRow);
+            maxVisRow = Math.max(maxVisRow, visRow);
+            break;
+          }
+          currentRow += 1 + Math.ceil(ts.total / this.paletteCols);
+        }
       }
     }
 
     if (maxCol === -1) return;
 
     const x = this.palettePosX + 1 + minCol * T;
-    const y = this.palettePosY + 1 + minRow * T;
+    const y = this.palettePosY + 1 + minVisRow * T;
     const w = (maxCol - minCol + 1) * T;
-    const h = (maxRow - minRow + 1) * T;
+    const h = (maxVisRow - minVisRow + 1) * T;
 
     this.paletteHighlight.lineStyle(2, 0xffff00, 1);
     this.paletteHighlight.strokeRect(x, y, w, h);
@@ -881,18 +883,18 @@ export class RoomEditorManager {
   /** Returns the current editor status string for display in the DOM status bar. */
   public getStatusText(): string {
     const map = this.roomManager.getMap();
-    const dims = map ? `${map.width}Ã—${map.height}` : '?';
+    const dims = map ? `${map.width}×${map.height}` : '?';
     let ctx = '';
     if (this.placementMode) {
       ctx = `armed: ${this.placementMode}  (Esc cancel)`;
     } else if (this.pairPhase === 'pick-target') {
-      ctx = 'pair: pick target room  (â†‘â†“ Enter Esc)';
+      ctx = 'pair: pick target room  (↑↓ Enter Esc)';
     } else if (this.pairPhase === 'place-source') {
       ctx = `pair: click source door  (target=${this.pairTargetRoomId})`;
     } else if (this.pairPhase === 'place-target') {
       ctx = `pair: click target door in ${this.pairTargetRoomId}`;
     }
-    const base = `${this.currentLayerName} Â· tile ${this.selectedTileIndex} Â· ${this.activeTool} Â· ${dims}`;
+    const base = `${this.currentLayerName} · tile ${this.selectedTileIndex} · ${this.activeTool} · ${dims}`;
     return ctx ? `${ctx}  |  ${base}` : base;
   }
 
@@ -922,7 +924,7 @@ export class RoomEditorManager {
         }
       }
 
-      // 2. Check door zones (grab handle is 16Ã—16 at zone center)
+      // 2. Check door zones (grab handle is 16×16 at zone center)
       for (const zone of this.roomManager.getDoorZones()) {
         const body = zone.body as Phaser.Physics.Arcade.StaticBody;
         if (Phaser.Geom.Rectangle.Contains(
@@ -1085,7 +1087,7 @@ export class RoomEditorManager {
    * Reset the active room to a baseline: floor everywhere on Ground,
    * walls around the perimeter on Collision (interior cleared), and
    * Above cleared. Same content the `npm run new-room` script writes
-   * for fresh rooms â€” useful for re-baselining a room mid-edit. Git
+   * for fresh rooms — useful for re-baselining a room mid-edit. Git
    * is the undo button.
    */
   private stampDefaultRoom(): void {
@@ -1349,7 +1351,7 @@ export class RoomEditorManager {
     const roomId = this.roomManager.getCurrentRoomId();
 
     if (!id) {
-      console.warn('[Editor] Cannot persist drag â€” selected object has no id');
+      console.warn('[Editor] Cannot persist drag — selected object has no id');
       return;
     }
 
@@ -1374,7 +1376,7 @@ export class RoomEditorManager {
     } catch {
       copied = false;
     }
-    this.showToast(copied ? message : `${message}\n(clipboard blocked â€” see console)`);
+    this.showToast(copied ? message : `${message}\n(clipboard blocked — see console)`);
   }
 
   private showToast(message: string): void {
