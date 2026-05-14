@@ -67,6 +67,13 @@ export function applyProduces(
       case 'setFlag':
         rsm.setFlag(effect.value);
         break;
+      case 'setFlagDuration':
+        if (effect.duration !== undefined) {
+          rsm.setFlagWithDuration(effect.value, effect.duration);
+        } else {
+          rsm.setFlag(effect.value);
+        }
+        break;
       case 'clearFlag':
         rsm.clearFlag(effect.value);
         break;

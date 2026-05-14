@@ -159,6 +159,8 @@ export class EditorScene extends Phaser.Scene {
         const dy = pointer.y - this.panLast.y;
         cam.scrollX -= dx / cam.zoom;
         cam.scrollY -= dy / cam.zoom;
+        cam.scrollX = Math.round(cam.scrollX);
+        cam.scrollY = Math.round(cam.scrollY);
         this.panLast.set(pointer.x, pointer.y);
       }
     });
@@ -178,6 +180,8 @@ export class EditorScene extends Phaser.Scene {
       const cam = this.cameras.main;
       const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
       cam.setZoom(Phaser.Math.Clamp(cam.zoom * factor, MIN_ZOOM, MAX_ZOOM));
+      cam.scrollX = Math.round(cam.scrollX);
+      cam.scrollY = Math.round(cam.scrollY);
     };
     this.game.canvas.addEventListener('wheel', this.wheelHandler, { capture: true, passive: false });
   }
@@ -195,6 +199,8 @@ export class EditorScene extends Phaser.Scene {
     if (dx !== 0 || dy !== 0) {
       cam.scrollX += dx / cam.zoom;
       cam.scrollY += dy / cam.zoom;
+      cam.scrollX = Math.round(cam.scrollX);
+      cam.scrollY = Math.round(cam.scrollY);
     }
   }
 

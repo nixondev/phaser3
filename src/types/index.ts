@@ -46,8 +46,9 @@ export interface RequireCondition {
 
 /** One effect that fires after a successful interaction. */
 export interface ProduceEffect {
-  type: 'setFlag' | 'clearFlag' | 'unlockDoor' | 'dropItem';
+  type: 'setFlag' | 'clearFlag' | 'unlockDoor' | 'dropItem' | 'setFlagDuration';
   value: string;        // flag name / door id / item keyId
+  duration?: number;    // milliseconds — used by setFlagDuration
   x?: number;          // world position for dropItem
   y?: number;
   item?: ItemDef;       // item definition for dropItem

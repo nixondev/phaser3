@@ -17,6 +17,7 @@ export class RoomStateManager {
   private activeCharacterId = 'player';
   private characterInventories: Map<string, (ItemDef | null)[]> = new Map();
   private worldFlags: Set<string> = new Set();
+  private flagExpiries: Map<string, number> = new Map();
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -224,9 +225,32 @@ export class RoomStateManager {
 
   // ── World flags (Phase 5) ───────────────────────────────────────────────
 
-  setFlag(name: string): void { this.worldFlags.add(name); }
-  clearFlag(name: string): void { this.worldFlags.delete(name); }
-  hasFlag(name: string): boolean { return this.worldFlags.has(name); }
+  setFlag(name: string): void {
+    this.worldFlags.add(name);
+    this.flagExpiries.delete(name);
+  }
+
+  setFlagWithDuration(name: string, durationMs: number): void {
+    this.worldFlags.add(name);
+    this.flagExpiries.set(name, Date.now() + durationMs);
+  }
+
+  clearFlag(name: string): void {
+    this.worldFlags.delete(name);
+    this.flagExpiries.delete(name);
+  }
+
+  hasFlag(name: string): boolean {
+    if (!this.worldFlags.has(name)) return false;
+    const expiry = this.flagExpiries.get(name);
+    if (expiry !== undefined && Date.now() > expiry) {
+      this.worldFlags.delete(name);
+      this.flagExpiries.delete(name);
+      return false;
+    }
+    return true;
+  }
+
   getFlags(): Set<string> { return this.worldFlags; }
 
   // ── Tutorial ────────────────────────────────────────────────────────────
@@ -258,6 +282,7 @@ export class RoomStateManager {
       activeCharacterId: this.activeCharacterId,
       characterInventories: [...this.characterInventories.entries()],
       worldFlags: [...this.worldFlags],
+      flagExpiries: [...this.flagExpiries.entries()],
     };
   }
 
@@ -277,6 +302,7 @@ export class RoomStateManager {
     this.activeCharacterId = data.activeCharacterId ?? 'player';
     this.characterInventories = new Map(data.characterInventories ?? []);
     this.worldFlags = new Set(data.worldFlags ?? []);
+    this.flagExpiries = new Map(data.flagExpiries ?? []);
   }
 
   // ── Reset ───────────────────────────────────────────────────────────────
@@ -297,6 +323,7 @@ export class RoomStateManager {
     this.activeCharacterId = 'player';
     this.characterInventories.clear();
     this.worldFlags.clear();
+    this.flagExpiries.clear();
   }
 }
 

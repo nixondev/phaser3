@@ -51,8 +51,8 @@ export class UIScene extends Phaser.Scene {
 
     // Interact prompt
     this.interactPrompt = this.add
-      .text(w / 2, h - 80, '[ E ]', {
-        fontSize: '8px', color: '#ffdd44', fontFamily: 'monospace',
+      .text(w / 2, h - 40, 'E', {
+        fontSize: '8px', color: '#ffffff', fontFamily: 'monospace',
         backgroundColor: '#00000088', padding: { x: 6, y: 3 },
       })
       .setOrigin(0.5).setVisible(false);
