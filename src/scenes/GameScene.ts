@@ -913,7 +913,7 @@ export class GameScene extends Phaser.Scene {
     rt.setDepth(DEPTH.GROUND + 0.5);
     rt.setAlpha(0.75);
 
-    const gfx = this.make.graphics({ add: false });
+    const gfx = this.make.graphics();
     gfx.fillStyle(0x000000, 1);
 
     const layerData = collisionLayer.layer.data;
