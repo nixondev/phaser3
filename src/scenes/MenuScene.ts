@@ -53,7 +53,7 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.add
-      .text(w / 2, h - 56, '? — open editor', {
+      .text(w / 2, h - 56, '? — room editor     # — tile editor', {
         fontSize: '32px',
         color: '#888866',
         fontFamily: 'monospace',
@@ -64,6 +64,7 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
     this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
       if (event.key === '?') this.openEditor();
+      if (event.key === '#') this.openTileEditor();
     });
     this.input.on('pointerdown', () => this.resumeAudio());
   }
@@ -72,6 +73,12 @@ export class MenuScene extends Phaser.Scene {
     if (this.started) return;
     this.started = true;
     this.scene.start(SCENES.EDITOR);
+  }
+
+  private openTileEditor(): void {
+    if (this.started) return;
+    this.started = true;
+    this.scene.start(SCENES.TILE_EDITOR);
   }
 
   private resumeAudio(): void {

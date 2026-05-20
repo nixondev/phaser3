@@ -9,6 +9,7 @@ import { UIScene } from '@scenes/UIScene';
 import { PauseScene } from '@scenes/PauseScene';
 import { EditorScene } from '@scenes/EditorScene';
 import { DocumentReaderScene } from '@scenes/DocumentReaderScene';
+import { TileEditorScene } from '@scenes/TileEditorScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -26,7 +27,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: GAME_CONFIG.DEBUG,
     },
   },
-  scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, PauseScene, EditorScene, DocumentReaderScene],
+  scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, PauseScene, EditorScene, DocumentReaderScene, TileEditorScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

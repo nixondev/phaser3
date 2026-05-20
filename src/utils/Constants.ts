@@ -34,6 +34,7 @@ export const SCENES = {
   UI: 'UI',
   PAUSE: 'Pause',
   EDITOR: 'Editor',
+  TILE_EDITOR: 'TileEditor',
   DOCUMENT_READER: 'DocumentReader',
 } as const;
 

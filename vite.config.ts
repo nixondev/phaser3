@@ -112,9 +112,33 @@ function editorSavePlugin(): Plugin {
         }
       });
 
+      server.middlewares.use('/__editor/save-tile', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const chunks: Buffer[] = [];
+          await new Promise<void>((resolve, reject) => {
+            req.on('data', (c: Buffer) => chunks.push(c));
+            req.on('end', resolve);
+            req.on('error', reject);
+          });
+          const target = path.join(tilemapsDir, 'tileset.png');
+          if (!target.startsWith(tilemapsDir + path.sep)) {
+            send(res, 400, { error: 'path escapes tilemaps dir' });
+            return;
+          }
+          const buf = Buffer.concat(chunks);
+          const tmp = `${target}.tmp`;
+          await fsp.writeFile(tmp, buf);
+          await fsp.rename(tmp, target);
+          send(res, 200, { ok: true, bytes: buf.length });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile');
       }
     }
   };
