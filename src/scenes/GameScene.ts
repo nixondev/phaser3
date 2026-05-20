@@ -61,6 +61,8 @@ export class GameScene extends Phaser.Scene {
   // Standing sprites for inactive roster members present in the current room
   private parkedBodies: Map<string, Phaser.GameObjects.Sprite> = new Map();
 
+  private edgeShadows?: Phaser.GameObjects.Graphics;
+
   private weatherManager!: WeatherManager;
 
   constructor() {
@@ -126,6 +128,7 @@ export class GameScene extends Phaser.Scene {
     this.setupCollisions();
     this.setupCamera();
     applyFlagConditions(roomDef, this.rsm, this.roomManager);
+    this.buildEdgeShadows();
     this.createWorldItemSprites();
     this.spawnAfflicted();
     this.refreshParkedBodies();
@@ -798,6 +801,7 @@ export class GameScene extends Phaser.Scene {
         this.rsm.visitRoom(target.roomId);
         this.setupCollisions();
         this.setupCamera();
+        this.buildEdgeShadows();
         this.createWorldItemSprites();
         this.spawnAfflicted();
         doSwitch();
@@ -891,6 +895,62 @@ export class GameScene extends Phaser.Scene {
         .setDepth(DEPTH.ENTITIES);
       this.parkedBodies.set(char.id, sprite);
     }
+  }
+
+  private buildEdgeShadows(): void {
+    if (this.edgeShadows) {
+      this.edgeShadows.destroy();
+      this.edgeShadows = undefined;
+    }
+
+    const map = this.roomManager.getMap();
+    const collisionLayer = this.roomManager.getCollisionLayer();
+    if (!map || !collisionLayer) return;
+
+    const TILE = GAME_CONFIG.TILE_SIZE;
+    const STEPS = 14;
+    const MAX_ALPHA = 0.55;
+
+    const gfx = this.add.graphics();
+    gfx.setDepth(DEPTH.GROUND + 2);
+
+    const layerData = collisionLayer.layer.data;
+    const mapW = map.width;
+    const mapH = map.height;
+
+    const isSolid = (tx: number, ty: number): boolean => {
+      if (tx < 0 || ty < 0 || tx >= mapW || ty >= mapH) return false;
+      const t = layerData[ty]?.[tx];
+      return !!t && t.index >= 0;
+    };
+
+    for (let ty = 0; ty < mapH; ty++) {
+      for (let tx = 0; tx < mapW; tx++) {
+        if (!isSolid(tx, ty)) continue;
+
+        const px = tx * TILE;
+        const py = ty * TILE;
+
+        // Light from top-right: bottom and left edges cast stronger shadowswhere do you set the clor of
+
+        const edges = [
+          { check: isSolid(tx + 1, ty), x: px + TILE + 0, y: py,          w: 1,    h: TILE, dx: 1,  dy: 0,  peak: 0.48 },
+          { check: isSolid(tx - 1, ty), x: px - 1,         y: py,          w: 1,    h: TILE, dx: -1, dy: 0,  peak: 0.45 },
+          { check: isSolid(tx, ty + 1), x: px,              y: py + TILE,   w: TILE, h: 1,    dx: 0,  dy: 1,  peak: 0.48 },
+          { check: isSolid(tx, ty - 1), x: px,              y: py - 1,      w: TILE, h: 1,    dx: 0,  dy: -1, peak: 0.48 },
+        ];
+        for (const e of edges) {
+          if (e.check) continue;
+          for (let i = 0; i < STEPS; i++) {
+            const alpha = e.peak * Math.pow(1 - i / STEPS, 1.8);
+            gfx.fillStyle(0x000000, alpha);
+            gfx.fillRect(e.x + e.dx * i, e.y + e.dy * i, e.w, e.h);
+          }
+        }
+      }
+    }
+
+    this.edgeShadows = gfx;
   }
 
   private createWorldItemSprites(): void {
@@ -1027,6 +1087,7 @@ export class GameScene extends Phaser.Scene {
       this.setupCollisions();
       this.setupCamera();
       applyFlagConditions(this.roomManager.getCurrentRoomDef(), this.rsm, this.roomManager);
+      this.buildEdgeShadows();
       this.createWorldItemSprites();
       this.spawnAfflicted();
       this.refreshParkedBodies();
