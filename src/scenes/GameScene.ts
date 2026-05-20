@@ -62,7 +62,7 @@ export class GameScene extends Phaser.Scene {
   // Standing sprites for inactive roster members present in the current room
   private parkedBodies: Map<string, Phaser.GameObjects.Sprite> = new Map();
 
-  private edgeShadows?: Phaser.GameObjects.Graphics;
+  private edgeShadows?: Phaser.GameObjects.RenderTexture;
 
   private weatherManager!: WeatherManager;
 
@@ -905,49 +905,32 @@ export class GameScene extends Phaser.Scene {
     if (!map || !collisionLayer) return;
 
     const TILE = GAME_CONFIG.TILE_SIZE;
-    const STEPS = 14;
-    const MAX_ALPHA = 0.55;
+    const roomW = map.width * TILE;
+    const roomH = map.height * TILE;
 
-    const gfx = this.add.graphics();
-    gfx.setDepth(DEPTH.GROUND + 2);
+    const rt = this.add.renderTexture(0, 0, roomW, roomH);
+    rt.setOrigin(0, 0);
+    rt.setDepth(DEPTH.GROUND + 0.5);
+    rt.setAlpha(0.75);
+
+    const gfx = this.make.graphics({ add: false });
+    gfx.fillStyle(0x000000, 1);
 
     const layerData = collisionLayer.layer.data;
-    const mapW = map.width;
-    const mapH = map.height;
-
-    const isSolid = (tx: number, ty: number): boolean => {
-      if (tx < 0 || ty < 0 || tx >= mapW || ty >= mapH) return false;
-      const t = layerData[ty]?.[tx];
-      return !!t && t.index >= 0;
-    };
-
-    for (let ty = 0; ty < mapH; ty++) {
-      for (let tx = 0; tx < mapW; tx++) {
-        if (!isSolid(tx, ty)) continue;
-
-        const px = tx * TILE;
-        const py = ty * TILE;
-
-        // Light from top-right: bottom and left edges cast stronger shadowswhere do you set the clor of
-
-        const edges = [
-          { check: isSolid(tx + 1, ty), x: px + TILE + 0, y: py,          w: 1,    h: TILE, dx: 1,  dy: 0,  peak: 0.38 },
-          { check: isSolid(tx - 1, ty), x: px - 1,         y: py,          w: 1,    h: TILE, dx: -1, dy: 0,  peak: 0.40 },
-          { check: isSolid(tx, ty + 1), x: px,              y: py + TILE,   w: TILE, h: 1,    dx: 0,  dy: 1,  peak: 0.38 },
-          { check: isSolid(tx, ty - 1), x: px,              y: py - 1,      w: TILE, h: 1,    dx: 0,  dy: -1, peak: 0.40 },
-        ];
-        for (const e of edges) {
-          if (e.check) continue;
-          for (let i = 0; i < STEPS; i++) {
-            const alpha = e.peak * Math.pow(1 - i / STEPS, 1.8);
-            gfx.fillStyle(0x000000, alpha);
-            gfx.fillRect(e.x + e.dx * i, e.y + e.dy * i, e.w, e.h);
-          }
-        }
+    for (let ty = 0; ty < map.height; ty++) {
+      for (let tx = 0; tx < map.width; tx++) {
+        const tile = layerData[ty]?.[tx];
+        if (!tile || tile.index < 0) continue;
+        gfx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
       }
     }
 
-    this.edgeShadows = gfx;
+    rt.draw(gfx, 0, 0);
+    gfx.destroy();
+
+    rt.postFX.addBlur(100, 25, 25, 0.2, 0x000000, 5);
+
+    this.edgeShadows = rt;
   }
 
   private createWorldItemSprites(): void {
