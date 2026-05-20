@@ -39,6 +39,7 @@ export class GameScene extends Phaser.Scene {
   private cureCooldown = false;  // prevents multi-afflicted same-frame double-trigger
   private lockedDoorCooldown = 0;
   private itemSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
+  private itemShadows: Map<string, Phaser.GameObjects.Graphics> = new Map();
 
   // Afflicted
   private afflictedGroup!: Phaser.Physics.Arcade.Group;
@@ -615,15 +616,13 @@ export class GameScene extends Phaser.Scene {
           return;
         }
         this.rsm.collectItem(inter.id);
-        const sprite = this.itemSprites.get(inter.id);
-        if (sprite) { sprite.destroy(); this.itemSprites.delete(inter.id); }
+        this.removeItemSprite(inter.id);
       }
 
       // Mark consumed interactables as collected so they disappear
       if (inter.consumed) {
         this.rsm.collectItem(inter.id);
-        const sprite = this.itemSprites.get(inter.id);
-        if (sprite) { sprite.destroy(); this.itemSprites.delete(inter.id); }
+        this.removeItemSprite(inter.id);
       }
 
       // Spawn world sprites for any dropped items
@@ -826,8 +825,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.rsm.collectItem(inter.id);
-    const sprite = this.itemSprites.get(inter.id);
-    if (sprite) { sprite.destroy(); this.itemSprites.delete(inter.id); }
+    this.removeItemSprite(inter.id);
     this.dialogOpen = true;
     this.events.emit('dialog-open', inter.text);
     this.events.emit('hide-interact-prompt');
@@ -843,8 +841,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.rsm.removeDroppedItem(this.rsm.getCurrentRoom(), dropped.instanceId);
-    const sprite = this.itemSprites.get(dropped.instanceId);
-    if (sprite) { sprite.destroy(); this.itemSprites.delete(dropped.instanceId); }
+    this.removeItemSprite(dropped.instanceId);
     this.events.emit('hide-interact-prompt');
     this.events.emit('inventory-changed', this.rsm.getInventory());
 
@@ -956,6 +953,8 @@ export class GameScene extends Phaser.Scene {
   private createWorldItemSprites(): void {
     this.itemSprites.forEach((s) => s.destroy());
     this.itemSprites.clear();
+    this.itemShadows.forEach((s) => s.destroy());
+    this.itemShadows.clear();
     const roomDef = this.roomManager.getCurrentRoomDef();
     for (const inter of roomDef.interactables || []) {
       if (inter.consumed && this.rsm.isItemCollected(inter.id)) continue;
@@ -974,6 +973,30 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createItemSprite(id: string, textureKey: string, frame: number, x: number, y: number): void {
+    const shadow = this.add.graphics();
+    shadow.setPosition(x, y + 32);
+    shadow.setDepth(DEPTH.ENTITIES - 1);
+    const rings = [
+      { w: 28, h: 9,  alpha: 0.38 },
+      { w: 36, h: 13, alpha: 0.18 },
+      { w: 44, h: 17, alpha: 0.09 },
+      { w: 52, h: 21, alpha: 0.04 },
+    ];
+    for (const r of rings) {
+      shadow.fillStyle(0x000000, r.alpha);
+      shadow.fillEllipse(0, 0, r.w, r.h);
+    }
+    this.tweens.add({
+      targets: shadow,
+      scaleX: 0.55,
+      scaleY: 0.55,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    this.itemShadows.set(id, shadow);
+
     const sprite = this.add.sprite(x, y, textureKey, frame);
     sprite.setScale(GAME_CONFIG.WORLD_SCALE);
     sprite.setDepth(DEPTH.ENTITIES);
@@ -986,6 +1009,13 @@ export class GameScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
     this.itemSprites.set(id, sprite);
+  }
+
+  private removeItemSprite(id: string): void {
+    const sprite = this.itemSprites.get(id);
+    if (sprite) { sprite.destroy(); this.itemSprites.delete(id); }
+    const shadow = this.itemShadows.get(id);
+    if (shadow) { shadow.destroy(); this.itemShadows.delete(id); }
   }
 
   private createSignSprite(id: string, textureKey: string, frame: number, x: number, y: number): void {
