@@ -39,14 +39,14 @@ export interface DroppedItemState {
 
 /** One condition that must be true before an interaction can succeed. */
 export interface RequireCondition {
-  type: 'item' | 'character' | 'flag';
+  type: 'item' | 'character' | 'flag' | 'flagAbsent';
   value: string;        // keyId for item, character id, or flag name
   consume?: boolean;    // if true and type===item, remove from inventory on success
 }
 
 /** One effect that fires after a successful interaction. */
 export interface ProduceEffect {
-  type: 'setFlag' | 'clearFlag' | 'unlockDoor' | 'dropItem' | 'setFlagDuration';
+  type: 'setFlag' | 'clearFlag' | 'unlockDoor' | 'dropItem' | 'setFlagDuration' | 'setFlagAfterDelay' | 'toggleFlag';
   value: string;        // flag name / door id / item keyId
   duration?: number;    // milliseconds — used by setFlagDuration
   x?: number;          // world position for dropItem
@@ -67,6 +67,10 @@ export interface InteractableDef {
   requires?: RequireCondition[];
   produces?: ProduceEffect[];
   consumed?: boolean;
+  hint?: string;
+  textAfter?: string;
+  pages?: (string | InteractablePage)[];
+  textSequence?: (string | TextSequenceEntry)[];
 }
 
 export type AfflictedStatus = 'wandering' | 'agitated' | 'frightened' | 'cured' | 'recovered';
@@ -177,3 +181,16 @@ export interface InputState {
   char4: boolean;
 }
 
+
+
+export interface InteractablePage {
+  text: string;
+  produces?: ProduceEffect[];
+}
+
+
+export interface TextSequenceEntry {
+  text: string;
+  produces?: ProduceEffect[];
+  afterDelay?: number;
+}

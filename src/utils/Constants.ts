@@ -1,16 +1,16 @@
 export const GAME_CONFIG = {
-  WIDTH: 320,
-  HEIGHT: 240,
-  TILE_SIZE: 16,
-  ASSET_SCALE: 4,        // 16 * 4 = 64px upscaled assets
-  WORLD_SCALE: 1 / 4,   // brings 64px assets down to 16px world units (= 1 / ASSET_SCALE)
-  ENTITY_SCALE: 1.5,    // scale multiplier for characters relative to a tile
-  ENTITY_WORLD_SCALE: 1.5 / 4, // entity sprite scale in world space (= ENTITY_SCALE / ASSET_SCALE)
+  WIDTH: 1280,
+  HEIGHT: 960,
+  TILE_SIZE: 64,
+  ASSET_SCALE: 1,        // tiles displayed at native 64px
+  WORLD_SCALE: 1,        // no downscale — 64px assets = 64px world units
+  ENTITY_SCALE: 1.5,     // scale multiplier for characters relative to a tile
+  ENTITY_WORLD_SCALE: 1.5, // entity sprite scale in world space (= ENTITY_SCALE / ASSET_SCALE)
   DEBUG: false,
 } as const;
 
 export const PLAYER_CONFIG = {
-  SPEED: 80,
+  SPEED: 320,
   ANIM_FPS: 8,
 } as const;
 
@@ -40,7 +40,7 @@ export const SCENES = {
 export const ROOM_CONFIG = {
   DEFAULT_ROOM: 'entrance',
   TRANSITION_DURATION: 300,
-  DOOR_ACTIVATION_DISTANCE: 8,
+  DOOR_ACTIVATION_DISTANCE: 32,
 } as const;
 
 export const CAMERA_CONFIG = {
@@ -48,11 +48,11 @@ export const CAMERA_CONFIG = {
 } as const;
 
 export const INTERACT_CONFIG = {
-  DISTANCE: 28,
+  DISTANCE: 112,
 } as const;
 
 export const FLASHLIGHT_CONFIG = {
-  RANGE: 96,            // pixels (~6 tiles)
+  RANGE: 384,           // pixels (~6 tiles at 64px/tile)
   HALF_ANGLE: Math.PI / 5, // 36° each side = 72° total beam
   BATTERY_MAX: 100,
   BATTERY_DRAIN_RATE: 2.0, // percent per second
@@ -61,7 +61,7 @@ export const FLASHLIGHT_CONFIG = {
 export const INVENTORY_CONFIG = {
   ROWS: 2,
   COLS: 6,
-  SLOT_SIZE: 14,
+  SLOT_SIZE: 56,
 } as const;
 
 export const USE_MIDI_MUSIC = true;

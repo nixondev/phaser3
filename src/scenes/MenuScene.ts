@@ -20,7 +20,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(w / 2, h / 3, 'WARDEN', {
-        fontSize: '28px',
+        fontSize: '112px',
         color: '#ffffff',
         fontFamily: 'monospace',
         fontStyle: 'bold',
@@ -29,7 +29,7 @@ export class MenuScene extends Phaser.Scene {
 
     const prompt = this.add
       .text(w / 2, h * 0.55, 'Press SPACE or ENTER', {
-        fontSize: '10px',
+        fontSize: '40px',
         color: '#aaaaaa',
         fontFamily: 'monospace',
       })
@@ -45,16 +45,16 @@ export class MenuScene extends Phaser.Scene {
     });
 
     this.add
-      .text(w / 2, h - 28, 'Arrow Keys / WASD to move', {
-        fontSize: '8px',
+      .text(w / 2, h - 112, 'Arrow Keys / WASD to move', {
+        fontSize: '32px',
         color: '#666666',
         fontFamily: 'monospace',
       })
       .setOrigin(0.5);
 
     this.add
-      .text(w / 2, h - 14, '? — open editor', {
-        fontSize: '8px',
+      .text(w / 2, h - 56, '? — open editor', {
+        fontSize: '32px',
         color: '#888866',
         fontFamily: 'monospace',
       })

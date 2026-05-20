@@ -85,39 +85,39 @@ export class DebugManager {
     
     const bg = this.scene.add.graphics();
     bg.fillStyle(0x000000, 0.9);
-    bg.fillRect(0, 0, 160, 190);
+    bg.fillRect(0, 0, 640, 760);
     this.overlayContainer.add(bg);
-    
-    this.infoText = this.scene.add.text(3, 3, '', {
-      fontSize: '8px',
+
+    this.infoText = this.scene.add.text(12, 12, '', {
+      fontSize: '32px',
       color: '#ffffff',
       fontFamily: 'Verdana, Arial, sans-serif'
     });
     this.overlayContainer.add(this.infoText);
 
     // Warp picker overlay (centered, hidden by default)
-    this.warpOverlay = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 30);
+    this.warpOverlay = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 120);
     this.warpOverlay.setScrollFactor(0).setDepth(DEPTH.UI + 250).setVisible(false);
     const warpBg = this.scene.add.graphics();
     warpBg.fillStyle(0x000000, 0.92);
-    warpBg.fillRect(-95, -8, 190, 200);
-    warpBg.lineStyle(1, 0xffff00, 1);
-    warpBg.strokeRect(-95, -8, 190, 200);
+    warpBg.fillRect(-380, -32, 760, 800);
+    warpBg.lineStyle(4, 0xffff00, 1);
+    warpBg.strokeRect(-380, -32, 760, 800);
     this.warpOverlay.add(warpBg);
     this.warpHint = this.scene.add.text(0, 0, 'Warp to room  [Up/Down] [Enter] [Esc]', {
-      fontSize: '8px', color: '#ffff00', fontFamily: 'Verdana, Arial, sans-serif'
+      fontSize: '32px', color: '#ffff00', fontFamily: 'Verdana, Arial, sans-serif'
     }).setOrigin(0.5, 0);
     this.warpOverlay.add(this.warpHint);
-    this.warpListText = this.scene.add.text(-90, 14, '', {
-      fontSize: '8px', color: '#ffffff', fontFamily: 'Verdana, Arial, sans-serif'
+    this.warpListText = this.scene.add.text(-360, 56, '', {
+      fontSize: '32px', color: '#ffffff', fontFamily: 'Verdana, Arial, sans-serif'
     });
     this.warpOverlay.add(this.warpListText);
 
-    this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 6, '', {
-      fontSize: '8px',
+    this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 24, '', {
+      fontSize: '32px',
       color: '#000000',
       backgroundColor: '#ffff66',
-      padding: { x: 5, y: 3 },
+      padding: { x: 20, y: 12 },
       align: 'center',
       fontFamily: 'Verdana, Arial, sans-serif'
     })
@@ -283,7 +283,7 @@ export class DebugManager {
     // Draw collision layer
     const collisionLayer = this.roomManager.getCollisionLayer();
     if (collisionLayer) {
-      this.debugGraphics.lineStyle(1, 0xff0000, 0.5);
+      this.debugGraphics.lineStyle(4, 0xff0000, 0.5);
       collisionLayer.forEachTile(tile => {
         if (tile.collides) {
           const x = tile.getLeft();
@@ -306,29 +306,27 @@ export class DebugManager {
         targetRoom === 'TODO' || targetDoor === 'TODO' ||
         !allRooms[targetRoom] ||
         !(allRooms[targetRoom].doors || []).some((d: any) => d.id === targetDoor);
-      this.debugGraphics.lineStyle(2, broken ? 0xff3333 : 0x00ffff, 0.9);
+      this.debugGraphics.lineStyle(8, broken ? 0xff3333 : 0x00ffff, 0.9);
       this.debugGraphics.strokeRect(body.x, body.y, body.width, body.height);
     });
 
     // Draw interactables
     const roomDef = this.roomManager.getCurrentRoomDef();
     if (roomDef.interactables) {
-      this.debugGraphics.lineStyle(1, 0xffff00, 0.6);
+      this.debugGraphics.lineStyle(4, 0xffff00, 0.6);
       roomDef.interactables.forEach(inter => {
         this.debugGraphics.strokeCircle(inter.x, inter.y, INTERACT_CONFIG.DISTANCE);
-        this.debugGraphics.strokeRect(inter.x - 2, inter.y - 2, 4, 4);
+        this.debugGraphics.strokeRect(inter.x - 8, inter.y - 8, 16, 16);
       });
     }
 
     // Draw Afflicted radii
     const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.GameObjects.Group;
     if (afflictedGroup) {
-      this.debugGraphics.lineStyle(1, 0xff00ff, 0.6);
+      this.debugGraphics.lineStyle(4, 0xff00ff, 0.6);
       afflictedGroup.getChildren().forEach(child => {
         const a = child as any;
-        // Draw wander range (if we had it easily accessible)
-        // For now just draw a circle around them
-        this.debugGraphics.strokeCircle(a.x, a.y, 32);
+        this.debugGraphics.strokeCircle(a.x, a.y, 128);
       });
     }
   }

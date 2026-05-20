@@ -40,8 +40,8 @@ export class DrippingEffect implements WeatherEffect {
         x:       p.x,
         y:       p.y,
         originY: p.y,
-        maxY:    Math.min(p.y + Phaser.Math.Between(20, 48), b.height - 4),
-        speed:   Phaser.Math.Between(30, 60),
+        maxY:    Math.min(p.y + Phaser.Math.Between(80, 192), b.height - 16),
+        speed:   Phaser.Math.Between(120, 240),
         timer:   0,
         delay:   Phaser.Math.Between(800, 3500),
         active:  false,
@@ -69,8 +69,8 @@ export class DrippingEffect implements WeatherEffect {
       }
 
       d.y += d.speed * dt;
-      // Draw a 2×2 drop
-      this.graphics.fillRect(d.x - 1, d.y - 1, 2, 2);
+      // Draw an 8×8 drop
+      this.graphics.fillRect(d.x - 4, d.y - 4, 8, 8);
 
       if (d.y >= d.maxY) {
         d.active = false;

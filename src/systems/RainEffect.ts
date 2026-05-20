@@ -25,7 +25,7 @@ export class RainEffect implements WeatherEffect {
       this.drops.push({
         x:     Math.random() * (W + 40) - 20,
         y:     Math.random() * H,
-        speed: this.mild ? 100 + Math.random() * 70 : 230 + Math.random() * 100,
+        speed: this.mild ? 400 + Math.random() * 280 : 920 + Math.random() * 400,
       });
     }
   }
@@ -36,12 +36,12 @@ export class RainEffect implements WeatherEffect {
     const W     = GAME_CONFIG.WIDTH;
     const H     = GAME_CONFIG.HEIGHT;
     // streak length and horizontal slant per vertical pixel
-    const len   = this.mild ? 4 : 6;
+    const len   = this.mild ? 16 : 24;
     const slant = this.mild ? 0 : len * 0.36;   // ~20° angle for hard rain
     const alpha = this.mild ? 0.35 : 0.55;
 
     this.graphics.clear();
-    this.graphics.lineStyle(1, 0xaaccff, alpha);
+    this.graphics.lineStyle(4, 0xaaccff, alpha);
 
     for (const d of this.drops) {
       d.y += d.speed * dt;

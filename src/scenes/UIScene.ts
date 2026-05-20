@@ -2,13 +2,14 @@
 import { SCENES, GAME_CONFIG, INVENTORY_CONFIG } from '@utils/Constants';
 import { ItemDef, CharacterState } from '@/types';
 import { resolveTileSprite } from '@utils/TilesetResolver';
+import { GameScene } from './GameScene';
 
 const COLS = INVENTORY_CONFIG.COLS;
 const ROWS = INVENTORY_CONFIG.ROWS;
 const SS = INVENTORY_CONFIG.SLOT_SIZE;
 
-const GRID_X = GAME_CONFIG.WIDTH - COLS * SS - 4;
-const GRID_Y = 4;
+const GRID_X = GAME_CONFIG.WIDTH - COLS * SS - 16;
+const GRID_Y = 16;
 
 export class UIScene extends Phaser.Scene {
   private roomNameText!: Phaser.GameObjects.Text;
@@ -46,32 +47,32 @@ export class UIScene extends Phaser.Scene {
 
     // Room name
     this.roomNameText = this.add
-      .text(w / 2, 20, '', { fontSize: '10px', color: '#ffffff', fontFamily: 'monospace' })
+      .text(w / 2, 80, '', { fontSize: '40px', color: '#ffffff', fontFamily: 'monospace' })
       .setOrigin(0.5).setAlpha(0);
 
     // Interact prompt
     this.interactPrompt = this.add
-      .text(w / 2, h - 40, 'E', {
-        fontSize: '8px', color: '#ffffff', fontFamily: 'monospace',
-        backgroundColor: '#00000088', padding: { x: 6, y: 3 },
+      .text(w / 2, h - 160, 'E', {
+        fontSize: '32px', color: '#ffffff', fontFamily: 'monospace',
+        backgroundColor: '#00000088', padding: { x: 24, y: 12 },
       })
       .setOrigin(0.5).setVisible(false);
     this.tweens.add({ targets: this.interactPrompt, alpha: { from: 1, to: 0.5 }, duration: 600, yoyo: true, repeat: -1 });
 
     // Dialog box
-    const boxH = 60;
-    const boxY = h - boxH / 2 - 8;
-    const bg = this.add.rectangle(w / 2, boxY, w - 16, boxH, 0x111133, 0.92).setStrokeStyle(2, 0x4488cc);
-    this.dialogText = this.add.text(16, boxY - boxH / 2 + 8, '', {
-      fontSize: '9px', color: '#ffffff', fontFamily: 'monospace', lineSpacing: 4, wordWrap: { width: w - 40 },
+    const boxH = 240;
+    const boxY = h - boxH / 2 - 32;
+    const bg = this.add.rectangle(w / 2, boxY, w - 64, boxH, 0x111133, 0.85).setStrokeStyle(8, 0x4488cc);
+    this.dialogText = this.add.text(64, boxY - boxH / 2 + 32, '', {
+      fontSize: '36px', color: '#ffffff', fontFamily: 'monospace', lineSpacing: 16, wordWrap: { width: w - 160 },
     });
-    const hint = this.add.text(w - 16, boxY + boxH / 2 - 6, '[E / ESC]', {
-      fontSize: '7px', color: '#8888aa', fontFamily: 'monospace',
+    const hint = this.add.text(w - 64, boxY + boxH / 2 - 24, '[E / ESC]', {
+      fontSize: '28px', color: '#8888aa', fontFamily: 'monospace',
     }).setOrigin(1, 1);
     this.dialogBox = this.add.container(0, 0, [bg, this.dialogText, hint]).setVisible(false);
 
     // â”€â”€ Battery Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    this.batteryLabel = this.add.text(4, 4, 'PWR', { fontSize: '6px', color: '#8888aa', fontFamily: 'monospace' }).setVisible(false);
+    this.batteryLabel = this.add.text(16, 16, 'PWR', { fontSize: '24px', color: '#8888aa', fontFamily: 'monospace' }).setVisible(false);
     this.batteryBar = this.add.graphics().setVisible(false);
     this.drawBattery(100);
 
@@ -89,25 +90,75 @@ export class UIScene extends Phaser.Scene {
 
     // Cursor
     this.cursorRect = this.add.rectangle(0, 0, SS - 1, SS - 1)
-      .setStrokeStyle(2, 0xffdd44).setFillStyle(0xffdd44, 0.12).setVisible(false);
+      .setStrokeStyle(8, 0xffdd44).setFillStyle(0xffdd44, 0.12).setVisible(false);
 
     // Item name + hints
-    this.itemNameText = this.add.text(GRID_X, GRID_Y + ROWS * SS + 2, '', {
-      fontSize: '7px', color: '#aaaacc', fontFamily: 'monospace',
+    this.itemNameText = this.add.text(GRID_X, GRID_Y + ROWS * SS + 8, '', {
+      fontSize: '28px', color: '#aaaacc', fontFamily: 'monospace',
     });
-    this.invModeText = this.add.text(GRID_X + (COLS * SS) / 2, GRID_Y + ROWS * SS + 10, '', {
-      fontSize: '6px', color: '#666688', fontFamily: 'monospace',
+    this.invModeText = this.add.text(GRID_X + (COLS * SS) / 2, GRID_Y + ROWS * SS + 40, '', {
+      fontSize: '24px', color: '#666688', fontFamily: 'monospace',
     }).setOrigin(0.5, 0);
     this.updateInvHint();
 
     // â”€â”€ Avatar bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.avatarContainer = this.add.container(0, 0);
-    this.avatarHighlight = this.add.rectangle(0, 0, 16, 16)
-      .setStrokeStyle(1, 0xffdd44).setFillStyle(0, 0).setVisible(false);
+    this.avatarHighlight = this.add.rectangle(0, 0, 72, 72)
+      .setStrokeStyle(4, 0xffdd44).setFillStyle(0, 0).setVisible(false);
     this.avatarContainer.add(this.avatarHighlight);
 
     // â”€â”€ Events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const gs = this.scene.get(SCENES.GAME);
+    const gs = this.scene.get(SCENES.GAME) as GameScene;
+
+    // Mobile controls
+    if (!this.sys.game.device.os.desktop) {
+      const inputManager = gs.getInputManager();
+      const padX = 160;
+      const padY = h - 160;
+      const btnSize = 120;
+      const spacing = 16;
+
+      // D-Pad
+      const createDPadBtn = (x: number, y: number, key: string, label: string) => {
+        const btn = this.add.rectangle(x, y, btnSize, btnSize, 0xffffff, 0.1)
+          .setStrokeStyle(4, 0xffffff, 0.2)
+          .setInteractive({ useHandCursor: true });
+        this.add.text(x, y, label, { fontSize: '40px', color: '#ffffff' }).setOrigin(0.5).setAlpha(0.3);
+
+        btn.on('pointerdown', () => inputManager.setVirtualInput(key as any, true));
+        btn.on('pointerup', () => inputManager.setVirtualInput(key as any, false));
+        btn.on('pointerout', () => inputManager.setVirtualInput(key as any, false));
+        return btn;
+      };
+
+      createDPadBtn(padX, padY - btnSize - spacing, 'up', '↑');
+      createDPadBtn(padX, padY + btnSize + spacing, 'down', '↓');
+      createDPadBtn(padX - btnSize - spacing, padY, 'left', '←');
+      createDPadBtn(padX + btnSize + spacing, padY, 'right', '→');
+
+      // Action Buttons
+      const createActionBtn = (x: number, y: number, key: string, label: string, color = 0xffffff) => {
+        const btn = this.add.circle(x, y, btnSize / 1.6, color, 0.15)
+          .setStrokeStyle(4, color, 0.3)
+          .setInteractive({ useHandCursor: true });
+        this.add.text(x, y, label, { fontSize: '28px', color: '#ffffff', fontFamily: 'monospace' }).setOrigin(0.5).setAlpha(0.6);
+
+        btn.on('pointerdown', () => {
+          inputManager.setVirtualInput(key as any, true);
+          // Auto-release for tap-style actions
+          this.time.delayedCall(50, () => inputManager.setVirtualInput(key as any, false));
+        });
+        return btn;
+      };
+
+      const actX = w - 160;
+      const actY = h - 160;
+      createActionBtn(actX, actY - 128, 'action', 'E', 0x4488cc);      // Interact
+      createActionBtn(actX - 128, actY, 'flashlight', 'F', 0xffdd44);  // Flashlight
+      createActionBtn(actX, actY, 'inventory', 'TAB', 0x8888aa);       // Inventory
+      createActionBtn(actX + 128, actY, 'drop', 'Q', 0xcc4444);        // Drop
+    }
+
     gs.events.on('room-changed', this.showRoomName, this);
     gs.events.on('show-interact-prompt', () => this.interactPrompt.setVisible(true), this);
     gs.events.on('hide-interact-prompt', () => this.interactPrompt.setVisible(false), this);
@@ -209,18 +260,21 @@ export class UIScene extends Phaser.Scene {
     this.avatarSprites.forEach(s => s.destroy());
     this.avatarSprites = [];
 
-    const AVATAR_SIZE = 16;
-    const AVATAR_GAP = 2;
-    const AVATAR_X = 4;
-    const AVATAR_Y = 216;
+    const AVATAR_SIZE = 72;
+    const AVATAR_GAP = 8;
+    const AVATAR_X = 16;
+    const AVATAR_Y = 864;
 
     roster.forEach((char, i) => {
       const x = AVATAR_X + i * (AVATAR_SIZE + AVATAR_GAP) + AVATAR_SIZE / 2;
       const y = AVATAR_Y + AVATAR_SIZE / 2;
       const sprite = this.add.sprite(x, y, char.textureKey, 0)
+        .setScale(4.0)
         .setInteractive({ useHandCursor: true });
       sprite.on('pointerdown', () => {
-        this.scene.get(SCENES.GAME).events.emit('character-switch-request', char.id);
+        const gs = this.scene.get(SCENES.GAME) as GameScene;
+        gs.getInputManager().setVirtualInput(`char${i + 1}` as any, true);
+        this.time.delayedCall(50, () => gs.getInputManager().setVirtualInput(`char${i + 1}` as any, false));
       });
       this.avatarSprites.push(sprite);
       this.avatarContainer.add(sprite);
@@ -244,10 +298,10 @@ export class UIScene extends Phaser.Scene {
       return;
     }
 
-    const AVATAR_SIZE = 16;
-    const AVATAR_GAP = 2;
-    const AVATAR_X = 4;
-    const AVATAR_Y = 216;
+    const AVATAR_SIZE = 72;
+    const AVATAR_GAP = 8;
+    const AVATAR_X = 16;
+    const AVATAR_Y = 864;
 
     const idx = activeId
       ? this.rosterData.findIndex(c => c.id === activeId)
@@ -269,10 +323,10 @@ export class UIScene extends Phaser.Scene {
     if (!hasFlashlight) return;
 
     this.batteryBar.clear();
-    const w = 40;
-    const h = 4;
-    const x = 20;
-    const y = 6;
+    const w = 160;
+    const h = 16;
+    const x = 80;
+    const y = 24;
 
     // Background
     this.batteryBar.fillStyle(0x333333, 0.8);
@@ -285,7 +339,7 @@ export class UIScene extends Phaser.Scene {
     this.batteryBar.fillRect(x, y, fillWidth, h);
 
     // Border
-    this.batteryBar.lineStyle(1, 0x666666);
+    this.batteryBar.lineStyle(4, 0x666666);
     this.batteryBar.strokeRect(x, y, w, h);
   }
 }

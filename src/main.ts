@@ -16,9 +16,9 @@ const config: Phaser.Types.Core.GameConfig = {
   height: GAME_CONFIG.HEIGHT,
   zoom: 1,
   parent: 'game-container',
-  pixelArt: false,
+  pixelArt: true,
   antialias: false,
-  roundPixels: false,
+  roundPixels: true,
   physics: {
     default: 'arcade',
     arcade: {

@@ -6,8 +6,8 @@ import { MusicManager } from '@systems/MusicManager';
 export class PauseScene extends Phaser.Scene {
   private volumeText!: Phaser.GameObjects.Text;
   private volumeBar!: Phaser.GameObjects.Graphics;
-  private readonly BAR_WIDTH = 100;
-  private readonly BAR_HEIGHT = 10;
+  private readonly BAR_WIDTH = 400;
+  private readonly BAR_HEIGHT = 40;
 
   constructor() {
     super(SCENES.PAUSE);
@@ -20,8 +20,8 @@ export class PauseScene extends Phaser.Scene {
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.6);
 
     this.add
-      .text(w / 2, h / 2 - 95, 'PAUSED', {
-        fontSize: '20px',
+      .text(w / 2, h / 2 - 380, 'PAUSED', {
+        fontSize: '80px',
         color: '#ffffff',
         fontFamily: 'monospace',
         fontStyle: 'bold',
@@ -40,20 +40,20 @@ export class PauseScene extends Phaser.Scene {
     ].join('\n');
 
     this.add
-      .text(w / 2, h / 2 - 15, controls, {
-        fontSize: '10px',
+      .text(w / 2, h / 2 - 60, controls, {
+        fontSize: '40px',
         color: '#cccccc',
         fontFamily: 'monospace',
         align: 'center',
-        lineSpacing: 4
+        lineSpacing: 16
       })
       .setOrigin(0.5);
 
     this.volumeBar = this.add.graphics();
 
     this.volumeText = this.add
-      .text(w / 2, h / 2 + 55, '', {
-        fontSize: '10px',
+      .text(w / 2, h / 2 + 220, '', {
+        fontSize: '40px',
         color: '#ffdd44',
         fontFamily: 'monospace',
       })
@@ -62,8 +62,8 @@ export class PauseScene extends Phaser.Scene {
     this.updateVolumeUI();
 
     const hint = this.add
-      .text(w / 2, h / 2 + 85, 'Press ESC to resume', {
-        fontSize: '10px',
+      .text(w / 2, h / 2 + 340, 'Press ESC to resume', {
+        fontSize: '40px',
         color: '#888888',
         fontFamily: 'monospace',
       })
@@ -101,14 +101,14 @@ export class PauseScene extends Phaser.Scene {
     const w = GAME_CONFIG.WIDTH;
     const h = GAME_CONFIG.HEIGHT;
     const x = w / 2 - this.BAR_WIDTH / 2;
-    const y = h / 2 + 65;
+    const y = h / 2 + 260;
 
     this.volumeBar.clear();
     this.volumeBar.fillStyle(0x333333);
     this.volumeBar.fillRect(x, y, this.BAR_WIDTH, this.BAR_HEIGHT);
     this.volumeBar.fillStyle(0xffdd44);
     this.volumeBar.fillRect(x, y, this.BAR_WIDTH * vol, this.BAR_HEIGHT);
-    this.volumeBar.lineStyle(1, 0xffffff, 0.5);
+    this.volumeBar.lineStyle(4, 0xffffff, 0.5);
     this.volumeBar.strokeRect(x, y, this.BAR_WIDTH, this.BAR_HEIGHT);
   }
 }

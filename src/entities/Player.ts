@@ -7,11 +7,9 @@ export class Player extends Entity {
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player', 0);
     this.setDepth(DEPTH.PLAYER);
-    this.setScale(1.0);
+    this.setScale(4.0);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    // The player's asset is now 24x24 (exactly the desired render size).
-    // We use a 10x8 collision box at the feet.
     body.setSize(7, 6);
     body.setOffset(5, 10);
     body.setCollideWorldBounds(true);
@@ -157,22 +155,22 @@ export class Player extends Entity {
   /** Gets the flashlight origin point. */
   getFlashlightOrigin(): { x: number; y: number } {
     let offsetX = 0;
-    let offsetY = 1;
+    let offsetY = 4;
 
     switch (this.direction) {
       case Direction.UP:
-        offsetX = 3;
-        offsetY = -1;
+        offsetX = 12;
+        offsetY = -4;
         break;
       case Direction.DOWN:
-        offsetX = -3;
-        offsetY = 3;
+        offsetX = -12;
+        offsetY = 12;
         break;
       case Direction.LEFT:
-        offsetX = -2;
+        offsetX = -8;
         break;
       case Direction.RIGHT:
-        offsetX = 2;
+        offsetX = 8;
         break;
     }
 

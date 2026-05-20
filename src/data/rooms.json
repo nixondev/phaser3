@@ -13,21 +13,21 @@
       "reverbMix": 0.45,
       "dark": true,
       "playerSpawn": {
-        "x": 768,
-        "y": 944
+        "x": 3072,
+        "y": 3776
       },
       "doors": [
         {
           "id": "city-house-b-door",
-          "x": 376,
-          "y": 960,
-          "width": 16,
-          "height": 16,
+          "x": 1504,
+          "y": 3840,
+          "width": 64,
+          "height": 64,
           "targetRoom": "house-b",
           "targetDoor": "house-b-exit",
           "direction": "down",
-          "spawnX": 384,
-          "spawnY": 928,
+          "spawnX": 1536,
+          "spawnY": 3712,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -35,27 +35,27 @@
         },
         {
           "id": "city-house-door",
-          "x": 760,
-          "y": 960,
-          "width": 16,
-          "height": 16,
+          "x": 3040,
+          "y": 3840,
+          "width": 64,
+          "height": 64,
           "targetRoom": "protag-house",
           "targetDoor": "house-exit",
           "direction": "down",
-          "spawnX": 768,
-          "spawnY": 928
+          "spawnX": 3072,
+          "spawnY": 3712
         },
         {
           "id": "city-house-c-door",
-          "x": 1144,
-          "y": 960,
-          "width": 16,
-          "height": 16,
+          "x": 4576,
+          "y": 3840,
+          "width": 64,
+          "height": 64,
           "targetRoom": "house-c",
           "targetDoor": "house-c-exit",
           "direction": "down",
-          "spawnX": 1152,
-          "spawnY": 928,
+          "spawnX": 4608,
+          "spawnY": 3712,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -63,27 +63,27 @@
         },
         {
           "id": "city-clinic-door",
-          "x": 168,
-          "y": 304,
-          "width": 16,
-          "height": 16,
+          "x": 672,
+          "y": 1216,
+          "width": 64,
+          "height": 64,
           "targetRoom": "clinic",
           "targetDoor": "clinic-exit",
           "direction": "down",
-          "spawnX": 176,
-          "spawnY": 272
+          "spawnX": 704,
+          "spawnY": 1088
         },
         {
           "id": "city-records-door",
-          "x": 168,
-          "y": 528,
-          "width": 16,
-          "height": 16,
+          "x": 672,
+          "y": 2112,
+          "width": 64,
+          "height": 64,
           "targetRoom": "records-office",
           "targetDoor": "records-exit",
           "direction": "down",
-          "spawnX": 176,
-          "spawnY": 496,
+          "spawnX": 704,
+          "spawnY": 1984,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -91,15 +91,15 @@
         },
         {
           "id": "city-utility-door",
-          "x": 168,
-          "y": 848,
-          "width": 16,
-          "height": 16,
+          "x": 672,
+          "y": 3392,
+          "width": 64,
+          "height": 64,
           "targetRoom": "utility-substation",
           "targetDoor": "utility-exit",
           "direction": "down",
-          "spawnX": 176,
-          "spawnY": 816,
+          "spawnX": 704,
+          "spawnY": 3264,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -107,15 +107,15 @@
         },
         {
           "id": "city-market-door",
-          "x": 1288,
-          "y": 304,
-          "width": 16,
-          "height": 16,
+          "x": 5152,
+          "y": 1216,
+          "width": 64,
+          "height": 64,
           "targetRoom": "market",
           "targetDoor": "market-exit",
           "direction": "down",
-          "spawnX": 1296,
-          "spawnY": 272,
+          "spawnX": 5184,
+          "spawnY": 1088,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -123,15 +123,15 @@
         },
         {
           "id": "city-ration-door",
-          "x": 1320,
-          "y": 528,
-          "width": 16,
-          "height": 16,
+          "x": 5280,
+          "y": 2112,
+          "width": 64,
+          "height": 64,
           "targetRoom": "ration-office",
           "targetDoor": "ration-exit",
           "direction": "down",
-          "spawnX": 1328,
-          "spawnY": 496,
+          "spawnX": 5312,
+          "spawnY": 1984,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -139,15 +139,15 @@
         },
         {
           "id": "city-east-block-door",
-          "x": 1320,
-          "y": 848,
-          "width": 16,
-          "height": 16,
+          "x": 5280,
+          "y": 3392,
+          "width": 64,
+          "height": 64,
           "targetRoom": "east-block",
           "targetDoor": "east-block-exit",
           "direction": "down",
-          "spawnX": 1328,
-          "spawnY": 816,
+          "spawnX": 5312,
+          "spawnY": 3264,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -155,15 +155,15 @@
         },
         {
           "id": "city-laundromat-door",
-          "x": 936,
-          "y": 960,
-          "width": 16,
-          "height": 16,
+          "x": 3744,
+          "y": 3840,
+          "width": 64,
+          "height": 64,
           "targetRoom": "laundromat",
           "targetDoor": "laundromat-exit",
           "direction": "down",
-          "spawnX": 944,
-          "spawnY": 928,
+          "spawnX": 3776,
+          "spawnY": 3712,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -171,15 +171,15 @@
         },
         {
           "id": "city-depot-door",
-          "x": 1320,
-          "y": 960,
-          "width": 16,
-          "height": 16,
+          "x": 5280,
+          "y": 3840,
+          "width": 64,
+          "height": 64,
           "targetRoom": "depot",
           "targetDoor": "depot-exit",
           "direction": "down",
-          "spawnX": 1328,
-          "spawnY": 928,
+          "spawnX": 5312,
+          "spawnY": 3712,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -187,15 +187,15 @@
         },
         {
           "id": "city-apt-4a-door",
-          "x": 136,
-          "y": 960,
-          "width": 16,
-          "height": 16,
+          "x": 544,
+          "y": 3840,
+          "width": 64,
+          "height": 64,
           "targetRoom": "apt-4a",
           "targetDoor": "apt-4a-exit",
           "direction": "down",
-          "spawnX": 144,
-          "spawnY": 928,
+          "spawnX": 576,
+          "spawnY": 3712,
           "requiredKeys": [
             "skeleton-key",
             "master-key"
@@ -205,151 +205,151 @@
       "interactables": [
         {
           "id": "apt-4a-marker",
-          "x": 144,
-          "y": 944,
+          "x": 576,
+          "y": 3776,
           "type": "sign",
           "text": "Apartment 4A.\nDoor chained from the outside.\nNo movement inside."
         },
         {
           "id": "boarded-suite-marker",
-          "x": 560,
-          "y": 944,
+          "x": 2240,
+          "y": 3776,
           "type": "sign",
           "text": "Boarded residential suite.\nSomeone painted STAY QUIET across the door."
         },
         {
           "id": "laundromat-marker",
-          "x": 944,
-          "y": 944,
+          "x": 3776,
+          "y": 3776,
           "type": "sign",
           "text": "Rinse & Repeat Laundromat.\nMachines silent. Front shutter jammed."
         },
         {
           "id": "depot-marker",
-          "x": 1328,
-          "y": 944,
+          "x": 5312,
+          "y": 3776,
           "type": "sign",
           "text": "Maintenance and Supply.\nPadlocked. Someone tried forcing it open."
         },
         {
           "id": "clinic-marker",
-          "x": 176,
-          "y": 288,
+          "x": 704,
+          "y": 1152,
           "type": "sign",
           "text": "District Clinic.\nThe waiting room chairs are still stacked outside."
         },
         {
           "id": "records-office-marker",
-          "x": 176,
-          "y": 512,
+          "x": 704,
+          "y": 2048,
           "type": "sign",
           "text": "Civic Records Office.\nFiles and forms scatter under the door."
         },
         {
           "id": "utility-marker",
-          "x": 176,
-          "y": 832,
+          "x": 704,
+          "y": 3328,
           "type": "sign",
           "text": "Utilities Substation.\nBackup power failed days ago."
         },
         {
           "id": "market-marker",
-          "x": 1296,
-          "y": 288,
+          "x": 5184,
+          "y": 1152,
           "type": "sign",
           "text": "Market Street Grocer.\nShelves stripped. Door left hanging open."
         },
         {
           "id": "ration-office-marker",
-          "x": 1328,
-          "y": 512,
+          "x": 5312,
+          "y": 2048,
           "type": "sign",
           "text": "Emergency Ration Office.\nDistribution suspended until further notice."
         },
         {
           "id": "east-block-marker",
-          "x": 1328,
-          "y": 832,
+          "x": 5312,
+          "y": 3328,
           "type": "sign",
           "text": "East Block Apartments.\nSeveral windows are smashed from the inside."
         },
         {
           "id": "transit-marker",
-          "x": 1040,
-          "y": 448,
+          "x": 4160,
+          "y": 1792,
           "type": "sign",
           "tileFrame": 12,
           "text": "Transit shelter route map.\nEvery line has been crossed out in black marker."
         },
         {
           "id": "substation-kiosk-marker",
-          "x": 496,
-          "y": 448,
+          "x": 1984,
+          "y": 1792,
           "type": "sign",
           "tileFrame": 26,
           "text": "Service kiosk.\nThe panel is warm, but nothing in the city is lit."
         },
         {
           "id": "memorial-square-marker",
-          "x": 768,
-          "y": 736,
+          "x": 3072,
+          "y": 2944,
           "type": "sign",
           "tileFrame": 30,
           "text": "A civic memorial wrapped in warning tape.\nSomeone left flowers that have gone brown."
         },
         {
           "id": "memorial-tree-1",
-          "x": 656,
-          "y": 704,
+          "x": 2624,
+          "y": 2816,
           "type": "sign",
           "text": "A large city tree, its leaves are sparse and discolored.\nSomething about its twisted branches feels unnatural."
         },
         {
           "id": "memorial-tree-2",
-          "x": 816,
-          "y": 704,
+          "x": 3264,
+          "y": 2816,
           "type": "sign",
           "text": "A gnarled tree that has somehow survived the concrete.\nIts roots are cracking the pavement beneath it."
         },
         {
           "id": "city-tree-north-west",
-          "x": 256,
-          "y": 192,
+          "x": 1024,
+          "y": 768,
           "type": "sign",
           "text": "An old tree, looking more gray than green in the dim light."
         },
         {
           "id": "city-tree-north-east",
-          "x": 1216,
-          "y": 192,
+          "x": 4864,
+          "y": 768,
           "type": "sign",
           "text": "A tall, sparse tree reaching towards the sealed city walls."
         },
         {
           "id": "north-gate-marker",
-          "x": 768,
-          "y": 256,
+          "x": 3072,
+          "y": 1024,
           "type": "sign",
           "text": "NORTHERN GATE SEALED\nQuarantine order remains in effect.\nNo exit. No entry."
         },
         {
           "id": "west-gate-marker",
-          "x": 80,
-          "y": 464,
+          "x": 320,
+          "y": 1856,
           "type": "sign",
           "text": "West service gate.\nWelded shut from the city side."
         },
         {
           "id": "east-gate-marker",
-          "x": 1456,
-          "y": 576,
+          "x": 5824,
+          "y": 2304,
           "type": "sign",
           "text": "East checkpoint gate.\nBarricaded and silent."
         },
         {
           "id": "tunnel-marker",
-          "x": 768,
-          "y": 448,
+          "x": 3072,
+          "y": 1792,
           "type": "sign",
           "tileFrame": 24,
           "text": "A sealed manhole cover.\nSomeone painted NO BELOW in red."
@@ -360,8 +360,8 @@
           "id": "street-wanderer-1",
           "name": "Kai",
           "role": "Former Lab Technician",
-          "x": 400,
-          "y": 500,
+          "x": 1600,
+          "y": 2000,
           "behaviorLoop": "wander",
           "variant": "walker",
           "playerVariant": "ranger",
@@ -390,8 +390,8 @@
           "id": "street-wanderer-2",
           "name": "Maren",
           "role": "Local Shopkeeper",
-          "x": 1000,
-          "y": 700,
+          "x": 4000,
+          "y": 2800,
           "behaviorLoop": "wander",
           "variant": "walker",
           "playerVariant": "rogue",
@@ -431,49 +431,49 @@
       "reverbMix": 0.45,
       "weather": "rain-mild",
       "playerSpawn": {
-        "x": 192,
-        "y": 184
+        "x": 768,
+        "y": 736
       },
       "doors": [
         {
           "id": "house-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         },
         {
           "id": "door-uwnva",
-          "x": 352,
-          "y": 272,
-          "width": 16,
-          "height": 16,
+          "x": 1408,
+          "y": 1088,
+          "width": 64,
+          "height": 64,
           "targetRoom": "room-vault",
           "targetDoor": "door-sd3ig",
           "direction": "right",
-          "spawnX": 336,
-          "spawnY": 280,
+          "spawnX": 1344,
+          "spawnY": 1120,
           "requires": []
         }
       ],
       "interactables": [
         {
           "id": "controls-hint",
-          "x": 248,
-          "y": 144,
+          "x": 992,
+          "y": 576,
           "type": "sign",
           "tileFrame": 7,
           "text": "Flashlight: Pick it up, press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nDrop it (Q) and another can use it.\nIt keeps the afflicted at bay."
         },
         {
           "id": "desk-note",
-          "x": 56,
-          "y": 56,
+          "x": 224,
+          "y": 224,
           "type": "item",
           "text": "A page torn from your notebook.\nYour handwriting. Yesterday's date.",
           "item": {
@@ -485,16 +485,16 @@
         },
         {
           "id": "protag-charger",
-          "x": 200,
-          "y": 184,
+          "x": 800,
+          "y": 736,
           "type": "recharge",
           "text": "Your bedside charging dock. Flashlight batteries topped up.",
           "tileFrame": 39
         },
         {
           "id": "starter-flashlight",
-          "x": 216,
-          "y": 184,
+          "x": 864,
+          "y": 736,
           "type": "item",
           "tileFrame": 70,
           "text": "Your hand-held flashlight, resting on the dock.\nStill the only thing between you and the dark.",
@@ -507,8 +507,8 @@
         },
         {
           "id": "cure-vial-1",
-          "x": 152,
-          "y": 56,
+          "x": 608,
+          "y": 224,
           "type": "item",
           "tileFrame": 9,
           "text": "A small vial. Clinical label, hand-annotated.\n'Stabiliser — administer at close range.'",
@@ -529,35 +529,35 @@
       "height": 13,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 144,
-        "y": 104
+        "x": 576,
+        "y": 416
       },
       "doors": [
         {
           "id": "house-b-exit",
-          "x": 136,
+          "x": 544,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-house-b-door",
           "direction": "up",
-          "spawnX": 144,
-          "spawnY": 48
+          "spawnX": 576,
+          "spawnY": 192
         }
       ],
       "interactables": [
         {
           "id": "house-b-calendar",
-          "x": 48,
-          "y": 40,
+          "x": 192,
+          "y": 160,
           "type": "sign",
           "text": "A wall calendar. Every day crossed off\nup to the 11th. Then nothing."
         },
         {
           "id": "house-b-note",
-          "x": 176,
-          "y": 152,
+          "x": 704,
+          "y": 608,
           "type": "item",
           "text": "A handwritten note on the kitchen table.",
           "item": {
@@ -573,8 +573,8 @@
           "id": "street-wanderer-1",
           "name": "Kai",
           "role": "Former Lab Technician",
-          "x": 144,
-          "y": 80,
+          "x": 576,
+          "y": 320,
           "behaviorLoop": "wander",
           "variant": "walker",
           "playerVariant": "ranger",
@@ -591,47 +591,47 @@
       "height": 18,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 208,
-        "y": 248
+        "x": 832,
+        "y": 992
       },
       "doors": [
         {
           "id": "house-c-exit",
-          "x": 200,
+          "x": 800,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-house-c-door",
           "direction": "up",
-          "spawnX": 208,
-          "spawnY": 48
+          "spawnX": 832,
+          "spawnY": 192
         },
         {
           "id": "house-c-garden-door",
-          "x": 280,
-          "y": 256,
-          "width": 16,
-          "height": 16,
+          "x": 1120,
+          "y": 1024,
+          "width": 64,
+          "height": 64,
           "targetRoom": "room-garden",
           "targetDoor": "garden-house-c-exit",
           "direction": "down",
-          "spawnX": 288,
-          "spawnY": 240
+          "spawnX": 1152,
+          "spawnY": 960
         }
       ],
       "interactables": [
         {
           "id": "house-c-board",
-          "x": 208,
-          "y": 40,
+          "x": 832,
+          "y": 160,
           "type": "sign",
           "text": "DISTRICT NOTICE BOARD\n— Emergency rations: Building C basement\n— Curfew extended indefinitely\n— Do not approach the afflicted"
         },
         {
           "id": "house-c-logbook",
-          "x": 64,
-          "y": 136,
+          "x": 256,
+          "y": 544,
           "type": "item",
           "text": "A logbook left open on a folding table.",
           "item": {
@@ -647,8 +647,8 @@
           "id": "street-wanderer-2",
           "name": "Maren",
           "role": "Local Shopkeeper",
-          "x": 160,
-          "y": 160,
+          "x": 640,
+          "y": 640,
           "behaviorLoop": "wander",
           "variant": "walker",
           "playerVariant": "rogue",
@@ -666,36 +666,36 @@
       "reverb": "hospital",
       "reverbMix": 0.4,
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "clinic-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-clinic-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         }
       ],
       "interactables": [
         {
           "id": "clinic-skeleton",
-          "x": 80,
-          "y": 64,
+          "x": 320,
+          "y": 256,
           "type": "sign",
           "text": "A medical skeleton model. It's missing a few ribs and looks surprisingly realistic.",
           "tileFrame": 10
         },
         {
           "id": "skeleton-key-clinic",
-          "x": 160,
-          "y": 120,
+          "x": 640,
+          "y": 480,
           "type": "item",
           "text": "You found a heavy, old-fashioned key.\nIt's labeled 'Skeleton Key'.",
           "item": {
@@ -716,45 +716,45 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "records-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-records-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         },
         {
           "id": "records-vault-door",
-          "x": 240,
-          "y": 160,
-          "width": 16,
-          "height": 16,
+          "x": 960,
+          "y": 640,
+          "width": 64,
+          "height": 64,
           "targetRoom": "room-vault",
           "targetDoor": "vault-records-exit",
           "direction": "down",
-          "spawnX": 248,
-          "spawnY": 144
+          "spawnX": 992,
+          "spawnY": 576
         },
         {
           "id": "records-library-door",
-          "x": 56,
-          "y": 160,
-          "width": 16,
-          "height": 16,
+          "x": 224,
+          "y": 640,
+          "width": 64,
+          "height": 64,
           "targetRoom": "room-library",
           "targetDoor": "library-records-exit",
           "direction": "down",
-          "spawnX": 64,
-          "spawnY": 144
+          "spawnX": 256,
+          "spawnY": 576
         }
       ]
     },
@@ -768,48 +768,48 @@
       "music": "bgm-main",
       "reverb": "substation",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "utility-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-utility-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         },
         {
           "id": "utility-trapdoor",
-          "x": 32,
-          "y": 192,
-          "width": 16,
-          "height": 16,
+          "x": 128,
+          "y": 768,
+          "width": 64,
+          "height": 64,
           "targetRoom": "substation-tunnel",
           "targetDoor": "tunnel-utility-entrance",
           "direction": "down",
-          "spawnX": 40,
-          "spawnY": 160
+          "spawnX": 160,
+          "spawnY": 640
         }
       ],
       "interactables": [
         {
           "id": "substation-charger",
-          "x": 280,
-          "y": 56,
+          "x": 1120,
+          "y": 224,
           "type": "recharge",
           "text": "The substation's backup cells are humming. Flashlight recharged.",
           "tileFrame": 39
         },
         {
           "id": "substation-trapdoor-desc",
-          "x": 32,
-          "y": 192,
+          "x": 128,
+          "y": 768,
           "type": "sign",
           "text": "A heavy wooden trapdoor. It seems to lead to the maintenance tunnels.",
           "tileFrame": 34
@@ -825,21 +825,21 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "market-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-market-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         }
       ]
     },
@@ -852,33 +852,33 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "ration-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-ration-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         },
         {
           "id": "door-zlei6",
-          "x": 48,
-          "y": 72,
-          "width": 16,
-          "height": 16,
+          "x": 192,
+          "y": 288,
+          "width": 64,
+          "height": 64,
           "targetRoom": "basement",
           "targetDoor": "door-ndhrz",
           "direction": "left",
-          "spawnX": 80,
-          "spawnY": 80,
+          "spawnX": 320,
+          "spawnY": 320,
           "requires": []
         }
       ]
@@ -892,33 +892,33 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "east-block-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-east-block-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         },
         {
           "id": "east-block-lobby-door",
-          "x": 152,
-          "y": 160,
-          "width": 16,
-          "height": 16,
+          "x": 608,
+          "y": 640,
+          "width": 64,
+          "height": 64,
           "targetRoom": "room-entrance",
           "targetDoor": "entrance-east-block-exit",
           "direction": "down",
-          "spawnX": 160,
-          "spawnY": 144
+          "spawnX": 640,
+          "spawnY": 576
         }
       ]
     },
@@ -931,33 +931,33 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "laundromat-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-laundromat-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         },
         {
           "id": "laundromat-tunnel-door",
-          "x": 272,
-          "y": 192,
-          "width": 16,
-          "height": 16,
+          "x": 1088,
+          "y": 768,
+          "width": 64,
+          "height": 64,
           "targetRoom": "substation-tunnel",
           "targetDoor": "tunnel-laundromat-entrance",
           "direction": "down",
-          "spawnX": 280,
-          "spawnY": 160
+          "spawnX": 1120,
+          "spawnY": 640
         }
       ]
     },
@@ -970,33 +970,33 @@
       "height": 10,
       "reverb": "sewer",
       "playerSpawn": {
-        "x": 40,
-        "y": 80
+        "x": 160,
+        "y": 320
       },
       "doors": [
         {
           "id": "tunnel-utility-entrance",
-          "x": 32,
+          "x": 128,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "utility-substation",
           "targetDoor": "utility-trapdoor",
           "direction": "up",
-          "spawnX": 40,
-          "spawnY": 48
+          "spawnX": 160,
+          "spawnY": 192
         },
         {
           "id": "tunnel-laundromat-entrance",
-          "x": 592,
+          "x": 2368,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "laundromat",
           "targetDoor": "laundromat-tunnel-door",
           "direction": "up",
-          "spawnX": 600,
-          "spawnY": 48
+          "spawnX": 2400,
+          "spawnY": 192
         }
       ]
     },
@@ -1009,21 +1009,21 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "depot-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-depot-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         }
       ]
     },
@@ -1036,28 +1036,28 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 64
+        "x": 640,
+        "y": 256
       },
       "doors": [
         {
           "id": "apt-4a-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-apt-4a-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 48
+          "spawnX": 640,
+          "spawnY": 192
         }
       ],
       "interactables": [
         {
           "id": "skeleton-remains-apt4a",
-          "x": 80,
-          "y": 120,
+          "x": 320,
+          "y": 480,
           "type": "sign",
           "text": "The skeletal remains of someone who didn't make it out. They're clutching a faded photograph.",
           "tileFrame": 10
@@ -1074,33 +1074,33 @@
       "reverb": "indoor",
       "reverbMix": 0.45,
       "playerSpawn": {
-        "x": 112,
-        "y": 80
+        "x": 448,
+        "y": 320
       },
       "doors": [
         {
           "id": "vault-records-exit",
-          "x": 96,
+          "x": 384,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "records-office",
           "targetDoor": "records-vault-door",
           "direction": "up",
-          "spawnX": 248,
-          "spawnY": 144
+          "spawnX": 992,
+          "spawnY": 576
         },
         {
           "id": "door-sd3ig",
-          "x": 288,
-          "y": 528,
-          "width": 16,
-          "height": 16,
+          "x": 1152,
+          "y": 2112,
+          "width": 64,
+          "height": 64,
           "targetRoom": "protag-house",
           "targetDoor": "door-uwnva",
           "direction": "down",
-          "spawnX": 296,
-          "spawnY": 512,
+          "spawnX": 1184,
+          "spawnY": 2048,
           "requires": []
         }
       ]
@@ -1114,21 +1114,21 @@
       "height": 20,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 240,
-        "y": 80
+        "x": 960,
+        "y": 320
       },
       "doors": [
         {
           "id": "library-records-exit",
-          "x": 232,
+          "x": 928,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "records-office",
           "targetDoor": "records-library-door",
           "direction": "up",
-          "spawnX": 64,
-          "spawnY": 144
+          "spawnX": 256,
+          "spawnY": 576
         }
       ]
     },
@@ -1141,21 +1141,21 @@
       "height": 12,
       "reverb": "city",
       "playerSpawn": {
-        "x": 192,
-        "y": 80
+        "x": 768,
+        "y": 320
       },
       "doors": [
         {
           "id": "garden-house-c-exit",
-          "x": 200,
-          "y": 176,
-          "width": 16,
-          "height": 16,
+          "x": 800,
+          "y": 704,
+          "width": 64,
+          "height": 64,
           "targetRoom": "house-c",
           "targetDoor": "house-c-garden-door",
           "direction": "down",
-          "spawnX": 288,
-          "spawnY": 240
+          "spawnX": 1152,
+          "spawnY": 960
         }
       ]
     },
@@ -1168,21 +1168,21 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 160,
-        "y": 80
+        "x": 640,
+        "y": 320
       },
       "doors": [
         {
           "id": "entrance-east-block-exit",
-          "x": 152,
+          "x": 608,
           "y": 0,
-          "width": 16,
-          "height": 16,
+          "width": 64,
+          "height": 64,
           "targetRoom": "east-block",
           "targetDoor": "east-block-lobby-door",
           "direction": "up",
-          "spawnX": 160,
-          "spawnY": 144
+          "spawnX": 640,
+          "spawnY": 576
         }
       ]
     },
@@ -1195,21 +1195,21 @@
       "height": 15,
       "reverb": "indoor",
       "playerSpawn": {
-        "x": 168,
-        "y": 120
+        "x": 672,
+        "y": 480
       },
       "doors": [
         {
           "id": "door-ndhrz",
-          "x": 88,
-          "y": 64,
-          "width": 16,
-          "height": 16,
+          "x": 352,
+          "y": 256,
+          "width": 64,
+          "height": 64,
           "targetRoom": "ration-office",
           "targetDoor": "door-zlei6",
           "direction": "up",
-          "spawnX": 96,
-          "spawnY": 96,
+          "spawnX": 384,
+          "spawnY": 384,
           "requires": []
         }
       ],

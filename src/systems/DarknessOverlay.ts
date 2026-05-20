@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import type { Flashlight } from '@systems/Flashlight';
 
-const AMBIENT_RADIUS = 18;
+const AMBIENT_RADIUS = 72;
 
 export class DarknessOverlay {
   private rt: Phaser.GameObjects.RenderTexture;

@@ -34,10 +34,10 @@ export class RoomEditorManager {
   private paletteHighlight!: Phaser.GameObjects.Graphics;
   private paletteVisible: boolean = false;
   private paletteBuilt: boolean = false;
-  private readonly paletteThumb = 14;
+  private readonly paletteThumb = 56;
   private readonly paletteCols = 8;
-  private readonly palettePosX = GAME_CONFIG.WIDTH - 116;
-  private readonly palettePosY = 4;
+  private readonly palettePosX = GAME_CONFIG.WIDTH - 464;
+  private readonly palettePosY = 16;
   private paletteWidth: number = 0;
   private paletteHeight: number = 0;
   private paletteSelectionStart: { x: number; y: number } | null = null;
@@ -140,18 +140,18 @@ export class RoomEditorManager {
       ENTER: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     };
 
-    this.editorText = this.scene.add.text(4, GAME_CONFIG.HEIGHT - 50, '', {
-      fontSize: '8px',
+    this.editorText = this.scene.add.text(4, GAME_CONFIG.HEIGHT - 200, '', {
+      fontSize: '32px',
       color: '#ffff00',
       backgroundColor: '#000000cc',
-      padding: { x: 4, y: 3 },
+      padding: { x: 16, y: 12 },
       fontFamily: 'monospace'
     }).setScrollFactor(0).setDepth(DEPTH.UI + 200).setVisible(false);
 
     this.tileCursor = this.scene.add.graphics();
     this.tileCursor.setDepth(DEPTH.UI + 199).setVisible(false);
 
-    this.tilePreview = this.scene.add.image(GAME_CONFIG.WIDTH - 20, GAME_CONFIG.HEIGHT - 40, 'tileset-sprites')
+    this.tilePreview = this.scene.add.image(GAME_CONFIG.WIDTH - 80, GAME_CONFIG.HEIGHT - 160, 'tileset-sprites')
       .setScrollFactor(0)
       .setDepth(DEPTH.UI + 201)
       .setVisible(false)
@@ -167,11 +167,11 @@ export class RoomEditorManager {
     this.doorHandles = this.scene.add.graphics();
     this.doorHandles.setDepth(DEPTH.UI + 197).setVisible(false);
 
-    this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 6, '', {
-      fontSize: '8px',
+    this.toastText = this.scene.add.text(GAME_CONFIG.WIDTH / 2, 24, '', {
+      fontSize: '32px',
       color: '#000000',
       backgroundColor: '#ffff66',
-      padding: { x: 5, y: 3 },
+      padding: { x: 20, y: 12 },
       align: 'center'
     })
       .setOrigin(0.5, 0)
@@ -186,20 +186,20 @@ export class RoomEditorManager {
     this.scene.input.on('wheel', this.onWheel, this);
 
     // Door-pair target-room picker (shown during pairPhase === 'pick-target').
-    this.pairPickerContainer = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 30);
+    this.pairPickerContainer = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 120);
     this.pairPickerContainer.setScrollFactor(0).setDepth(DEPTH.UI + 250).setVisible(false);
     const pickerBg = this.scene.add.graphics();
     pickerBg.fillStyle(0x000000, 0.92);
-    pickerBg.fillRect(-95, -8, 190, 200);
-    pickerBg.lineStyle(1, 0xffff00, 1);
-    pickerBg.strokeRect(-95, -8, 190, 200);
+    pickerBg.fillRect(-380, -32, 760, 800);
+    pickerBg.lineStyle(4, 0xffff00, 1);
+    pickerBg.strokeRect(-380, -32, 760, 800);
     this.pairPickerContainer.add(pickerBg);
     const hint = this.scene.add.text(0, 0, 'Pair door target  Up/Down  Enter  Esc', {
-      fontSize: '8px', color: '#ffff00', fontFamily: 'monospace'
+      fontSize: '32px', color: '#ffff00', fontFamily: 'monospace'
     }).setOrigin(0.5, 0);
     this.pairPickerContainer.add(hint);
-    this.pairPickerListText = this.scene.add.text(-90, 14, '', {
-      fontSize: '8px', color: '#ffffff', fontFamily: 'monospace'
+    this.pairPickerListText = this.scene.add.text(-360, 56, '', {
+      fontSize: '32px', color: '#ffffff', fontFamily: 'monospace'
     });
     this.pairPickerContainer.add(this.pairPickerListText);
   }
@@ -614,7 +614,7 @@ export class RoomEditorManager {
     const bg = this.scene.add.graphics();
     bg.fillStyle(0x000000, 0.85);
     bg.fillRect(0, 0, this.paletteWidth, this.paletteHeight);
-    bg.lineStyle(1, 0xffff00, 1);
+    bg.lineStyle(4, 0xffff00, 1);
     bg.strokeRect(0, 0, this.paletteWidth, this.paletteHeight);
     this.paletteContainer.add(bg);
 
@@ -627,8 +627,8 @@ export class RoomEditorManager {
       const labelY = 1 + currentRow * T + Math.floor(T / 2);
       const label = this.scene.add.text(1 + Math.floor(T / 2), labelY,
         ts.name, {
-          fontSize: '6px', color: '#ffff88', fontFamily: 'monospace',
-          backgroundColor: '#00000088', padding: { x: 2, y: 1 },
+          fontSize: '24px', color: '#ffff88', fontFamily: 'monospace',
+          backgroundColor: '#00000088', padding: { x: 8, y: 4 },
         }).setScrollFactor(0).setOrigin(0, 0.5);
       this.paletteContainer.add(label);
       currentRow++;
@@ -751,7 +751,7 @@ export class RoomEditorManager {
     const w = (maxCol - minCol + 1) * T;
     const h = (maxVisRow - minVisRow + 1) * T;
 
-    this.paletteHighlight.lineStyle(2, 0xffff00, 1);
+    this.paletteHighlight.lineStyle(8, 0xffff00, 1);
     this.paletteHighlight.strokeRect(x, y, w, h);
   }
 
@@ -786,11 +786,11 @@ export class RoomEditorManager {
     const h = map.height * GAME_CONFIG.TILE_SIZE;
     this.mapOutline.clear();
     // Solid yellow outline at the room boundary
-    this.mapOutline.lineStyle(1, 0xffff00, 0.9);
+    this.mapOutline.lineStyle(4, 0xffff00, 0.9);
     this.mapOutline.strokeRect(0, 0, w, h);
     // Faint inner border one tile in, to reinforce the bound
     const inset = GAME_CONFIG.TILE_SIZE;
-    this.mapOutline.lineStyle(1, 0xffff00, 0.25);
+    this.mapOutline.lineStyle(4, 0xffff00, 0.25);
     this.mapOutline.strokeRect(inset, inset, Math.max(0, w - inset * 2), Math.max(0, h - inset * 2));
   }
 
@@ -989,7 +989,7 @@ export class RoomEditorManager {
       const body = zone.body as Phaser.Physics.Arcade.StaticBody;
       const isDragging = this.selectedDoor?.zone === zone;
       // Outer square
-      this.doorHandles.lineStyle(1, isDragging ? 0xffffff : 0x00ffff, isDragging ? 1 : 0.7);
+      this.doorHandles.lineStyle(4, isDragging ? 0xffffff : 0x00ffff, isDragging ? 1 : 0.7);
       this.doorHandles.strokeRect(body.x, body.y, body.width, body.height);
       // Cross-hair so it's obvious the handle is clickable
       const cx = body.x + body.width / 2;
@@ -1232,7 +1232,7 @@ export class RoomEditorManager {
     // Update cursor
     this.tileCursor.setVisible(true);
     this.tileCursor.clear();
-    this.tileCursor.lineStyle(1, 0xffff00, 0.8);
+    this.tileCursor.lineStyle(4, 0xffff00, 0.8);
     const tw = map.tileWidth * (map.layers[0]?.tilemapLayer?.scaleX || 1);
     const th = map.tileHeight * (map.layers[0]?.tilemapLayer?.scaleY || 1);
     
@@ -1445,7 +1445,7 @@ export class RoomEditorManager {
       this.tilePreview.setAlpha(0.3);
     }
 
-    this.tilePreview.setPosition(this.editorText.x + 185, this.editorText.y + 6);
+    this.tilePreview.setPosition(this.editorText.x + 740, this.editorText.y + 24);
   }
 
   private handleUndoRedo(input: InputState): void {
@@ -1603,7 +1603,7 @@ export class RoomEditorManager {
     const th = GAME_CONFIG.TILE_SIZE;
 
     this.rectGraphics.clear();
-    this.rectGraphics.lineStyle(2, 0xffff00, 1);
+    this.rectGraphics.lineStyle(8, 0xffff00, 1);
     this.rectGraphics.strokeRect(
       startX * tw,
       startY * th,

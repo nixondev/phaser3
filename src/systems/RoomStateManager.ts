@@ -18,6 +18,7 @@ export class RoomStateManager {
   private characterInventories: Map<string, (ItemDef | null)[]> = new Map();
   private worldFlags: Set<string> = new Set();
   private flagExpiries: Map<string, number> = new Map();
+  private flagPending: Map<string, number> = new Map();
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -228,6 +229,8 @@ export class RoomStateManager {
   setFlag(name: string): void {
     this.worldFlags.add(name);
     this.flagExpiries.delete(name);
+    this.flagPending.delete(name);
+    this.flagPending.delete(name);
   }
 
   setFlagWithDuration(name: string, durationMs: number): void {
@@ -238,6 +241,8 @@ export class RoomStateManager {
   clearFlag(name: string): void {
     this.worldFlags.delete(name);
     this.flagExpiries.delete(name);
+    this.flagPending.delete(name);
+    this.flagPending.delete(name);
   }
 
   hasFlag(name: string): boolean {
@@ -246,6 +251,8 @@ export class RoomStateManager {
     if (expiry !== undefined && Date.now() > expiry) {
       this.worldFlags.delete(name);
       this.flagExpiries.delete(name);
+    this.flagPending.delete(name);
+    this.flagPending.delete(name);
       return false;
     }
     return true;
@@ -283,6 +290,7 @@ export class RoomStateManager {
       characterInventories: [...this.characterInventories.entries()],
       worldFlags: [...this.worldFlags],
       flagExpiries: [...this.flagExpiries.entries()],
+      flagPending: [...this.flagPending.entries()],
     };
   }
 
@@ -303,6 +311,7 @@ export class RoomStateManager {
     this.characterInventories = new Map(data.characterInventories ?? []);
     this.worldFlags = new Set(data.worldFlags ?? []);
     this.flagExpiries = new Map(data.flagExpiries ?? []);
+    this.flagPending = new Map(data.flagPending ?? []);
   }
 
   // ── Reset ───────────────────────────────────────────────────────────────
@@ -324,6 +333,7 @@ export class RoomStateManager {
     this.characterInventories.clear();
     this.worldFlags.clear();
     this.flagExpiries.clear();
+    this.flagPending.clear();
   }
 }
 

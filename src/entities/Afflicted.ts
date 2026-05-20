@@ -5,19 +5,19 @@ import { AfflictedDef, AfflictedStatus, ItemDef, ProduceEffect, Position } from 
 import { MusicManager } from '@systems/MusicManager';
 import { Direction } from './Direction';
 
-const WANDER_SPEED      = 20;
+const WANDER_SPEED      = 80;
 const WANDER_PAUSE_MIN  = 1500;
 const WANDER_PAUSE_MAX  = 4000;
-const WANDER_RANGE      = 32;
+const WANDER_RANGE      = 128;
 
-const AGITATE_RANGE     = 60;   // px — player must be closer than this to trigger chase
-const AGITATE_SPEED     = 75;   // px/s — chase speed (player is 80, can escape but must work for it)
-const CALM_RANGE        = 120;  // px — agitated gives up chasing beyond this
+const AGITATE_RANGE     = 240;  // px — player must be closer than this to trigger chase
+const AGITATE_SPEED     = 300;  // px/s — chase speed (player is 320, can escape but must work for it)
+const CALM_RANGE        = 480;  // px — agitated gives up chasing beyond this
 
-const FRIGHTEN_SPEED    = 100;  // px/s — flee speed when panicked by flashlight
-const FRIGHTEN_CALM     = 150;  // px — frightened calms down once this far from player
+const FRIGHTEN_SPEED    = 400;  // px/s — flee speed when panicked by flashlight
+const FRIGHTEN_CALM     = 600;  // px — frightened calms down once this far from player
 
-const SOUND_RADIUS      = 200;  // px — distance at which sound starts being audible
+const SOUND_RADIUS      = 800;  // px — distance at which sound starts being audible
 
 export class Afflicted extends Entity {
   private afflictedId: string;
@@ -46,7 +46,7 @@ export class Afflicted extends Entity {
     const texture = `afflicted-${variant}`;
     super(scene, def.x, def.y, texture, 0);
     
-    this.baseScale = 1.0;
+    this.baseScale = 4.0;
     this.setScale(this.baseScale);
 
     this.afflictedId    = def.id;

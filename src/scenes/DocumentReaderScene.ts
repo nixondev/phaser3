@@ -28,14 +28,14 @@ export class DocumentReaderScene extends Phaser.Scene {
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.82);
 
     // Border frame
-    const margin = 14;
+    const margin = 56;
     this.add.rectangle(w / 2, h / 2, w - margin * 2, h - margin * 2)
-      .setStrokeStyle(1, 0x888844, 0.8)
+      .setStrokeStyle(4, 0x888844, 0.8)
       .setFillStyle(0x0a0a0a, 0.95);
 
     // Title
-    this.add.text(w / 2, margin + 10, data.title ?? 'Document', {
-      fontSize: '9px',
+    this.add.text(w / 2, margin + 40, data.title ?? 'Document', {
+      fontSize: '36px',
       color: '#d4c87a',
       fontFamily: 'monospace',
       fontStyle: 'bold',
@@ -43,28 +43,28 @@ export class DocumentReaderScene extends Phaser.Scene {
 
     // Divider
     const divG = this.add.graphics();
-    divG.lineStyle(1, 0x444422, 1);
-    divG.lineBetween(margin + 4, margin + 23, w - margin - 4, margin + 23);
+    divG.lineStyle(4, 0x444422, 1);
+    divG.lineBetween(margin + 16, margin + 92, w - margin - 16, margin + 92);
 
     // Body text (updated per page)
-    this.bodyText = this.add.text(margin + 6, margin + 30, '', {
-      fontSize: '8px',
+    this.bodyText = this.add.text(margin + 24, margin + 120, '', {
+      fontSize: '32px',
       color: '#ccccbb',
       fontFamily: 'monospace',
-      wordWrap: { width: w - (margin + 6) * 2 },
-      lineSpacing: 2,
+      wordWrap: { width: w - (margin + 24) * 2 },
+      lineSpacing: 8,
     });
 
     // Page counter (top-right)
-    this.pageCounter = this.add.text(w - margin - 6, margin + 10, '', {
-      fontSize: '8px',
+    this.pageCounter = this.add.text(w - margin - 24, margin + 40, '', {
+      fontSize: '32px',
       color: '#666655',
       fontFamily: 'monospace',
     }).setOrigin(1, 0);
 
     // Hint (bottom-centre, blinks)
-    this.hintText = this.add.text(w / 2, h - margin - 6, '', {
-      fontSize: '8px',
+    this.hintText = this.add.text(w / 2, h - margin - 24, '', {
+      fontSize: '32px',
       color: '#888866',
       fontFamily: 'monospace',
     }).setOrigin(0.5, 1);

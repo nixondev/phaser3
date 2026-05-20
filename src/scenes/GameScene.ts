@@ -19,9 +19,9 @@ import { WeatherManager } from '@systems/WeatherManager';
 import { checkRequires, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
 import { resolveTileSprite } from '@utils/TilesetResolver';
 
-const CLINIC_DOOR_X     = 160;
-const CLINIC_DOOR_Y     = 304;
-const CLINIC_SOUND_DIST = 150;
+const CLINIC_DOOR_X     = 672;
+const CLINIC_DOOR_Y     = 1216;
+const CLINIC_SOUND_DIST = 600;
 const CLINIC_SOUND_ID   = 'clinic-hint';
 
 export class GameScene extends Phaser.Scene {
@@ -65,6 +65,10 @@ export class GameScene extends Phaser.Scene {
 
   constructor() {
     super(SCENES.GAME);
+  }
+
+  public getInputManager(): InputManager {
+    return this.inputManager;
   }
 
   create(): void {
