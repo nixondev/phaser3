@@ -934,10 +934,10 @@ export class GameScene extends Phaser.Scene {
         // Light from top-right: bottom and left edges cast stronger shadowswhere do you set the clor of
 
         const edges = [
-          { check: isSolid(tx + 1, ty), x: px + TILE + 0, y: py,          w: 1,    h: TILE, dx: 1,  dy: 0,  peak: 0.48 },
-          { check: isSolid(tx - 1, ty), x: px - 1,         y: py,          w: 1,    h: TILE, dx: -1, dy: 0,  peak: 0.45 },
-          { check: isSolid(tx, ty + 1), x: px,              y: py + TILE,   w: TILE, h: 1,    dx: 0,  dy: 1,  peak: 0.48 },
-          { check: isSolid(tx, ty - 1), x: px,              y: py - 1,      w: TILE, h: 1,    dx: 0,  dy: -1, peak: 0.48 },
+          { check: isSolid(tx + 1, ty), x: px + TILE + 0, y: py,          w: 1,    h: TILE, dx: 1,  dy: 0,  peak: 0.38 },
+          { check: isSolid(tx - 1, ty), x: px - 1,         y: py,          w: 1,    h: TILE, dx: -1, dy: 0,  peak: 0.40 },
+          { check: isSolid(tx, ty + 1), x: px,              y: py + TILE,   w: TILE, h: 1,    dx: 0,  dy: 1,  peak: 0.38 },
+          { check: isSolid(tx, ty - 1), x: px,              y: py - 1,      w: TILE, h: 1,    dx: 0,  dy: -1, peak: 0.40 },
         ];
         for (const e of edges) {
           if (e.check) continue;
