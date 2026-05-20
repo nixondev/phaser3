@@ -103,7 +103,7 @@ export class UIScene extends Phaser.Scene {
 
     // â”€â”€ Avatar bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.avatarContainer = this.add.container(0, 0);
-    this.avatarHighlight = this.add.rectangle(0, 0, 72, 72)
+    this.avatarHighlight = this.add.rectangle(0, 0, 68, 68)
       .setStrokeStyle(4, 0xffdd44).setFillStyle(0, 0).setVisible(false);
     this.avatarContainer.add(this.avatarHighlight);
 
@@ -260,7 +260,7 @@ export class UIScene extends Phaser.Scene {
     this.avatarSprites.forEach(s => s.destroy());
     this.avatarSprites = [];
 
-    const AVATAR_SIZE = 72;
+    const AVATAR_SIZE = 68;
     const AVATAR_GAP = 8;
     const AVATAR_X = 16;
     const AVATAR_Y = 864;
@@ -269,7 +269,7 @@ export class UIScene extends Phaser.Scene {
       const x = AVATAR_X + i * (AVATAR_SIZE + AVATAR_GAP) + AVATAR_SIZE / 2;
       const y = AVATAR_Y + AVATAR_SIZE / 2;
       const sprite = this.add.sprite(x, y, char.textureKey, 0)
-        .setScale(4.0)
+        .setScale(1.0)
         .setInteractive({ useHandCursor: true });
       sprite.on('pointerdown', () => {
         const gs = this.scene.get(SCENES.GAME) as GameScene;
@@ -298,7 +298,7 @@ export class UIScene extends Phaser.Scene {
       return;
     }
 
-    const AVATAR_SIZE = 72;
+    const AVATAR_SIZE = 68;
     const AVATAR_GAP = 8;
     const AVATAR_X = 16;
     const AVATAR_Y = 864;

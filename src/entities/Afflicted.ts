@@ -46,7 +46,7 @@ export class Afflicted extends Entity {
     const texture = `afflicted-${variant}`;
     super(scene, def.x, def.y, texture, 0);
     
-    this.baseScale = 4.0;
+    this.baseScale = 1.0;
     this.setScale(this.baseScale);
 
     this.afflictedId    = def.id;
@@ -68,8 +68,8 @@ export class Afflicted extends Entity {
 
     this.setDepth(DEPTH.ENTITIES);
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(7, 6);
-    body.setOffset(5, 10);
+    body.setSize(28, 24);
+    body.setOffset(18, 38);
     body.setCollideWorldBounds(true);
 
     this.createAnimations();

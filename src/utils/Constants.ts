@@ -4,8 +4,8 @@ export const GAME_CONFIG = {
   TILE_SIZE: 64,
   ASSET_SCALE: 1,        // tiles displayed at native 64px
   WORLD_SCALE: 1,        // no downscale — 64px assets = 64px world units
-  ENTITY_SCALE: 1.5,     // scale multiplier for characters relative to a tile
-  ENTITY_WORLD_SCALE: 1.5, // entity sprite scale in world space (= ENTITY_SCALE / ASSET_SCALE)
+  ENTITY_SCALE: 1.0,     // scale multiplier for characters relative to a tile
+  ENTITY_WORLD_SCALE: 1.0, // entity sprite scale in world space — sprites are native 64px
   DEBUG: false,
 } as const;
 

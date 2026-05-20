@@ -7,11 +7,11 @@ export class Player extends Entity {
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'player', 0);
     this.setDepth(DEPTH.PLAYER);
-    this.setScale(4.0);
+    this.setScale(1.0);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(7, 6);
-    body.setOffset(5, 10);
+    body.setSize(28, 24);
+    body.setOffset(18, 38);
     body.setCollideWorldBounds(true);
 
     this.createAnimations();

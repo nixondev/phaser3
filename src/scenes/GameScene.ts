@@ -572,10 +572,6 @@ export class GameScene extends Phaser.Scene {
       }
     } else {
       this.events.emit('hide-interact-prompt');
-      if (input.action) {
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', 'Nothing reacts.');
-      }
     }
   }
 

@@ -43,8 +43,8 @@ export class PreloadScene extends Phaser.Scene {
       frameHeight: upscale,
     });
     this.load.spritesheet('player', 'assets/sprites/player.png', {
-      frameWidth: 17,
-      frameHeight: 17,
+      frameWidth: 64,
+      frameHeight: 64,
     });
 
     this.load.image('vial_cure', 'assets/sprites/vial_cure.png');
@@ -54,8 +54,8 @@ export class PreloadScene extends Phaser.Scene {
     ];
     for (const v of playerVariants) {
       this.load.spritesheet(`player-${v}`, `assets/sprites/player-${v}.png`, {
-        frameWidth: 17,
-        frameHeight: 17,
+        frameWidth: 64,
+        frameHeight: 64,
       });
     }
 
@@ -71,8 +71,8 @@ export class PreloadScene extends Phaser.Scene {
     ];
     for (const v of afflictedVariants) {
       this.load.spritesheet(`afflicted-${v}`, `assets/sprites/afflicted-${v}.png`, {
-        frameWidth: 17,
-        frameHeight: 17,
+        frameWidth: 64,
+        frameHeight: 64,
       });
     }
 
