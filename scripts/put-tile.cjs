@@ -168,13 +168,8 @@ function decodePNG(buffer) {
 
 // ── Resolve canonical assets_src name for a frame slot ──────────────────
 
-function resolveAssetSrcName(frame, srcDir) {
-  if (fs.existsSync(srcDir)) {
-    const prefix   = frame.toString().padStart(2, '0') + '_';
-    const existing = fs.readdirSync(srcDir).find(f => f.startsWith(prefix) && f.endsWith('.png'));
-    if (existing) return existing;
-  }
-  return `${frame.toString().padStart(2, '0')}_tile_${frame}.png`;
+function resolveAssetSrcName(frame) {
+  return `tile_${frame}.png`;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────
@@ -243,7 +238,7 @@ if (fs.existsSync(path.dirname(distPath))) {
 
 const srcDir = path.join(__dirname, '..', 'assets_src', 'tiles');
 if (fs.existsSync(srcDir)) {
-  const destName = resolveAssetSrcName(frame, srcDir);
+  const destName = resolveAssetSrcName(frame);
   const destPath = path.join(srcDir, destName);
   fs.copyFileSync(srcPath, destPath);
   console.log(`Synced → ${destPath}`);

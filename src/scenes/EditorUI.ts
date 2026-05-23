@@ -28,6 +28,8 @@ export class EditorUI {
 
   private currentRoomId = '';
   private currentWeather: string[] = [];
+  private currentDark = false;
+  private currentDarkLevel = 0.92;
 
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;
@@ -98,6 +100,7 @@ export class EditorUI {
     this.setStatus(`Loaded ${roomId}`);
     this.clearProperties();
     this.updateWeatherSelector(roomId);
+    this.updateDarknessSelector(roomId);
   }
 
   public setStatus(text: string): void {
@@ -184,6 +187,43 @@ export class EditorUI {
       .catch(e => this.setStatus(`Weather save failed: ${e}`));
   }
 
+  private updateDarknessSelector(roomId: string): void {
+    this.currentRoomId = roomId;
+    const rooms = RoomManager.getRoomsData().rooms;
+    const room = rooms[roomId] as any;
+    this.currentDark = room?.dark === true;
+    this.currentDarkLevel = typeof room?.darkLevel === 'number' ? room.darkLevel : 0.92;
+    this.syncDarknessControls();
+  }
+
+  private syncDarknessControls(): void {
+    const toggle = this.root.querySelector<HTMLButtonElement>('#editor-dark-toggle');
+    const slider = this.root.querySelector<HTMLInputElement>('#editor-dark-level');
+    const valEl  = this.root.querySelector<HTMLSpanElement>('#editor-dark-level-val');
+    if (toggle) {
+      toggle.classList.toggle('active', this.currentDark);
+      toggle.textContent = `dark: ${this.currentDark ? 'on' : 'off'}`;
+    }
+    if (slider) slider.value = String(this.currentDarkLevel);
+    if (valEl)  valEl.textContent = this.currentDarkLevel.toFixed(2);
+  }
+
+  private saveDark(): void {
+    if (!this.currentRoomId) return;
+    fetch('/__editor/save-dark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId: this.currentRoomId,
+        dark: this.currentDark,
+        darkLevel: this.currentDarkLevel,
+      }),
+    })
+      .then(r => r.json())
+      .then(() => this.setStatus(`Dark: ${this.currentDark ? `on (level ${this.currentDarkLevel.toFixed(2)})` : 'off'}`))
+      .catch(e => this.setStatus(`Dark save failed: ${e}`));
+  }
+
   private wireButtons(): void {
     const exit = this.root.querySelector<HTMLButtonElement>('#editor-exit');
     exit?.addEventListener('click', () => this.scene.exitToMenu());
@@ -246,6 +286,25 @@ export class EditorUI {
         this.scene.game.canvas.focus();
       });
     });
+
+    const darkToggle = this.root.querySelector<HTMLButtonElement>('#editor-dark-toggle');
+    darkToggle?.addEventListener('click', () => {
+      this.currentDark = !this.currentDark;
+      this.syncDarknessControls();
+      this.saveDark();
+      this.scene.game.canvas.focus();
+    });
+
+    const darkSlider = this.root.querySelector<HTMLInputElement>('#editor-dark-level');
+    darkSlider?.addEventListener('input', () => {
+      this.currentDarkLevel = parseFloat(darkSlider.value);
+      const valEl = this.root.querySelector<HTMLSpanElement>('#editor-dark-level-val');
+      if (valEl) valEl.textContent = this.currentDarkLevel.toFixed(2);
+    });
+    darkSlider?.addEventListener('change', () => {
+      this.saveDark();
+      this.scene.game.canvas.focus();
+    });
   }
 
   // â”€â”€ HTML / CSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -305,6 +364,14 @@ export class EditorUI {
           <button class="btn weather-btn" data-weather="rain-hard">rain-hard</button>
           <button class="btn weather-btn" data-weather="dripping">dripping</button>
           <button class="btn weather-btn" data-weather="clouds">clouds</button>
+        </div>
+        <h3>Darkness</h3>
+        <div class="row col" style="gap:6px">
+          <button class="btn" id="editor-dark-toggle">dark: off</button>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Level: <span id="editor-dark-level-val">0.92</span></span>
+            <input type="range" id="editor-dark-level" min="0" max="1" step="0.05" value="0.92">
+          </div>
         </div>
         <h3>Cheatsheet</h3>
         <div class="cheats">
@@ -371,6 +438,12 @@ export class EditorUI {
       #editor-overlay .btn-warn { background: #4a2a2a; border-color: #6a3a3a; }
       #editor-overlay .btn-warn:hover { background: #5a3030; }
       #editor-overlay .weather-btn.active { background: #2d3a2d; border-color: #4f6d4f; color: #d4f1d4; }
+      #editor-overlay #editor-dark-toggle.active { background: #1a1a2e; border-color: #4a4a8f; color: #aaaaff; }
+      #editor-overlay .dark-slider-row {
+        display: flex; align-items: center; gap: 6px; padding: 0 2px;
+      }
+      #editor-overlay .dark-slider-label { color: #aaa; white-space: nowrap; min-width: 70px; }
+      #editor-overlay #editor-dark-level { flex: 1; cursor: pointer; accent-color: #6666cc; }
 
       #editor-topbar {
         grid-area: top;

@@ -17,7 +17,7 @@ import { WeatherManager } from '@systems/WeatherManager';
 // The serialize/loadFrom infrastructure is preserved for future use.
 // import { SaveManager } from '@utils/SaveManager';
 import { checkRequires, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
-import { resolveTileSprite } from '@utils/TilesetResolver';
+import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 const CLINIC_DOOR_X     = 672;
 const CLINIC_DOOR_Y     = 1216;
@@ -101,7 +101,7 @@ export class GameScene extends Phaser.Scene {
     this.weatherManager.updateForRoom(startRoom);
 
     const roomDef = this.roomManager.getCurrentRoomDef();
-    this.darknessOverlay.setEnabled(roomDef.dark === true);
+    this.darknessOverlay.setEnabled(roomDef.dark === true, roomDef.darkLevel);
 
     if (USE_MIDI_MUSIC) {
       const music = MusicManager.getInstance();
@@ -806,7 +806,8 @@ export class GameScene extends Phaser.Scene {
         doSwitch();
         this.refreshParkedBodies();
         this.weatherManager.updateForRoom(target.roomId);
-        this.darknessOverlay.setEnabled(this.roomManager.getCurrentRoomDef().dark === true);
+        const _td = this.roomManager.getCurrentRoomDef();
+        this.darknessOverlay.setEnabled(_td.dark === true, _td.darkLevel);
         if (USE_MIDI_MUSIC) MusicManager.getInstance().playRoomMusic(target.roomId);
         this.events.emit('room-changed', this.roomManager.getCurrentRoomDef().name);
       }).then(() => { this.isTransitioning = false; });
@@ -911,24 +912,33 @@ export class GameScene extends Phaser.Scene {
     const rt = this.add.renderTexture(0, 0, roomW, roomH);
     rt.setOrigin(0, 0);
     rt.setDepth(DEPTH.GROUND + 0.5);
-    rt.setAlpha(0.75);
-
-    const gfx = this.make.graphics();
-    gfx.fillStyle(0x000000, 1);
+    rt.setAlpha(0.6);
 
     const layerData = collisionLayer.layer.data;
+    const tilesets = map.tilesets;
     for (let ty = 0; ty < map.height; ty++) {
       for (let tx = 0; tx < map.width; tx++) {
         const tile = layerData[ty]?.[tx];
-        if (!tile || tile.index < 0) continue;
-        gfx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
+        if (!tile || tile.index <= 0) continue;
+        let owningTs = tilesets[0];
+        for (const ts of tilesets) {
+          if (ts.firstgid <= tile.index) owningTs = ts;
+        }
+        if (!owningTs) continue;
+        const key = tilesetSpritesheetKey(owningTs.name);
+        const frame = tile.index - owningTs.firstgid;
+        const img = this.make.image({ x: 0, y: 0, key, frame, add: false });
+        img.setTint(0x000000).setOrigin(0, 0);
+        rt.draw(img, tx * TILE, ty * TILE);
+        img.destroy();
       }
     }
 
-    rt.draw(gfx, 0, 0);
-    gfx.destroy();
-
-    rt.postFX.addBlur(100, 25, 25, 0.2, 0x000000, 5);
+    // A shadow effect with x, y offset provides the "3D" directional look
+    // x=8, y=8 makes it cast towards the bottom-right (more prominent left/top edges)
+    rt.postFX.addShadow(3, -3 , .006, 1, 0x000000, 15, 0.5);
+    // Optional light blur to soften it further
+    rt.postFX.addBlur(100, 20, 20, 0.2, 0x000000, 5);
 
     this.edgeShadows = rt;
   }
@@ -1105,7 +1115,8 @@ export class GameScene extends Phaser.Scene {
       this.spawnAfflicted();
       this.refreshParkedBodies();
       this.weatherManager.updateForRoom(doorDef.targetRoom);
-      this.darknessOverlay.setEnabled(this.roomManager.getCurrentRoomDef().dark === true);
+      const _dd = this.roomManager.getCurrentRoomDef();
+      this.darknessOverlay.setEnabled(_dd.dark === true, _dd.darkLevel);
 
       if (USE_MIDI_MUSIC) {
         MusicManager.getInstance().playRoomMusic(doorDef.targetRoom);

@@ -262,6 +262,37 @@ function editorSavePlugin(): Plugin {
         }
       });
 
+      server.middlewares.use('/__editor/save-dark', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const body = await readJsonBody(req) as { roomId?: string; dark?: boolean; darkLevel?: number };
+          const { roomId, dark, darkLevel } = body;
+          if (!roomId || !ROOM_ID_RE.test(roomId)) { send(res, 400, { error: 'invalid roomId' }); return; }
+          if (typeof dark !== 'boolean') { send(res, 400, { error: 'dark must be boolean' }); return; }
+          if (darkLevel !== undefined && (typeof darkLevel !== 'number' || darkLevel < 0 || darkLevel > 1)) {
+            send(res, 400, { error: 'darkLevel must be 0–1' }); return;
+          }
+          const raw = await fsp.readFile(roomsJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          const room = data?.rooms?.[roomId];
+          if (!room) { send(res, 404, { error: `room ${roomId} not found` }); return; }
+          if (dark) {
+            room.dark = true;
+            if (darkLevel !== undefined) room.darkLevel = darkLevel;
+            else delete room.darkLevel;
+          } else {
+            delete room.dark;
+            delete room.darkLevel;
+          }
+          const tmp = `${roomsJsonPath}.tmp`;
+          await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          await fsp.rename(tmp, roomsJsonPath);
+          send(res, 200, { ok: true, roomId, dark: room.dark, darkLevel: room.darkLevel });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
       server.middlewares.use('/__editor/save-tile', async (req, res, next) => {
         if (req.method !== 'POST') { next(); return; }
         try {
@@ -301,7 +332,7 @@ function editorSavePlugin(): Plugin {
 
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark');
       }
     }
   };

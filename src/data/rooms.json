@@ -11,7 +11,6 @@
       "music": "bgm-main",
       "reverb": "Large Long Echo Hall",
       "reverbMix": 0.45,
-      "dark": true,
       "playerSpawn": {
         "x": 3072,
         "y": 3776
@@ -417,7 +416,9 @@
             }
           ]
         }
-      ]
+      ],
+      "dark": true,
+      "darkLevel": 0.4
     },
     "protag-house": {
       "id": "protag-house",
@@ -463,8 +464,8 @@
       "interactables": [
         {
           "id": "controls-hint",
-          "x": 992,
-          "y": 576,
+          "x": 1309,
+          "y": 212,
           "type": "sign",
           "tileFrame": 7,
           "text": "Flashlight: Pick it up, press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nDrop it (Q) and another can use it.\nIt keeps the afflicted at bay."

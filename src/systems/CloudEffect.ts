@@ -15,23 +15,33 @@ export class CloudEffect {
   private running = false;
 
   constructor(scene: Phaser.Scene) {
-    const defs: Array<[x: number, y: number, speed: number, w: number, h: number]> = [
-      [  -40,   8, 14, 640, 176],
-      [  640,   0, 22, 660, 176],
-      [  260, 200, 28, 660, 200],
-      [  940, 192, 16, 640, 200],
-      [  -80, 376, 24, 640, 184],
-      [  600, 368, 12, 660, 192],
+    // Three rows, two clouds each. Same speed per row so spacing never drifts.
+    // Random phase start per row so each load looks different.
+    const W = GAME_CONFIG.WIDTH;
+    const rows: Array<[yBase: number, speed: number, w: number, h: number]> = [
+      [  10, 14, 640, 176],
+      [ 200, 20, 660, 200],
+      [ 370, 16, 650, 184],
     ];
 
-    for (const [x, y, speed, cw, ch] of defs) {
-      const gfx = scene.add.graphics();
-      gfx.setScrollFactor(0);
-      gfx.setDepth(DEPTH.WEATHER - 1);
-      CloudEffect.drawCloud(gfx, cw, ch);
-      gfx.setPosition(x, y);
-      gfx.setVisible(false);
-      this.clouds.push({ gfx, x, y, speed, w: cw, h: ch });
+    for (const [yBase, speed, cw, ch] of rows) {
+      const halfCycle = (W + 2 * cw) / 2;
+      // Random start anywhere in the full wrap range so they scatter naturally
+      const phaseA = Math.random() * (W + cw) - cw;
+      const phaseB = phaseA + halfCycle;
+
+      for (let i = 0; i < 2; i++) {
+        const x = i === 0 ? phaseA : phaseB;
+        // Small random y offset within the row band
+        const y = yBase + (Math.random() - 0.5) * 40;
+        const gfx = scene.add.graphics();
+        gfx.setScrollFactor(0);
+        gfx.setDepth(DEPTH.WEATHER - 1);
+        CloudEffect.drawCloud(gfx, cw, ch);
+        gfx.setPosition(x, y);
+        gfx.setVisible(false);
+        this.clouds.push({ gfx, x, y, speed, w: cw, h: ch });
+      }
     }
   }
 

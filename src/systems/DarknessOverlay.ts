@@ -3,11 +3,13 @@ import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import type { Flashlight } from '@systems/Flashlight';
 
 const AMBIENT_RADIUS = 72;
+const DEFAULT_DARK_LEVEL = 0.92;
 
 export class DarknessOverlay {
   private rt: Phaser.GameObjects.RenderTexture;
   private lightMask: Phaser.GameObjects.Graphics;
   private enabled = false;
+  private darkLevel = DEFAULT_DARK_LEVEL;
 
   constructor(scene: Phaser.Scene) {
     this.rt = scene.add.renderTexture(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT);
@@ -21,8 +23,9 @@ export class DarknessOverlay {
     this.lightMask.setDepth(-9999);
   }
 
-  setEnabled(enabled: boolean): void {
+  setEnabled(enabled: boolean, level?: number): void {
     this.enabled = enabled;
+    if (level !== undefined) this.darkLevel = Math.max(0, Math.min(1, level));
     this.rt.setVisible(enabled);
   }
 
@@ -30,7 +33,7 @@ export class DarknessOverlay {
     if (!this.enabled) return;
 
     this.rt.clear();
-    this.rt.fill(0x000000, 0.92);
+    this.rt.fill(0x000000, this.darkLevel);
 
     // Erase ambient circle — everything in screen-space coords, no scroll offset needed
     this.lightMask.clear();
