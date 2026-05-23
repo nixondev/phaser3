@@ -429,7 +429,6 @@
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
-      "weather": "rain-mild",
       "playerSpawn": {
         "x": 768,
         "y": 736
@@ -1215,6 +1214,43 @@
       ],
       "interactables": [],
       "afflicted": []
+    },
+    "title-screen": {
+      "id": "title-screen",
+      "name": "The Junction",
+      "mapKey": "title-screen",
+      "tilemapPath": "assets/tilemaps/title-screen.json",
+      "width": 20,
+      "height": 15,
+      "weather": [
+        "rain-hard",
+        "clouds"
+      ],
+      "playerSpawn": {
+        "x": 640,
+        "y": 480
+      },
+      "doors": [],
+      "afflicted": [
+        {
+          "id": "ts-wanderer-a",
+          "name": "Unknown",
+          "role": "",
+          "x": 320,
+          "y": 450,
+          "behaviorLoop": "wander",
+          "variant": "walker"
+        },
+        {
+          "id": "ts-wanderer-b",
+          "name": "Unknown",
+          "role": "",
+          "x": 900,
+          "y": 560,
+          "behaviorLoop": "wander",
+          "variant": "husk"
+        }
+      ]
     }
   },
   "startRoom": "protag-house"

@@ -26,6 +26,9 @@ export class EditorUI {
   private propsLabel!: HTMLElement;
   private propsTextarea!: HTMLTextAreaElement;
 
+  private currentRoomId = '';
+  private currentWeather: string[] = [];
+
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;
     this.originalParent = this.gameContainer.parentNode;
@@ -94,6 +97,7 @@ export class EditorUI {
     this.highlightActiveRoom(roomId);
     this.setStatus(`Loaded ${roomId}`);
     this.clearProperties();
+    this.updateWeatherSelector(roomId);
   }
 
   public setStatus(text: string): void {
@@ -153,6 +157,33 @@ export class EditorUI {
     });
   }
 
+  private updateWeatherSelector(roomId: string): void {
+    this.currentRoomId = roomId;
+    const rooms = RoomManager.getRoomsData().rooms;
+    const room = rooms[roomId] as any;
+    const w = room?.weather;
+    this.currentWeather = w ? (Array.isArray(w) ? [...w] : [w]) : [];
+    this.syncWeatherButtons();
+  }
+
+  private syncWeatherButtons(): void {
+    this.root.querySelectorAll<HTMLButtonElement>('.weather-btn').forEach(btn => {
+      btn.classList.toggle('active', this.currentWeather.includes(btn.dataset.weather ?? ''));
+    });
+  }
+
+  private saveWeather(): void {
+    if (!this.currentRoomId) return;
+    fetch('/__editor/save-weather', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: this.currentRoomId, weather: this.currentWeather }),
+    })
+      .then(r => r.json())
+      .then(() => this.setStatus(`Weather: [${this.currentWeather.join(', ') || 'none'}]`))
+      .catch(e => this.setStatus(`Weather save failed: ${e}`));
+  }
+
   private wireButtons(): void {
     const exit = this.root.querySelector<HTMLButtonElement>('#editor-exit');
     exit?.addEventListener('click', () => this.scene.exitToMenu());
@@ -199,6 +230,22 @@ export class EditorUI {
 
     const visuals = this.root.querySelector<HTMLButtonElement>('#editor-visuals');
     visuals?.addEventListener('click', () => synthesizeKey(86, 'KeyV'));
+
+    this.root.querySelectorAll<HTMLButtonElement>('.weather-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const type = btn.dataset.weather ?? '';
+        if (!type) return;
+        const idx = this.currentWeather.indexOf(type);
+        if (idx >= 0) {
+          this.currentWeather.splice(idx, 1);
+        } else {
+          this.currentWeather.push(type);
+        }
+        this.syncWeatherButtons();
+        this.saveWeather();
+        this.scene.game.canvas.focus();
+      });
+    });
   }
 
   // â”€â”€ HTML / CSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -251,6 +298,13 @@ export class EditorUI {
         <div class="row col">
           <button class="btn" id="editor-hud">H · HUD overlay</button>
           <button class="btn" id="editor-visuals">V · Visual debug</button>
+        </div>
+        <h3>Weather</h3>
+        <div id="editor-weather-btns" class="row col">
+          <button class="btn weather-btn" data-weather="rain-mild">rain-mild</button>
+          <button class="btn weather-btn" data-weather="rain-hard">rain-hard</button>
+          <button class="btn weather-btn" data-weather="dripping">dripping</button>
+          <button class="btn weather-btn" data-weather="clouds">clouds</button>
         </div>
         <h3>Cheatsheet</h3>
         <div class="cheats">
@@ -316,6 +370,7 @@ export class EditorUI {
       #editor-overlay .btn:hover { background: #353535; border-color: #555; }
       #editor-overlay .btn-warn { background: #4a2a2a; border-color: #6a3a3a; }
       #editor-overlay .btn-warn:hover { background: #5a3030; }
+      #editor-overlay .weather-btn.active { background: #2d3a2d; border-color: #4f6d4f; color: #d4f1d4; }
 
       #editor-topbar {
         grid-area: top;

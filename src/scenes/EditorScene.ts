@@ -117,6 +117,7 @@ export class EditorScene extends Phaser.Scene {
     }
     this.editorUI?.onRoomChanged(roomId);
     this.editorManager?.clearHistory();
+    this.editorManager?.clearDirtyState();
   }
 
   private setupCameraForEditor(): void {

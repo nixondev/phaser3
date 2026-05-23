@@ -1,3 +1,5 @@
+export type WeatherType = 'rain-mild' | 'rain-hard' | 'dripping' | 'clouds';
+
 export interface Position {
   x: number;
   y: number;
@@ -144,7 +146,7 @@ export interface RoomDefinition {
   reverb?: string;
   reverbMix?: number;
   dark?: boolean;
-  weather?: 'rain-mild' | 'rain-hard' | 'dripping';
+  weather?: WeatherType | WeatherType[];
   drips?: Array<{ x: number; y: number }>;
   /** Applied at room load: if the flag is set, mutate the live tilemap/state. */
   flagConditions?: FlagCondition[];

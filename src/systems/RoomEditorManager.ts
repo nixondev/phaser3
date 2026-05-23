@@ -77,6 +77,9 @@ export class RoomEditorManager {
     ENTER: Phaser.Input.Keyboard.Key;
   };
 
+  private dirtyObjects = new Map<string, { type: 'afflicted' | 'interactable'; id: string; x: number; y: number }>();
+  private pendingRoomSize: { width: number; height: number } | null = null;
+
   private placementMode: 'interactable' | 'afflicted' | null = null;
   private activeTool: 'paint' | 'rect' | 'fill' = 'paint';
   private afflictedVariantIndex: number = 0;
@@ -844,9 +847,8 @@ export class RoomEditorManager {
     }
     this.peekAtChangedEdge(oldW, oldH, newW, newH, offX, offY);
     console.log(`[Editor] Resized map ${oldW}x${oldH} -> ${newW}x${newH} (offset ${offX},${offY})`);
-    if (import.meta.env.DEV) {
-      this.saveRoomSizeToDisk(this.roomManager.getCurrentRoomId(), newW, newH);
-    }
+    this.pendingRoomSize = { width: newW, height: newH };
+    this.showToast(`Resized ${newW}×${newH} — press X to save`);
   }
 
   /**
@@ -1160,9 +1162,9 @@ export class RoomEditorManager {
     const path = `public/assets/tilemaps/${roomId}.json`;
     const json = JSON.stringify(exportData, null, 2);
     
-    // Auto-save attempt
     if (import.meta.env.DEV) {
       this.saveTilemapToDisk(roomId, exportData);
+      this.flushDirtyState(roomId);
     } else {
       console.log(`[Editor] Tilemap JSON for ${path}:\n`, exportData);
       this.copyAndToast(json, `Tilemap copied. Paste into:\n${path}`);
@@ -1204,6 +1206,23 @@ export class RoomEditorManager {
       const json = JSON.stringify(data, null, 2);
       this.copyAndToast(json, `Disk save failed: ${err.message}\nFallback: JSON copied to clipboard.`);
     }
+  }
+
+  private flushDirtyState(roomId: string): void {
+    if (this.pendingRoomSize) {
+      const { width, height } = this.pendingRoomSize;
+      this.saveRoomSizeToDisk(roomId, width, height);
+      this.pendingRoomSize = null;
+    }
+    for (const entry of this.dirtyObjects.values()) {
+      this.saveObjectToDisk(entry.type, entry.id, entry.x, entry.y);
+    }
+    this.dirtyObjects.clear();
+  }
+
+  public clearDirtyState(): void {
+    this.pendingRoomSize = null;
+    this.dirtyObjects.clear();
   }
 
   private handleTilePainting(): void {
@@ -1355,15 +1374,8 @@ export class RoomEditorManager {
       return;
     }
 
-    if (import.meta.env.DEV) {
-      this.saveObjectToDisk(type, id, x, y);
-    } else {
-      const listKey = type === 'afflicted' ? 'afflicted' : 'interactables';
-      const path = `src/data/rooms.json â†’ rooms.${roomId}.${listKey}[id="${id}"]`;
-      const snippet = JSON.stringify({ id, x, y }, null, 2);
-      console.log(`[Editor] Position update for ${path}:\n${snippet}`);
-      this.copyAndToast(snippet, `Position copied. Update x/y in:\n${path}`);
-    }
+    this.dirtyObjects.set(id, { type, id, x, y });
+    this.showToast(`Moved ${id} — press X to save`);
   }
 
   private async copyAndToast(text: string, message: string): Promise<void> {
