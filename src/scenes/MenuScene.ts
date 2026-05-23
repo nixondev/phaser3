@@ -124,11 +124,11 @@ export class MenuScene extends Phaser.Scene {
 
     const prompt = this.add
       .text(w / 2, h * 0.62, 'PRESS SPACE OR ENTER', {
-        fontSize: '52px',
-        fontFamily: 'VT323',
+        fontSize: '20px',
+        fontFamily: 'Silkscreen',
         color: '#aabbcc',
         stroke: '#1a2a3a',
-        strokeThickness: 3,
+        strokeThickness: 2,
         shadow: {
           offsetX: 0,
           offsetY: 0,
@@ -148,17 +148,6 @@ export class MenuScene extends Phaser.Scene {
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
-
-    this.add
-      .text(w / 2, h - 80, 'ARROW KEYS / WASD TO MOVE', {
-        fontSize: '36px',
-        fontFamily: 'VT323',
-        color: '#556677',
-        stroke: '#0a0a14',
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5)
-      .setDepth(TEXT_DEPTH);
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.rain?.destroy();

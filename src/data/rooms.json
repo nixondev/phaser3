@@ -455,9 +455,9 @@
           "height": 64,
           "targetRoom": "room-vault",
           "targetDoor": "door-sd3ig",
-          "direction": "right",
-          "spawnX": 1344,
-          "spawnY": 1120,
+          "direction": "left",
+          "spawnX": 1442,
+          "spawnY": 1118,
           "requires": []
         }
       ],
@@ -1094,15 +1094,15 @@
         },
         {
           "id": "door-sd3ig",
-          "x": 1152,
-          "y": 2112,
+          "x": 870,
+          "y": 545,
           "width": 64,
           "height": 64,
           "targetRoom": "protag-house",
           "targetDoor": "door-uwnva",
           "direction": "down",
-          "spawnX": 1184,
-          "spawnY": 2048,
+          "spawnX": 870,
+          "spawnY": 545,
           "requires": []
         }
       ]

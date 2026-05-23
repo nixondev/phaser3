@@ -105,7 +105,10 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    document.fonts.load('1em VT323').finally(() => {
+    Promise.all([
+      document.fonts.load('1em VT323'),
+      document.fonts.load('1em Silkscreen'),
+    ]).finally(() => {
       this.scene.start(SCENES.MENU);
     });
   }

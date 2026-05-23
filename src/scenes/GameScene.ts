@@ -34,6 +34,7 @@ export class GameScene extends Phaser.Scene {
   private afflictedCollider?: Phaser.Physics.Arcade.Collider;
   private playerAfflictedCollider?: Phaser.Physics.Arcade.Collider;
   private doorOverlaps: Phaser.Physics.Arcade.Collider[] = [];
+  private nearDoor: DoorDefinition | null = null;
   private isTransitioning = false;
   private dialogOpen = false;
   private cureCooldown = false;  // prevents multi-afflicted same-frame double-trigger
@@ -515,6 +516,27 @@ export class GameScene extends Phaser.Scene {
   // ── Interactables & item pickup ─────────────────────────────────────────
 
   private checkInteractables(input: InputState): void {
+    // Update nearDoor every frame via manual bounds check.
+    this.nearDoor = null;
+    if (!this.isTransitioning) {
+      const pb = this.player.body as Phaser.Physics.Arcade.Body;
+      const pr = new Phaser.Geom.Rectangle(pb.x, pb.y, pb.width, pb.height);
+      for (const zone of this.roomManager.getDoorZones()) {
+        const zb = zone.body as Phaser.Physics.Arcade.StaticBody;
+        if (Phaser.Geom.Rectangle.Overlaps(pr, new Phaser.Geom.Rectangle(zb.x, zb.y, zb.width, zb.height))) {
+          this.nearDoor = zone.getData('doorDef') as DoorDefinition;
+          break;
+        }
+      }
+    }
+
+    // Door takes priority over all other interactables.
+    if (this.nearDoor) {
+      this.events.emit('show-interact-prompt');
+      if (input.action) this.handleDoorTransition(this.nearDoor);
+      return;
+    }
+
     const roomDef = this.roomManager.getCurrentRoomDef();
     const interactables = roomDef.interactables || [];
     const roomId = this.rsm.getCurrentRoom();
@@ -1028,11 +1050,7 @@ export class GameScene extends Phaser.Scene {
     const collisionLayer = this.roomManager.getCollisionLayer();
     this.collider = this.physics.add.collider(this.player, collisionLayer);
 
-    this.doorOverlaps = this.roomManager.getDoorZones().map((zone) =>
-      this.physics.add.overlap(this.player, zone, (_p, dz) => {
-        this.handleDoorTransition((dz as Phaser.GameObjects.Zone).getData('doorDef') as DoorDefinition);
-      }, undefined, this)
-    );
+    // Doors are now E-to-enter; nearDoor is updated each frame in checkInteractables.
   }
 
   private setupCamera(): void {

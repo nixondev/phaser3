@@ -19,7 +19,9 @@
     "setup": "npm run generate-assets && npm run build-tiles",
     "build:tauri": "tsc && vite build --config vite.config.tauri.ts",
     "tauri:dev": "npx tauri dev",
-    "tauri:build": "npx tauri build"
+    "tauri:build": "npx tauri build",
+    "tauri-dev": "npx tauri dev",
+    "tauri-build": "npx tauri build"
   },
   "dependencies": {
     "phaser": "^3.80.1"

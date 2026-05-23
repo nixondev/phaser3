@@ -18,9 +18,12 @@ export class DarknessOverlay {
     this.rt.setDepth(DEPTH.LIGHTING);
     this.rt.setVisible(false);
 
-    // Must be visible for rt.erase() to render it
+    // Must be visible (non-zero alpha, visible=true) for rt.erase() to render it,
+    // but must NOT appear in the main camera — exclude it via cameraFilter so it
+    // only participates in the RT's internal draw pass.
     this.lightMask = scene.add.graphics();
     this.lightMask.setDepth(-9999);
+    this.lightMask.cameraFilter = scene.cameras.main.id;
   }
 
   setEnabled(enabled: boolean, level?: number): void {
