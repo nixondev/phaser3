@@ -2,4 +2,3 @@ node_modules/
 dist/
 .idea/
 *.iml
-public/assets/tilemaps/room-*.json
