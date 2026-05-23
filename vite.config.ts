@@ -2,9 +2,128 @@ import { defineConfig, type Plugin } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import fsp from 'fs/promises';
+import zlib from 'zlib';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 const ROOM_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+// ── PNG helpers for individual tile extraction ────────────────────────────
+
+function pngCrc32(buf: Buffer): number {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[i] = c;
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function encodeTilePNG(pixels: Uint8Array, size: number): Buffer {
+  const rowBytes = 1 + size * 4;
+  const raw = Buffer.alloc(size * rowBytes);
+  for (let y = 0; y < size; y++) {
+    raw[y * rowBytes] = 0;
+    for (let x = 0; x < size; x++) {
+      const si = (y * size + x) * 4;
+      const di = y * rowBytes + 1 + x * 4;
+      raw[di] = pixels[si]; raw[di+1] = pixels[si+1];
+      raw[di+2] = pixels[si+2]; raw[di+3] = pixels[si+3];
+    }
+  }
+  const compressed = zlib.deflateSync(raw);
+  function chunk(type: string, data: Buffer): Buffer {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const c  = Buffer.allocUnsafe(4); c.writeUInt32BE(pngCrc32(td));
+    return Buffer.concat([len, td, c]);
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function paethPredictor(a: number, b: number, c: number): number {
+  const p = a + b - c;
+  const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  if (pb <= pc) return b;
+  return c;
+}
+
+function extractTileFromPNG(buf: Buffer, frame: number, tileSize: number, cols: number): Uint8Array | null {
+  try {
+    if (buf.readUInt32BE(0) !== 0x89504E47) return null;
+    let pos = 8;
+    let width = 0, height = 0, colorType = 0;
+    const idatChunks: Buffer[] = [];
+    let palette: Buffer | null = null, trns: Buffer | null = null;
+    while (pos < buf.length) {
+      const length = buf.readUInt32BE(pos);
+      const type   = buf.toString('ascii', pos + 4, pos + 8);
+      if (type === 'IHDR') {
+        width = buf.readUInt32BE(pos + 8); height = buf.readUInt32BE(pos + 12);
+        colorType = buf[pos + 17];
+      } else if (type === 'PLTE') { palette = buf.slice(pos + 8, pos + 8 + length);
+      } else if (type === 'tRNS') { trns    = buf.slice(pos + 8, pos + 8 + length);
+      } else if (type === 'IDAT') { idatChunks.push(buf.slice(pos + 8, pos + 8 + length)); }
+      pos += 12 + length;
+    }
+    const decompressed = zlib.inflateSync(Buffer.concat(idatChunks));
+    const bpp    = colorType === 6 ? 4 : colorType === 4 ? 2 : colorType === 2 ? 3 : 1;
+    const stride = width * bpp;
+    const raw    = new Uint8Array(height * stride);
+    for (let y = 0; y < height; y++) {
+      const ft  = decompressed[y * (stride + 1)];
+      const src = y * (stride + 1) + 1;
+      const dst = y * stride;
+      const prv = (y - 1) * stride;
+      for (let x = 0; x < stride; x++) {
+        const f = decompressed[src + x];
+        const a = x >= bpp          ? raw[dst + x - bpp]  : 0;
+        const b = y >  0            ? raw[prv + x]        : 0;
+        const c = y >  0 && x >= bpp ? raw[prv + x - bpp] : 0;
+        switch (ft) {
+          case 0: raw[dst+x] =  f;                                       break;
+          case 1: raw[dst+x] = (f + a)                        & 0xff;   break;
+          case 2: raw[dst+x] = (f + b)                        & 0xff;   break;
+          case 3: raw[dst+x] = (f + Math.floor((a + b) / 2)) & 0xff;   break;
+          case 4: raw[dst+x] = (f + paethPredictor(a, b, c)) & 0xff;   break;
+        }
+      }
+    }
+    const col = frame % cols, row = Math.floor(frame / cols);
+    const ox = col * tileSize, oy = row * tileSize;
+    if (ox + tileSize > width || oy + tileSize > height) return null;
+    const tile = new Uint8Array(tileSize * tileSize * 4);
+    for (let ty = 0; ty < tileSize; ty++) {
+      for (let tx = 0; tx < tileSize; tx++) {
+        const si = (oy + ty) * stride + (ox + tx) * bpp;
+        const di = (ty * tileSize + tx) * 4;
+        if (colorType === 6) {
+          tile[di] = raw[si]; tile[di+1] = raw[si+1]; tile[di+2] = raw[si+2]; tile[di+3] = raw[si+3];
+        } else if (colorType === 2) {
+          tile[di] = raw[si]; tile[di+1] = raw[si+1]; tile[di+2] = raw[si+2]; tile[di+3] = 255;
+        } else if (colorType === 3 && palette) {
+          const idx = raw[si];
+          tile[di] = palette[idx*3]; tile[di+1] = palette[idx*3+1]; tile[di+2] = palette[idx*3+2];
+          tile[di+3] = trns && idx < trns.length ? trns[idx] : 255;
+        } else {
+          tile[di] = tile[di+1] = tile[di+2] = raw[si]; tile[di+3] = 255;
+        }
+      }
+    }
+    return tile;
+  } catch {
+    return null;
+  }
+}
 
 function readJsonBody(req: import('http').IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -115,6 +234,8 @@ function editorSavePlugin(): Plugin {
       server.middlewares.use('/__editor/save-tile', async (req, res, next) => {
         if (req.method !== 'POST') { next(); return; }
         try {
+          const url   = new URL(req.url ?? '', 'http://localhost');
+          const frame = parseInt(url.searchParams.get('frame') ?? '', 10);
           const chunks: Buffer[] = [];
           await new Promise<void>((resolve, reject) => {
             req.on('data', (c: Buffer) => chunks.push(c));
@@ -122,15 +243,26 @@ function editorSavePlugin(): Plugin {
             req.on('error', reject);
           });
           const target = path.join(tilemapsDir, 'tileset.png');
-          if (!target.startsWith(tilemapsDir + path.sep)) {
-            send(res, 400, { error: 'path escapes tilemaps dir' });
-            return;
-          }
           const buf = Buffer.concat(chunks);
           const tmp = `${target}.tmp`;
           await fsp.writeFile(tmp, buf);
           await fsp.rename(tmp, target);
-          send(res, 200, { ok: true, bytes: buf.length });
+
+          // Also export the individual tile to assets_src/tiles/tile_<N>.png
+          let tileExported = false;
+          if (!isNaN(frame) && frame >= 0) {
+            const tilesDir = path.join(projectRoot, 'assets_src', 'tiles');
+            if (fs.existsSync(tilesDir)) {
+              const tilePixels = extractTileFromPNG(buf, frame, 64, 8);
+              if (tilePixels) {
+                const tilePath = path.join(tilesDir, `tile_${frame}.png`);
+                await fsp.writeFile(tilePath, encodeTilePNG(tilePixels, 64));
+                tileExported = true;
+              }
+            }
+          }
+
+          send(res, 200, { ok: true, bytes: buf.length, tileExported });
         } catch (e: any) {
           send(res, 500, { error: String(e?.message ?? e) });
         }

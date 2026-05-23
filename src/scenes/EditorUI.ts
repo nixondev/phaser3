@@ -191,6 +191,9 @@ export class EditorUI {
     const palette = this.root.querySelector<HTMLButtonElement>('#editor-palette');
     palette?.addEventListener('click', () => synthesizeKey(80, 'KeyP'));
 
+    const fill = this.root.querySelector<HTMLButtonElement>('#editor-fill');
+    fill?.addEventListener('click', () => synthesizeKey(70, 'KeyF'));
+
     const hud = this.root.querySelector<HTMLButtonElement>('#editor-hud');
     hud?.addEventListener('click', () => synthesizeKey(72, 'KeyH'));
 
@@ -238,6 +241,7 @@ export class EditorUI {
         <h3>Tools</h3>
         <div class="row col">
           <button class="btn" id="editor-palette">P · Tile palette</button>
+          <button class="btn" id="editor-fill">F · Flood fill</button>
           <button class="btn" id="editor-stamp">T · Stamp default room</button>
           <button class="btn" id="editor-place-interactable">I · Place interactable</button>
           <button class="btn" id="editor-place-npc">N · Place NPC</button>
@@ -252,6 +256,7 @@ export class EditorUI {
         <div class="cheats">
           <div><kbd>Q</kbd>/<kbd>E</kbd> tile cycle</div>
           <div><kbd>L-clk</kbd> paint &nbsp; <kbd>R-clk</kbd> erase</div>
+          <div><kbd>F</kbd> flood fill (toggle)</div>
           <div><kbd>M-clk</kbd>/<kbd>Alt+L</kbd> eyedropper</div>
           <div><kbd>Sh+Arrow</kbd> expand edge</div>
           <div><kbd>Ctrl+Sh+Arrow</kbd> shrink edge</div>

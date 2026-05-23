@@ -14,7 +14,9 @@
       "Bash(dir \"C:\\\\Users\\\\flyki\\\\Music\\\\EchoThief\")",
       "Bash(git rm *)",
       "Bash(rm -f public/assets/sprites/infected-*-2026*.png)",
-      "Bash(dir \"C:\\\\Users\\\\flyki\\\\IdeaProjects\\\\claudeded\\\\*.md\" /b)"
+      "Bash(dir \"C:\\\\Users\\\\flyki\\\\IdeaProjects\\\\claudeded\\\\*.md\" /b)",
+      "Bash(cp assets_src/tiles/* assets_src/tiles_old/)",
+      "Bash(rm assets_src/tiles/*)"
     ]
   }
 }

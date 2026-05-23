@@ -1539,19 +1539,18 @@ export class RoomEditorManager {
 
   private handleFloodFill(): void {
     if (this.activeTool !== 'fill') return;
-    
+    if (!this.justDown) return;
+
     const map = this.roomManager.getMap();
     if (!map) return;
-    
-    const pointer = this.scene.input.activePointer;
-    if (pointer.primaryDown && !this.wasPrimaryDown) {
-      const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
-      const tileX = map.worldToTileX(worldPoint.x);
-      const tileY = map.worldToTileY(worldPoint.y);
 
-      if (tileX !== null && tileY !== null) {
-        this.executeFloodFill(tileX, tileY);
-      }
+    const pointer = this.scene.input.activePointer;
+    const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+    const tileX = map.worldToTileX(worldPoint.x);
+    const tileY = map.worldToTileY(worldPoint.y);
+
+    if (tileX !== null && tileY !== null) {
+      this.executeFloodFill(tileX, tileY);
     }
   }
 
