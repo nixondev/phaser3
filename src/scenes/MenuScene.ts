@@ -65,7 +65,7 @@ export class MenuScene extends Phaser.Scene {
           blur: 24,
           fill: true,
         },
-      })
+      } as any)
       .setOrigin(0.5)
       .setDepth(TEXT_DEPTH);
 
