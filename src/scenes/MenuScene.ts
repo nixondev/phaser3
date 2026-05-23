@@ -89,8 +89,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: prompt,
-      alpha: 0.2,
-      duration: 900,
+      alpha: 0.55,
+      duration: 1100,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
@@ -143,14 +143,14 @@ export class MenuScene extends Phaser.Scene {
       console.warn('[MenuScene] title-screen tilemap not in cache — restart dev server');
     }
 
-    this.wanderers.push(this.makeWanderer(320, 450, 'afflicted-walker'));
-    this.wanderers.push(this.makeWanderer(900, 560, 'afflicted-husk'));
+    this.wanderers.push(this.makeWanderer(320, 450, 'afflicted-walker', 0x5577cc));
+    this.wanderers.push(this.makeWanderer(900, 560, 'afflicted-husk',   0x997755));
   }
 
-  private makeWanderer(x: number, y: number, texture: string): WanderSprite {
+  private makeWanderer(x: number, y: number, texture: string, tint: number): WanderSprite {
     const sprite = this.add.sprite(x, y, texture, 0);
     sprite.setDepth(DEPTH.ENTITIES);
-    sprite.setTint(0x4466cc);
+    sprite.setTint(tint);
     sprite.setScrollFactor(0);
     const angle = Math.random() * Math.PI * 2;
     const speed = 80 + Math.random() * 40;
