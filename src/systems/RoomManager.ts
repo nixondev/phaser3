@@ -22,6 +22,7 @@ export class RoomManager {
   private currentMap: Phaser.Tilemaps.Tilemap | null = null;
   private currentLayers: {
     ground: Phaser.Tilemaps.TilemapLayer;
+    onGround: Phaser.Tilemaps.TilemapLayer | null;
     collision: Phaser.Tilemaps.TilemapLayer;
     above: Phaser.Tilemaps.TilemapLayer;
   } | null = null;
@@ -64,6 +65,7 @@ export class RoomManager {
     const ground = this.currentMap.createLayer('Ground', tilesets, 0, 0);
     const collision = this.currentMap.createLayer('Collision', tilesets, 0, 0);
     const above = this.currentMap.createLayer('Above', tilesets, 0, 0);
+    const onGround = this.currentMap.createLayer('OnGround', tilesets, 0, 0) ?? null;
 
     if (!ground || !collision || !above) {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');
@@ -73,12 +75,14 @@ export class RoomManager {
     ground.setScale(visualScale);
     collision.setScale(visualScale);
     above.setScale(visualScale);
+    if (onGround) onGround.setScale(visualScale);
 
-    this.currentLayers = { ground, collision, above };
+    this.currentLayers = { ground, onGround, collision, above };
 
     ground.setDepth(DEPTH.GROUND);
     collision.setDepth(DEPTH.GROUND + 1);
     above.setDepth(DEPTH.ABOVE);
+    if (onGround) onGround.setDepth(DEPTH.GROUND + 0.3);
 
     collision.setCollisionByExclusion([-1]);
 
@@ -108,6 +112,7 @@ export class RoomManager {
 
     if (this.currentLayers) {
       this.currentLayers.ground.destroy();
+      this.currentLayers.onGround?.destroy();
       this.currentLayers.collision.destroy();
       this.currentLayers.above.destroy();
       this.currentLayers = null;
@@ -134,6 +139,32 @@ export class RoomManager {
   getMap(): Phaser.Tilemaps.Tilemap | null { return this.currentMap; }
 
   getGroundLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.ground || null; }
+
+  getOnGroundLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.onGround ?? null; }
+
+  /**
+   * Returns the OnGround layer, creating it first if the current tilemap
+   * was loaded from a JSON that predates this layer. Safe to call from the
+   * editor at any time; no-ops if the layer already exists.
+   */
+  ensureOnGroundLayer(): Phaser.Tilemaps.TilemapLayer | null {
+    if (!this.currentMap || !this.currentLayers) return null;
+    if (this.currentLayers.onGround) return this.currentLayers.onGround;
+
+    const tilesets = this.currentMap.tilesets;
+    if (!tilesets.length) return null;
+
+    const onGround = this.currentMap.createBlankLayer(
+      'OnGround', tilesets, 0, 0,
+      this.currentMap.width, this.currentMap.height
+    );
+    if (!onGround) return null;
+
+    onGround.setScale(GAME_CONFIG.WORLD_SCALE);
+    onGround.setDepth(DEPTH.GROUND + 0.3);
+    this.currentLayers.onGround = onGround;
+    return onGround;
+  }
 
   getAboveLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.above || null; }
 
@@ -194,6 +225,7 @@ export class RoomManager {
     };
 
     const groundData = captureLayer(this.currentLayers.ground);
+    const onGroundData = this.currentLayers.onGround ? captureLayer(this.currentLayers.onGround) : null;
     const collisionData = captureLayer(this.currentLayers.collision);
     const aboveData = captureLayer(this.currentLayers.above);
 
@@ -234,6 +266,7 @@ export class RoomManager {
     this.doorZones.forEach((z) => z.destroy());
     this.doorZones = [];
     this.currentLayers.ground.destroy();
+    this.currentLayers.onGround?.destroy();
     this.currentLayers.collision.destroy();
     this.currentLayers.above.destroy();
     this.currentLayers = null;
@@ -253,6 +286,9 @@ export class RoomManager {
     }
 
     const ground = newMap.createBlankLayer('Ground', tileset, 0, 0, newWidth, newHeight);
+    const onGround = onGroundData !== null
+      ? (newMap.createBlankLayer('OnGround', tileset, 0, 0, newWidth, newHeight) ?? null)
+      : null;
     const collision = newMap.createBlankLayer('Collision', tileset, 0, 0, newWidth, newHeight);
     const above = newMap.createBlankLayer('Above', tileset, 0, 0, newWidth, newHeight);
     if (!ground || !collision || !above) {
@@ -261,9 +297,11 @@ export class RoomManager {
 
     const visualScale = GAME_CONFIG.WORLD_SCALE;
     ground.setScale(visualScale);
+    if (onGround) onGround.setScale(visualScale);
     collision.setScale(visualScale);
     above.setScale(visualScale);
     ground.setDepth(DEPTH.GROUND);
+    if (onGround) onGround.setDepth(DEPTH.GROUND + 0.3);
     collision.setDepth(DEPTH.GROUND + 1);
     above.setDepth(DEPTH.ABOVE);
 
@@ -282,12 +320,13 @@ export class RoomManager {
       }
     };
     restoreLayer(ground, groundData);
+    if (onGround && onGroundData) restoreLayer(onGround, onGroundData);
     restoreLayer(collision, collisionData);
     restoreLayer(above, aboveData);
 
     collision.setCollisionByExclusion([-1]);
     this.currentMap = newMap;
-    this.currentLayers = { ground, collision, above };
+    this.currentLayers = { ground, onGround, collision, above };
 
     this.scene.physics.world.setBounds(0, 0, newPixelW, newPixelH);
 

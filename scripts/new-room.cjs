@@ -131,12 +131,13 @@ const tilemap = {
   type: 'map',
   version: '1.10',
   tiledversion: '1.10.2',
-  nextlayerid: 4,
+  nextlayerid: 5,
   nextobjectid: 1,
   layers: [
     makeFilledLayer(1, 'Ground', FLOOR_GID),
-    makeCollisionLayer(2),
-    makeFilledLayer(3, 'Above', 0)
+    makeFilledLayer(2, 'OnGround', 0),
+    makeCollisionLayer(3),
+    makeFilledLayer(4, 'Above', 0)
   ],
   tilesets: [{
     firstgid: 1,

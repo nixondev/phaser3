@@ -518,7 +518,9 @@
             "category": "cure"
           }
         }
-      ]
+      ],
+      "dark": true,
+      "darkLevel": 0.35
     },
     "house-b": {
       "id": "house-b",

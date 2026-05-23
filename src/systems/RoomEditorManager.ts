@@ -21,7 +21,7 @@ export class RoomEditorManager {
   /** Derived from selectedTiles[0][0] — always reflects the top-left tile of the current stamp. */
   private get selectedTileIndex(): number { return this.selectedTiles[0][0]; }
   private set selectedTileIndex(v: number) { this.selectedTiles = [[v]]; }
-  private currentLayerName: 'Ground' | 'Collision' | 'Above' = 'Ground';
+  private currentLayerName: 'Ground' | 'Collision' | 'Above' | 'OnGround' = 'Ground';
   private editorText: Phaser.GameObjects.Text;
   private tileCursor: Phaser.GameObjects.Graphics;
   private tilePreview: Phaser.GameObjects.Image;
@@ -45,7 +45,7 @@ export class RoomEditorManager {
 
   // History for undo/redo
   private history: Array<{
-    layer: 'Ground' | 'Collision' | 'Above',
+    layer: 'Ground' | 'Collision' | 'Above' | 'OnGround',
     data: number[][]
   }> = [];
   private historyIndex: number = -1;
@@ -55,6 +55,7 @@ export class RoomEditorManager {
     ONE: Phaser.Input.Keyboard.Key;
     TWO: Phaser.Input.Keyboard.Key;
     THREE: Phaser.Input.Keyboard.Key;
+    FOUR: Phaser.Input.Keyboard.Key;
     X: Phaser.Input.Keyboard.Key;
     Q: Phaser.Input.Keyboard.Key;
     E: Phaser.Input.Keyboard.Key;
@@ -121,6 +122,7 @@ export class RoomEditorManager {
       ONE: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
       TWO: kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
       THREE: kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+      FOUR: kb.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
       X: kb.addKey(Phaser.Input.Keyboard.KeyCodes.X),
       Q: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
       E: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
@@ -1060,6 +1062,11 @@ export class RoomEditorManager {
       this.currentLayerName = 'Above';
       layerChanged = true;
     }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.FOUR)) {
+      this.roomManager.ensureOnGroundLayer();
+      this.currentLayerName = 'OnGround';
+      layerChanged = true;
+    }
 
     if (layerChanged) {
       this.updateLayerOpacities();
@@ -1407,16 +1414,18 @@ export class RoomEditorManager {
 
   private updateLayerOpacities(): void {
     const ground = this.roomManager.getGroundLayer();
+    const onGround = this.roomManager.getOnGroundLayer();
     const collision = this.roomManager.getCollisionLayer();
     const above = this.roomManager.getAboveLayer();
 
     const layerMap: Record<string, Phaser.Tilemaps.TilemapLayer | null> = {
       'Ground': ground,
+      'OnGround': onGround,
       'Collision': collision,
       'Above': above
     };
 
-    [ground, collision, above].forEach(layer => {
+    [ground, onGround, collision, above].forEach(layer => {
       if (!layer) return;
       if (!this.isActive) {
         layer.setAlpha(1);
@@ -1427,7 +1436,7 @@ export class RoomEditorManager {
       if (layer === activeLayer) {
         layer.setAlpha(1);
       } else {
-        layer.setAlpha(0.2); // Dim other layers
+        layer.setAlpha(0.2);
       }
     });
   }
@@ -1528,7 +1537,7 @@ export class RoomEditorManager {
     this.showToast(`Redo (${this.historyIndex + 1}/${this.history.length})`);
   }
 
-  private applyHistoryState(state: { layer: 'Ground' | 'Collision' | 'Above', data: number[][] }): void {
+  private applyHistoryState(state: { layer: 'Ground' | 'Collision' | 'Above' | 'OnGround', data: number[][] }): void {
     const map = this.roomManager.getMap();
     if (!map) return;
 
