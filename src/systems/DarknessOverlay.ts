@@ -1,15 +1,14 @@
 import Phaser from 'phaser';
-import { DEPTH, GAME_CONFIG } from '@utils/Constants';
+import { DEPTH, GAME_CONFIG, DARKNESS_CONFIG } from '@utils/Constants';
 import type { Flashlight } from '@systems/Flashlight';
 
 const AMBIENT_RADIUS = 72;
-const DEFAULT_DARK_LEVEL = 0.92;
 
 export class DarknessOverlay {
   private rt: Phaser.GameObjects.RenderTexture;
   private lightMask: Phaser.GameObjects.Graphics;
   private enabled = false;
-  private darkLevel = DEFAULT_DARK_LEVEL;
+  private darkLevel = DARKNESS_CONFIG.DEFAULT_LEVEL;
 
   constructor(scene: Phaser.Scene) {
     this.rt = scene.add.renderTexture(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT);

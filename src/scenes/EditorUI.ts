@@ -1,5 +1,6 @@
 ﻿import { RoomManager } from '@systems/RoomManager';
 import type { EditorScene } from './EditorScene';
+import { DARKNESS_CONFIG } from '@utils/Constants';
 
 /**
  * DOM panel controller for the editor scene.
@@ -29,7 +30,7 @@ export class EditorUI {
   private currentRoomId = '';
   private currentWeather: string[] = [];
   private currentDark = false;
-  private currentDarkLevel = 0.92;
+  private currentDarkLevel = DARKNESS_CONFIG.DEFAULT_LEVEL;
 
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;
@@ -192,7 +193,7 @@ export class EditorUI {
     const rooms = RoomManager.getRoomsData().rooms;
     const room = rooms[roomId] as any;
     this.currentDark = room?.dark === true;
-    this.currentDarkLevel = typeof room?.darkLevel === 'number' ? room.darkLevel : 0.92;
+    this.currentDarkLevel = typeof room?.darkLevel === 'number' ? room.darkLevel : DARKNESS_CONFIG.DEFAULT_LEVEL;
     this.syncDarknessControls();
   }
 
@@ -370,8 +371,8 @@ export class EditorUI {
         <div class="row col" style="gap:6px">
           <button class="btn" id="editor-dark-toggle">dark: off</button>
           <div class="dark-slider-row">
-            <span class="dark-slider-label">Level: <span id="editor-dark-level-val">0.92</span></span>
-            <input type="range" id="editor-dark-level" min="0" max="1" step="0.05" value="0.92">
+            <span class="dark-slider-label">Level: <span id="editor-dark-level-val">${DARKNESS_CONFIG.DEFAULT_LEVEL}</span></span>
+            <input type="range" id="editor-dark-level" min="0" max="1" step="0.05" value="${DARKNESS_CONFIG.DEFAULT_LEVEL}">
           </div>
         </div>
         <h3>Cheatsheet</h3>

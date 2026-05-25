@@ -149,6 +149,7 @@ export interface RoomDefinition {
   reverbMix?: number;
   dark?: boolean;
   darkLevel?: number;
+  onGroundAlpha?: number;
   weather?: WeatherType | WeatherType[];
   drips?: Array<{ x: number; y: number }>;
   /** Applied at room load: if the flag is set, mutate the live tilemap/state. */

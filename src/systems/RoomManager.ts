@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG, DEPTH } from '@utils/Constants';
+import { GAME_CONFIG, DEPTH, LAYER_NAMES, LAYER_CONFIG } from '@utils/Constants';
 import { RoomDefinition, RoomsData } from '@/types';
 import { debug } from '@utils/Debug';
 import roomsDataRaw from '@/data/rooms.json';
@@ -62,11 +62,11 @@ export class RoomManager {
         `Add it to the Tiled JSON and ensure the PNG is at assets/tilemaps/${tsName}.png`);
     }
 
-    const ground = this.currentMap.createLayer('Ground', tilesets, 0, 0);
-    const collision = this.currentMap.createLayer('Collision', tilesets, 0, 0);
-    const above = this.currentMap.createLayer('Above', tilesets, 0, 0);
-    const hasOnGround = this.currentMap.getLayerIndexByName('OnGround') !== null;
-    const onGround = hasOnGround ? this.currentMap.createLayer('OnGround', tilesets, 0, 0) ?? null : null;
+    const ground = this.currentMap.createLayer(LAYER_NAMES.GROUND, tilesets, 0, 0);
+    const collision = this.currentMap.createLayer(LAYER_NAMES.COLLISION, tilesets, 0, 0);
+    const above = this.currentMap.createLayer(LAYER_NAMES.ABOVE, tilesets, 0, 0);
+    const hasOnGround = this.currentMap.getLayerIndexByName(LAYER_NAMES.ON_GROUND) !== null;
+    const onGround = hasOnGround ? this.currentMap.createLayer(LAYER_NAMES.ON_GROUND, tilesets, 0, 0) ?? null : null;
 
     if (!ground || !collision || !above) {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');
@@ -83,7 +83,10 @@ export class RoomManager {
     ground.setDepth(DEPTH.GROUND);
     collision.setDepth(DEPTH.GROUND + 1);
     above.setDepth(DEPTH.ABOVE);
-    if (onGround) onGround.setDepth(DEPTH.GROUND + 0.3);
+    if (onGround) {
+      onGround.setDepth(DEPTH.ON_GROUND);
+      onGround.setAlpha(room.onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA);
+    }
 
     collision.setCollisionByExclusion([-1]);
 
@@ -156,13 +159,15 @@ export class RoomManager {
     if (!tilesets.length) return null;
 
     const onGround = this.currentMap.createBlankLayer(
-      'OnGround', tilesets, 0, 0,
+      LAYER_NAMES.ON_GROUND, tilesets, 0, 0,
       this.currentMap.width, this.currentMap.height
     );
     if (!onGround) return null;
 
     onGround.setScale(GAME_CONFIG.WORLD_SCALE);
-    onGround.setDepth(DEPTH.GROUND + 0.3);
+    onGround.setDepth(DEPTH.ON_GROUND);
+    const roomDef = this.getCurrentRoomDef();
+    onGround.setAlpha(roomDef.onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA);
     this.currentLayers.onGround = onGround;
     return onGround;
   }
@@ -286,12 +291,12 @@ export class RoomManager {
       throw new Error('Failed to add tileset image during resize');
     }
 
-    const ground = newMap.createBlankLayer('Ground', tileset, 0, 0, newWidth, newHeight);
+    const ground = newMap.createBlankLayer(LAYER_NAMES.GROUND, tileset, 0, 0, newWidth, newHeight);
     const onGround = onGroundData !== null
-      ? (newMap.createBlankLayer('OnGround', tileset, 0, 0, newWidth, newHeight) ?? null)
+      ? (newMap.createBlankLayer(LAYER_NAMES.ON_GROUND, tileset, 0, 0, newWidth, newHeight) ?? null)
       : null;
-    const collision = newMap.createBlankLayer('Collision', tileset, 0, 0, newWidth, newHeight);
-    const above = newMap.createBlankLayer('Above', tileset, 0, 0, newWidth, newHeight);
+    const collision = newMap.createBlankLayer(LAYER_NAMES.COLLISION, tileset, 0, 0, newWidth, newHeight);
+    const above = newMap.createBlankLayer(LAYER_NAMES.ABOVE, tileset, 0, 0, newWidth, newHeight);
     if (!ground || !collision || !above) {
       throw new Error('Failed to create blank tilemap layers during resize');
     }
@@ -302,7 +307,10 @@ export class RoomManager {
     collision.setScale(visualScale);
     above.setScale(visualScale);
     ground.setDepth(DEPTH.GROUND);
-    if (onGround) onGround.setDepth(DEPTH.GROUND + 0.3);
+    if (onGround) {
+      onGround.setDepth(DEPTH.ON_GROUND);
+      onGround.setAlpha(this.getCurrentRoomDef().onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA);
+    }
     collision.setDepth(DEPTH.GROUND + 1);
     above.setDepth(DEPTH.ABOVE);
 

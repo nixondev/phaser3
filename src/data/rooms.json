@@ -430,6 +430,7 @@
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
+      "onGroundAlpha": 0.3,
       "playerSpawn": {
         "x": 768,
         "y": 736
@@ -709,7 +710,8 @@
             "name": "Skeleton Key",
             "tileFrame": 8,
             "category": "key",
-            "keyId": "skeleton-key"
+            "keyId": "skeleton-key",
+            "consumedOnUse": false
           }
         }
       ]

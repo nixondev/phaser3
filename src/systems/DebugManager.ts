@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
-import { DEPTH, GAME_CONFIG, INTERACT_CONFIG, USE_MIDI_MUSIC } from '@utils/Constants';
+import { DEPTH, GAME_CONFIG, INTERACT_CONFIG, USE_MIDI_MUSIC, AUDIO_CONFIG } from '@utils/Constants';
 import { InputState } from '@/types';
 import { MusicManager } from './MusicManager';
 import { AudioManager } from './AudioManager';
@@ -18,7 +18,7 @@ export class DebugManager {
   private isVisible: boolean = false;
   private showVisuals: boolean = false;
 
-  private reverbMix: number = 0.3;
+  private reverbMix: number = AUDIO_CONFIG.DEFAULT_REVERB_MIX;
 
   private keys: {
     R: Phaser.Input.Keyboard.Key;

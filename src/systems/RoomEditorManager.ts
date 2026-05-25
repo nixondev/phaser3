@@ -1,7 +1,7 @@
 ﻿import Phaser from 'phaser';
 import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
-import { DEPTH, GAME_CONFIG } from '@utils/Constants';
+import { DEPTH, GAME_CONFIG, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils/Constants';
 import { InputState } from '@/types';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
@@ -22,7 +22,7 @@ export class RoomEditorManager {
   /** Derived from selectedTiles[0][0] — always reflects the top-left tile of the current stamp. */
   private get selectedTileIndex(): number { return this.selectedTiles[0][0]; }
   private set selectedTileIndex(v: number) { this.selectedTiles = [[v]]; }
-  private currentLayerName: 'Ground' | 'Collision' | 'Above' | 'OnGround' = 'Ground';
+  private currentLayerName: LayerName = LAYER_NAMES.GROUND;
   private editorText: Phaser.GameObjects.Text;
   private tileCursor: Phaser.GameObjects.Graphics;
   private tilePreview: Phaser.GameObjects.Image;
@@ -46,7 +46,7 @@ export class RoomEditorManager {
 
   // History for undo/redo
   private history: Array<{
-    layer: 'Ground' | 'Collision' | 'Above' | 'OnGround',
+    layer: LayerName,
     data: number[][]
   }> = [];
   private historyIndex: number = -1;
@@ -1056,20 +1056,20 @@ export class RoomEditorManager {
   private handleLayerSwitching(input: InputState): void {
     let layerChanged = false;
     if (Phaser.Input.Keyboard.JustDown(this.keys.ONE)) {
-      this.currentLayerName = 'Ground';
+      this.currentLayerName = LAYER_NAMES.GROUND;
       layerChanged = true;
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.TWO)) {
-      this.currentLayerName = 'Collision';
+      this.currentLayerName = LAYER_NAMES.COLLISION;
       layerChanged = true;
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.THREE)) {
-      this.currentLayerName = 'Above';
+      this.currentLayerName = LAYER_NAMES.ABOVE;
       layerChanged = true;
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.FOUR)) {
       this.roomManager.ensureOnGroundLayer();
-      this.currentLayerName = 'OnGround';
+      this.currentLayerName = LAYER_NAMES.ON_GROUND;
       layerChanged = true;
     }
 
@@ -1112,11 +1112,11 @@ export class RoomEditorManager {
     const FLOOR = 3;
     const WALL = 2;
 
-    map.fill(FLOOR, 0, 0, w, h, false, 'Ground');
-    map.fill(-1, 0, 0, w, h, false, 'Above');
-    map.fill(WALL, 0, 0, w, h, false, 'Collision');
+    map.fill(FLOOR, 0, 0, w, h, false, LAYER_NAMES.GROUND);
+    map.fill(-1, 0, 0, w, h, false, LAYER_NAMES.ABOVE);
+    map.fill(WALL, 0, 0, w, h, false, LAYER_NAMES.COLLISION);
     if (w > 2 && h > 2) {
-      map.fill(-1, 1, 1, w - 2, h - 2, false, 'Collision');
+      map.fill(-1, 1, 1, w - 2, h - 2, false, LAYER_NAMES.COLLISION);
     }
     this.refreshCollision();
     this.showToast('Room stamped: floor + perimeter walls. Git to undo.');
@@ -1339,7 +1339,7 @@ export class RoomEditorManager {
       }
     }
 
-    if (changed && this.currentLayerName === 'Collision') {
+    if (changed && this.currentLayerName === LAYER_NAMES.COLLISION) {
       this.refreshCollision();
     }
   }
@@ -1424,10 +1424,10 @@ export class RoomEditorManager {
     const above = this.roomManager.getAboveLayer();
 
     const layerMap: Record<string, Phaser.Tilemaps.TilemapLayer | null> = {
-      'Ground': ground,
-      'OnGround': onGround,
-      'Collision': collision,
-      'Above': above
+      [LAYER_NAMES.GROUND]: ground,
+      [LAYER_NAMES.ON_GROUND]: onGround,
+      [LAYER_NAMES.COLLISION]: collision,
+      [LAYER_NAMES.ABOVE]: above,
     };
 
     [ground, onGround, collision, above].forEach(layer => {
@@ -1441,7 +1441,7 @@ export class RoomEditorManager {
       if (layer === activeLayer) {
         layer.setAlpha(1);
       } else {
-        layer.setAlpha(0.2);
+        layer.setAlpha(LAYER_CONFIG.EDITOR_INACTIVE_ALPHA);
       }
     });
   }
@@ -1542,7 +1542,7 @@ export class RoomEditorManager {
     this.showToast(`Redo (${this.historyIndex + 1}/${this.history.length})`);
   }
 
-  private applyHistoryState(state: { layer: 'Ground' | 'Collision' | 'Above' | 'OnGround', data: number[][] }): void {
+  private applyHistoryState(state: { layer: LayerName, data: number[][] }): void {
     const map = this.roomManager.getMap();
     if (!map) return;
 
@@ -1557,7 +1557,7 @@ export class RoomEditorManager {
       }
     }
 
-    if (state.layer === 'Collision') {
+    if (state.layer === LAYER_NAMES.COLLISION) {
       this.refreshCollision();
     }
     this.updateLayerOpacities();
@@ -1671,7 +1671,7 @@ export class RoomEditorManager {
     }
 
     if (changed) {
-      if (layer === 'Collision') this.refreshCollision();
+      if (layer === LAYER_NAMES.COLLISION) this.refreshCollision();
       const count = (endX - startX + 1) * (endY - startY + 1);
       this.showToast(`Rect filled ${count} tiles`);
     }
@@ -1719,7 +1719,7 @@ export class RoomEditorManager {
       }
     }
 
-    if (count > 0 && layer === 'Collision') {
+    if (count > 0 && layer === LAYER_NAMES.COLLISION) {
       this.refreshCollision();
     }
     this.showToast(`Filled ${count} tiles`);

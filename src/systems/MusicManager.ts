@@ -2,6 +2,7 @@ import { SpessaSynthPlayer } from '@/lib/SpessaSynthPlayer';
 import { AudioEffectsManager } from '@/systems/AudioEffectsManager';
 import { RoomManager } from '@/systems/RoomManager';
 import { AudioManager } from '@/systems/AudioManager';
+import { AUDIO_CONFIG } from '@utils/Constants';
 
 const BASE = import.meta.env.BASE_URL; // '/' in dev, '/phaser3/' on GitHub Pages
 
@@ -111,11 +112,11 @@ export class MusicManager {
         if (roomDef.reverbMix !== undefined) {
           this.effects.setMix(roomDef.reverbMix);
         } else {
-          this.effects.setMix(0.3); // Default mix
+          this.effects.setMix(AUDIO_CONFIG.DEFAULT_REVERB_MIX);
         }
       } else {
         await this.setReverb('city'); // Default fallback
-        this.effects.setMix(0.3);
+        this.effects.setMix(AUDIO_CONFIG.DEFAULT_REVERB_MIX);
       }
 
       console.log(`[MusicManager] Music started for room ${roomId}`);

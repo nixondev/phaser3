@@ -16,6 +16,7 @@ export const PLAYER_CONFIG = {
 
 export const DEPTH = {
   GROUND: 0,
+  ON_GROUND: 0.3,
   ENTITIES: 10,
   PLAYER: 20,
   ABOVE: 30,
@@ -24,6 +25,28 @@ export const DEPTH = {
   WEATHER: 37,  // above darkness and flashlight beam, always visible
   UI: 40,
   TRANSITION: 50,
+} as const;
+
+export const LAYER_NAMES = {
+  GROUND: 'Ground',
+  ON_GROUND: 'OnGround',
+  COLLISION: 'Collision',
+  ABOVE: 'Above',
+} as const;
+
+export type LayerName = typeof LAYER_NAMES[keyof typeof LAYER_NAMES];
+
+export const LAYER_CONFIG = {
+  ON_GROUND_DEFAULT_ALPHA: 0.2,
+  EDITOR_INACTIVE_ALPHA: 0.2,
+} as const;
+
+export const DARKNESS_CONFIG = {
+  DEFAULT_LEVEL: 0.92,
+} as const;
+
+export const AUDIO_CONFIG = {
+  DEFAULT_REVERB_MIX: 0.3,
 } as const;
 
 export const SCENES = {
