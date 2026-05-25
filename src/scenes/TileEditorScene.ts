@@ -627,15 +627,41 @@ export class TileEditorScene extends Phaser.Scene {
   private setupInput(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (!this.inDrawArea(p.x, p.y)) return;
+      if (p.middleButtonDown()) { this.quickEyedrop(p.x, p.y); return; }
+      if (p.rightButtonDown())  { this.pushHistory(); this.isDrawing = true; this.quickErase(p.x, p.y); return; }
       this.pushHistory();
       this.isDrawing = true;
       this.applyTool(p.x, p.y);
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!this.isDrawing || !p.isDown) return;
+      if (p.rightButtonDown()) { this.quickErase(p.x, p.y); return; }
       this.applyTool(p.x, p.y);
     });
     this.input.on('pointerup', () => { this.isDrawing = false; });
+  }
+
+  private quickErase(sx: number, sy: number): void {
+    const tx = Math.floor((sx - DRAW_X) / DRAW_SCALE);
+    const ty = Math.floor((sy - DRAW_Y) / DRAW_SCALE);
+    this.paintBrush(tx, ty, 0);
+    this.redrawAll();
+  }
+
+  private quickEyedrop(sx: number, sy: number): void {
+    const tx = Math.floor((sx - DRAW_X) / DRAW_SCALE);
+    const ty = Math.floor((sy - DRAW_Y) / DRAW_SCALE);
+    this.currentColor = this.px(tx, ty);
+    if (this.hexInputEl) this.hexInputEl.value = this.colorToHex8(this.currentColor);
+    this.syncHsvFromColor(this.currentColor);
+    this.redrawColorPicker();
+    this.addToRecent(this.currentColor);
+    const matchIdx = PALETTE.indexOf(this.currentColor);
+    if (matchIdx >= 0) this.updateSwatchHighlight(matchIdx);
+    else { this.swatchHighlight?.destroy(); this.swatchHighlight = undefined; }
+    const hex = (this.currentColor & 0x00ffffff).toString(16).padStart(6, '0');
+    const a   = Math.round(((this.currentColor >>> 24) & 0xff) / 255 * 100);
+    this.statusText?.setText(`picked: #${hex}  α:${a}%`);
   }
 
   private inDrawArea(sx: number, sy: number): boolean {

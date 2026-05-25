@@ -65,7 +65,8 @@ export class RoomManager {
     const ground = this.currentMap.createLayer('Ground', tilesets, 0, 0);
     const collision = this.currentMap.createLayer('Collision', tilesets, 0, 0);
     const above = this.currentMap.createLayer('Above', tilesets, 0, 0);
-    const onGround = this.currentMap.createLayer('OnGround', tilesets, 0, 0) ?? null;
+    const hasOnGround = this.currentMap.getLayerIndexByName('OnGround') !== null;
+    const onGround = hasOnGround ? this.currentMap.createLayer('OnGround', tilesets, 0, 0) ?? null : null;
 
     if (!ground || !collision || !above) {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');

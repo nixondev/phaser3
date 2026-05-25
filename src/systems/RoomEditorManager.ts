@@ -17,6 +17,7 @@ export class RoomEditorManager {
   private dragOffset: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private wasPrimaryDown: boolean = false;
   private justDown: boolean = false;
+  private pointerDownOnCanvas: boolean = false;
 
   /** Derived from selectedTiles[0][0] — always reflects the top-left tile of the current stamp. */
   private get selectedTileIndex(): number { return this.selectedTiles[0][0]; }
@@ -189,6 +190,9 @@ export class RoomEditorManager {
     this.paletteHighlight = this.scene.add.graphics();
 
     this.scene.input.on('wheel', this.onWheel, this);
+    // Track whether the current pointer press originated on the canvas, not on a DOM UI button.
+    this.scene.input.on('pointerdown', () => { this.pointerDownOnCanvas = true; });
+    this.scene.input.on('pointerup',   () => { this.pointerDownOnCanvas = false; });
 
     // Door-pair target-room picker (shown during pairPhase === 'pick-target').
     this.pairPickerContainer = this.scene.add.container(GAME_CONFIG.WIDTH / 2, 120);
@@ -230,10 +234,11 @@ export class RoomEditorManager {
   
   update(input: InputState): void {
     const pointer = this.scene.input.activePointer;
-    this.justDown = pointer.primaryDown && !this.wasPrimaryDown;
+    const canvasDown = pointer.primaryDown && this.pointerDownOnCanvas;
+    this.justDown = canvasDown && !this.wasPrimaryDown;
     const justDown = this.justDown;
     const justUp = !pointer.primaryDown && this.wasPrimaryDown;
-    this.wasPrimaryDown = pointer.primaryDown;
+    this.wasPrimaryDown = canvasDown;
 
     if (input.editor) {
       this.isActive = !this.isActive;
@@ -1282,8 +1287,8 @@ export class RoomEditorManager {
         this.updatePaletteHighlight();
       }
     } 
-    // Left Click: Paint (only if NOT alt)
-    else if (pointer.leftButtonDown()) {
+    // Left Click: Paint (only if NOT alt, and only if press originated on canvas)
+    else if (pointer.leftButtonDown() && this.pointerDownOnCanvas) {
       if (this.justDown) {
         this.pushHistory();
       }
@@ -1592,8 +1597,8 @@ export class RoomEditorManager {
 
     if (tileX === null || tileY === null) return;
 
-    const justDown = pointer.primaryDown && !this.wasPrimaryDown;
-    const isDown = pointer.primaryDown;
+    const justDown = pointer.primaryDown && this.pointerDownOnCanvas && !this.wasPrimaryDown;
+    const isDown = pointer.primaryDown && this.pointerDownOnCanvas;
 
     if (justDown) {
       this.rectStart = { x: tileX, y: tileY };

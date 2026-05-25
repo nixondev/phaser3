@@ -75,33 +75,55 @@ function decodePNG(buffer) {
     pos += 12 + length;
   }
   const decompressed = zlib.inflateSync(Buffer.concat(idatChunks));
-  const pixels = new Uint8Array(width * height * 4);
-  
   const isIndexed = palette !== null;
-  const rowBytes = 1 + (isIndexed ? width : width * 4);
-  
+  const bpp = isIndexed ? 1 : 4; // bytes per pixel in raw data
+  const rawStride = width * bpp; // bytes per row (no filter byte)
+  const srcStride = 1 + rawStride; // filter byte + row data
+
+  // Reconstruct scanlines by applying PNG filters
+  const recon = new Uint8Array(height * rawStride);
+  function paethPredictor(a, b, c) {
+    const p = a + b - c;
+    const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+  }
+  for (let y = 0; y < height; y++) {
+    const filter = decompressed[y * srcStride];
+    const src = y * srcStride + 1;
+    const dst = y * rawStride;
+    const prev = y === 0 ? null : (y - 1) * rawStride;
+    for (let i = 0; i < rawStride; i++) {
+      const raw = decompressed[src + i];
+      const a = i >= bpp ? recon[dst + i - bpp] : 0;
+      const b = prev !== null ? recon[prev + i] : 0;
+      const c = prev !== null && i >= bpp ? recon[prev + i - bpp] : 0;
+      switch (filter) {
+        case 0: recon[dst + i] = raw; break;
+        case 1: recon[dst + i] = (raw + a) & 0xff; break;
+        case 2: recon[dst + i] = (raw + b) & 0xff; break;
+        case 3: recon[dst + i] = (raw + Math.floor((a + b) / 2)) & 0xff; break;
+        case 4: recon[dst + i] = (raw + paethPredictor(a, b, c)) & 0xff; break;
+        default: throw new Error('Unknown PNG filter type: ' + filter);
+      }
+    }
+  }
+
+  const pixels = new Uint8Array(width * height * 4);
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const di = (y * width + x) * 4;
       if (isIndexed) {
-        const si = y * rowBytes + 1 + x;
-        const paletteIdx = decompressed[si];
-        pixels[di] = palette[paletteIdx * 3];
+        const paletteIdx = recon[y * rawStride + x];
+        pixels[di]     = palette[paletteIdx * 3];
         pixels[di + 1] = palette[paletteIdx * 3 + 1];
         pixels[di + 2] = palette[paletteIdx * 3 + 2];
-        
-        // Handle transparency for indexed color
-        if (trns && paletteIdx < trns.length) {
-          pixels[di + 3] = trns[paletteIdx];
-        } else {
-          pixels[di + 3] = 255;
-        }
+        pixels[di + 3] = trns && paletteIdx < trns.length ? trns[paletteIdx] : 255;
       } else {
-        const si = y * rowBytes + 1 + x * 4;
-        pixels[di] = decompressed[si];
-        pixels[di + 1] = decompressed[si + 1];
-        pixels[di + 2] = decompressed[si + 2];
-        pixels[di + 3] = decompressed[si + 3];
+        const si = y * rawStride + x * 4;
+        pixels[di]     = recon[si];
+        pixels[di + 1] = recon[si + 1];
+        pixels[di + 2] = recon[si + 2];
+        pixels[di + 3] = recon[si + 3];
       }
     }
   }
@@ -123,13 +145,13 @@ if (!fs.existsSync(srcDir)) {
 }
 
 const files = fs.readdirSync(srcDir).filter(f => f.endsWith('.png'));
-const tiles = new Array(64).fill(null);
+const tiles = new Array(128).fill(null);
 
 files.forEach(file => {
-  const match = file.match(/^(\d+)_/);
+  const match = file.match(/^(\d+)_/) || file.match(/^tile_(\d+)\.png$/);
   if (match) {
     const index = parseInt(match[1], 10);
-    if (index >= 0 && index < 64) {
+    if (index >= 0 && index < 128) {
       if (tiles[index]) {
         console.log(`Note: Multiple files for index ${index}, using ${file} (previously ${tiles[index]})`);
       }

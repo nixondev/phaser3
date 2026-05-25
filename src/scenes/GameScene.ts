@@ -1102,15 +1102,16 @@ export class GameScene extends Phaser.Scene {
       }
 
       if (keySlot >= 0) {
-        if (usedKeyId !== 'skeleton-key') this.rsm.removeFromInventory(keySlot);
+        const keyItem = this.rsm.getSlot(keySlot);
+        if (keyItem?.consumedOnUse !== false) this.rsm.removeFromInventory(keySlot);
         this.rsm.unlockDoor(doorDef.id);
-        this.events.emit('door-unlocked');
+        this.events.emit('door-unlocked', doorDef.unlockedMessage ?? 'Door unlocked!');
         this.events.emit('inventory-changed', this.rsm.getInventory());
       } else {
         if (this.lockedDoorCooldown > 0) return;
         this.lockedDoorCooldown = 90;
         this.dialogOpen = true;
-        this.events.emit('dialog-open', 'This door is locked.\nYou need a key to open it.');
+        this.events.emit('dialog-open', doorDef.lockedMessage ?? 'This door is locked.\nYou need a key to open it.');
         (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
         return;
       }

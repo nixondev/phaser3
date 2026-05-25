@@ -445,7 +445,12 @@
           "targetDoor": "city-house-door",
           "direction": "up",
           "spawnX": 640,
-          "spawnY": 192
+          "spawnY": 192,
+          "lockedMessage": "The door opens slightly and then stops suddenly. You can see chains on the outer side of door, holding it closed.",
+          "unlockedMessage": "The chain snaps. So does the prybar",
+          "requiredKeys": [
+            "prybar"
+          ]
         },
         {
           "id": "door-uwnva",
@@ -1079,19 +1084,23 @@
         "x": 448,
         "y": 320
       },
-      "doors": [
+      "interactables": [
         {
-          "id": "vault-records-exit",
-          "x": 384,
-          "y": 0,
-          "width": 64,
-          "height": 64,
-          "targetRoom": "records-office",
-          "targetDoor": "records-vault-door",
-          "direction": "up",
-          "spawnX": 992,
-          "spawnY": 576
-        },
+          "id": "prybar",
+          "x": 480,
+          "y": 350,
+          "type": "item",
+          "tileFrame": 9,
+          "text": "Prybar. Looks ancient.",
+          "item": {
+            "name": "Prybar",
+            "tileFrame": 62,
+            "category": "key",
+            "keyId": "prybar"
+          }
+        }
+      ],
+      "doors": [
         {
           "id": "door-sd3ig",
           "x": 870,
@@ -1105,7 +1114,9 @@
           "spawnY": 545,
           "requires": []
         }
-      ]
+      ],
+      "dark": true,
+      "darkLevel": 0.9
     },
     "room-library": {
       "id": "room-library",

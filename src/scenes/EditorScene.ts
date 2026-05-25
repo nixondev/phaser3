@@ -220,8 +220,12 @@ export class EditorScene extends Phaser.Scene {
     if (!room) return;
 
     for (const inter of room.interactables ?? []) {
-      const tileFrame = inter.tileFrame ?? inter.item?.tileFrame ?? 0;
-      const tilesetKey = inter.tilesetKey ?? inter.item?.tilesetKey;
+      const tileFrame = inter.type === 'item'
+        ? (inter.item?.tileFrame ?? inter.tileFrame ?? 0)
+        : (inter.tileFrame ?? inter.item?.tileFrame ?? 0);
+      const tilesetKey = inter.type === 'item'
+        ? (inter.item?.tilesetKey ?? inter.tilesetKey)
+        : (inter.tilesetKey ?? inter.item?.tilesetKey);
       const { key, frame } = resolveTileSprite(tileFrame, tilesetKey);
       const sprite = this.add.sprite(inter.x, inter.y, key, frame);
       sprite.setScale(GAME_CONFIG.WORLD_SCALE);

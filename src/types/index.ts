@@ -17,6 +17,8 @@ export interface DoorDefinition {
   spawnX: number;
   spawnY: number;
   requiredKeys?: string[];
+  lockedMessage?: string;
+  unlockedMessage?: string;
 }
 
 export interface ItemDef {

@@ -248,8 +248,8 @@ export class UIScene extends Phaser.Scene {
     this.itemNameText.setText(item ? item.name : '');
   }
 
-  private onDoorUnlocked(): void {
-    this.roomNameText.setText('Door unlocked!').setAlpha(1);
+  private onDoorUnlocked(message: string): void {
+    this.roomNameText.setText(message).setAlpha(1);
     if (this.roomNameTween) this.roomNameTween.destroy();
     this.roomNameTween = this.tweens.add({ targets: this.roomNameText, alpha: 0, delay: 1200, duration: 400 });
   }
