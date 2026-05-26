@@ -201,6 +201,7 @@ export class MenuScene extends Phaser.Scene {
     this.wanderers.push(this.makeWanderer('menu-husk',   900, 560, 'husk',   0x997755));
 
     if (this.collisionLayer) {
+      this.collisionLayer.setCollisionByExclusion([-1]);
       for (const a of this.wanderers) {
         this.physics.add.collider(a, this.collisionLayer);
       }
@@ -250,6 +251,7 @@ export class MenuScene extends Phaser.Scene {
       name: '', role: '', x, y,
       behaviorLoop: 'wander',
     }, 'wandering');
+    MusicManager.getInstance().stopProximity(id);
     afflicted.setTint(tint);
     afflicted.setScrollFactor(0);
     return afflicted;
