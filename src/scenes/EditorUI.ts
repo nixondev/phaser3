@@ -30,7 +30,7 @@ export class EditorUI {
   private currentRoomId = '';
   private currentWeather: string[] = [];
   private currentDark = false;
-  private currentDarkLevel = DARKNESS_CONFIG.DEFAULT_LEVEL;
+  private currentDarkLevel: number = DARKNESS_CONFIG.DEFAULT_LEVEL;
 
   constructor(private scene: EditorScene) {
     this.gameContainer = document.getElementById('game-container')!;

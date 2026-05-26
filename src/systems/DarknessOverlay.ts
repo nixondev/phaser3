@@ -8,7 +8,7 @@ export class DarknessOverlay {
   private rt: Phaser.GameObjects.RenderTexture;
   private lightMask: Phaser.GameObjects.Graphics;
   private enabled = false;
-  private darkLevel = DARKNESS_CONFIG.DEFAULT_LEVEL;
+  private darkLevel: number = DARKNESS_CONFIG.DEFAULT_LEVEL;
 
   constructor(scene: Phaser.Scene) {
     this.rt = scene.add.renderTexture(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT);
