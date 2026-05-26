@@ -430,7 +430,7 @@
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
-      "onGroundAlpha": 0.3,
+      "onGroundAlpha": 0.5,
       "playerSpawn": {
         "x": 768,
         "y": 736
