@@ -66,7 +66,6 @@ export class GameScene extends Phaser.Scene {
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
 
   private weatherManager!: WeatherManager;
-  private weatherDebug = false;
 
   constructor() {
     super(SCENES.GAME);
@@ -170,12 +169,6 @@ export class GameScene extends Phaser.Scene {
     }
 
     const input = this.inputManager.getState();
-
-    // Weather debug overlay (F3)
-    if (input.visuals) {
-      this.weatherDebug = !this.weatherDebug;
-      this.weatherManager.setDebug(this.weatherDebug);
-    }
 
     // Flashlight toggle — only if active character carries the flashlight item
     const hasFlashlight = this.rsm.hasItemWithKeyId('flashlight');
