@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { DEPTH } from '@utils/Constants';
+import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import type { WeatherEffect } from '@systems/WeatherManager';
 
 interface Drip {
@@ -13,11 +13,12 @@ interface Drip {
   active: boolean;
 }
 
-function scatterPositions(scene: Phaser.Scene): Array<{ x: number; y: number }> {
-  const b = scene.physics.world.bounds;
-  return [0.18, 0.38, 0.61, 0.82].map(t => ({
-    x: Math.floor(b.width  * t),
-    y: Math.floor(b.height * 0.08),
+function scatterPositions(): Array<{ x: number; y: number }> {
+  const W = GAME_CONFIG.WIDTH;
+  const count = Math.max(4, Math.floor(W / 120));
+  return Array.from({ length: count }, (_, i) => ({
+    x: Math.floor(W * ((i + 0.5) / count)),
+    y: 0,
   }));
 }
 
@@ -28,19 +29,19 @@ export class DrippingEffect implements WeatherEffect {
 
   constructor(scene: Phaser.Scene, positions: Array<{ x: number; y: number }>) {
     this.graphics = scene.add.graphics();
-    this.graphics.setScrollFactor(1);
+    this.graphics.setScrollFactor(0);
     this.graphics.setDepth(DEPTH.WEATHER);
     this.graphics.setVisible(false);
 
-    const pts = positions.length > 0 ? positions : scatterPositions(scene);
-    const b = scene.physics.world.bounds;
+    const pts = positions.length > 0 ? positions : scatterPositions();
+    const H = GAME_CONFIG.HEIGHT;
 
     for (const p of pts) {
       this.drips.push({
         x:       p.x,
         y:       p.y,
         originY: p.y,
-        maxY:    Math.min(p.y + Phaser.Math.Between(80, 192), b.height - 16),
+        maxY:    Math.floor(H * Phaser.Math.FloatBetween(0.75, 0.97)),
         speed:   Phaser.Math.Between(120, 240),
         timer:   0,
         delay:   Phaser.Math.Between(800, 3500),
@@ -69,7 +70,6 @@ export class DrippingEffect implements WeatherEffect {
       }
 
       d.y += d.speed * dt;
-      // Draw an 8×8 drop
       this.graphics.fillRect(d.x - 4, d.y - 4, 8, 8);
 
       if (d.y >= d.maxY) {

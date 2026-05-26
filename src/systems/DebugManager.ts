@@ -329,6 +329,7 @@ export class DebugManager {
         this.debugGraphics.strokeCircle(a.x, a.y, 128);
       });
     }
+
   }
 
   // ── Map overview (F5) ──────────────────────────────────────────────────

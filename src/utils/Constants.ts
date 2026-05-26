@@ -72,7 +72,7 @@ export const CAMERA_CONFIG = {
 } as const;
 
 export const INTERACT_CONFIG = {
-  DISTANCE: 112,
+  DISTANCE: 75,
 } as const;
 
 export const FLASHLIGHT_CONFIG = {

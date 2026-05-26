@@ -455,8 +455,8 @@
         },
         {
           "id": "door-uwnva",
-          "x": 1408,
-          "y": 1088,
+          "x": 1466,
+          "y": 1042,
           "width": 64,
           "height": 64,
           "targetRoom": "room-vault",
@@ -709,6 +709,7 @@
           "item": {
             "name": "Skeleton Key",
             "tileFrame": 8,
+
             "category": "key",
             "keyId": "skeleton-key",
             "consumedOnUse": false
@@ -1118,7 +1119,8 @@
         }
       ],
       "dark": true,
-      "darkLevel": 0.9
+      "darkLevel": 0.99,
+      "weather": "dripping"
     },
     "room-library": {
       "id": "room-library",

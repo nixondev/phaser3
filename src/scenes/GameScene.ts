@@ -66,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
 
   private weatherManager!: WeatherManager;
+  private weatherDebug = false;
 
   constructor() {
     super(SCENES.GAME);
@@ -169,6 +170,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     const input = this.inputManager.getState();
+
+    // Weather debug overlay (F3)
+    if (input.visuals) {
+      this.weatherDebug = !this.weatherDebug;
+      this.weatherManager.setDebug(this.weatherDebug);
+    }
 
     // Flashlight toggle — only if active character carries the flashlight item
     const hasFlashlight = this.rsm.hasItemWithKeyId('flashlight');
@@ -516,24 +523,9 @@ export class GameScene extends Phaser.Scene {
   // ── Interactables & item pickup ─────────────────────────────────────────
 
   private checkInteractables(input: InputState): void {
-    // Update nearDoor every frame via manual bounds check.
-    this.nearDoor = null;
-    if (!this.isTransitioning) {
-      const pb = this.player.body as Phaser.Physics.Arcade.Body;
-      const pr = new Phaser.Geom.Rectangle(pb.x, pb.y, pb.width, pb.height);
-      for (const zone of this.roomManager.getDoorZones()) {
-        const zb = zone.body as Phaser.Physics.Arcade.StaticBody;
-        if (Phaser.Geom.Rectangle.Overlaps(pr, new Phaser.Geom.Rectangle(zb.x, zb.y, zb.width, zb.height))) {
-          this.nearDoor = zone.getData('doorDef') as DoorDefinition;
-          break;
-        }
-      }
-    }
-
-    // Door takes priority over all other interactables.
-    if (this.nearDoor) {
-      this.events.emit('show-interact-prompt');
-      if (input.action) this.handleDoorTransition(this.nearDoor);
+    if (this.isTransitioning) {
+      this.nearDoor = null;
+      this.events.emit('hide-interact-prompt');
       return;
     }
 
@@ -542,53 +534,79 @@ export class GameScene extends Phaser.Scene {
     const roomId = this.rsm.getCurrentRoom();
     const droppedItems = this.rsm.getDroppedItems(roomId);
 
-    let nearestType: 'interactable' | 'dropped' | 'afflicted' | null = null;
+    let nearestType: 'door' | 'interactable' | 'dropped' | 'afflicted' | null = null;
+    let nearestDoor: DoorDefinition | null = null;
     let nearestInteractable: InteractableDef | null = null;
     let nearestDropped: DroppedItemState | null = null;
     let nearestAfflicted: Afflicted | null = null;
-    let nearestDist = INTERACT_CONFIG.DISTANCE as number;
+    let nearestDist = Infinity;
+    const defaultRadius = INTERACT_CONFIG.DISTANCE as number;
+
+    for (const zone of this.roomManager.getDoorZones()) {
+      const doorDef = zone.getData('doorDef') as DoorDefinition;
+      const radius = doorDef.interactRadius ?? defaultRadius;
+      const zb = zone.body as Phaser.Physics.Arcade.StaticBody;
+      const cx = zb.x + zb.width / 2;
+      const cy = zb.y + zb.height / 2;
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, cx, cy);
+      if (dist < radius && dist < nearestDist) {
+        nearestDist = dist;
+        nearestType = 'door';
+        nearestDoor = doorDef;
+        nearestInteractable = null;
+        nearestDropped = null;
+        nearestAfflicted = null;
+      }
+    }
 
     for (const inter of interactables) {
       if (inter.type === 'item' && this.rsm.isItemCollected(inter.id)) continue;
+      const radius = inter.interactRadius ?? defaultRadius;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, inter.x, inter.y);
-      if (dist < nearestDist) {
+      if (dist < radius && dist < nearestDist) {
         nearestDist = dist;
         nearestType = 'interactable';
         nearestInteractable = inter;
+        nearestDoor = null;
         nearestDropped = null;
         nearestAfflicted = null;
       }
     }
     for (const dropped of droppedItems) {
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, dropped.x, dropped.y);
-      if (dist < nearestDist) {
+      if (dist < defaultRadius && dist < nearestDist) {
         nearestDist = dist;
         nearestType = 'dropped';
         nearestDropped = dropped;
+        nearestDoor = null;
         nearestInteractable = null;
         nearestAfflicted = null;
       }
     }
-    // Check afflicted (only cured/recovered are interactable)
     for (const child of this.afflictedGroup.getChildren()) {
       const a = child as Afflicted;
       if (!a.active) continue;
       const status = a.getStatus();
       if (status !== 'cured' && status !== 'recovered') continue;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, a.x, a.y);
-      if (dist < nearestDist) {
+      if (dist < defaultRadius && dist < nearestDist) {
         nearestDist = dist;
         nearestType = 'afflicted';
         nearestAfflicted = a;
+        nearestDoor = null;
         nearestInteractable = null;
         nearestDropped = null;
       }
     }
 
+    this.nearDoor = nearestType === 'door' ? nearestDoor : null;
+
     if (nearestType) {
       this.events.emit('show-interact-prompt');
       if (input.action) {
-        if (nearestType === 'interactable' && nearestInteractable) {
+        if (nearestType === 'door' && nearestDoor) {
+          this.handleDoorTransition(nearestDoor);
+        } else if (nearestType === 'interactable' && nearestInteractable) {
           this.handleInteractable(nearestInteractable);
         } else if (nearestType === 'dropped' && nearestDropped) {
           this.handleDroppedItemPickup(nearestDropped);

@@ -51,6 +51,12 @@ export class WeatherManager {
     this.effects.forEach(e => e.update(delta));
   }
 
+  setDebug(enabled: boolean): void {
+    for (const e of this.effects) {
+      if (e instanceof DrippingEffect) e.setDebug(enabled);
+    }
+  }
+
   destroy(): void {
     this.effects.forEach(e => e.destroy());
     this.effects = [];

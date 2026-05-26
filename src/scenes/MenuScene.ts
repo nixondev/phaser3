@@ -5,22 +5,15 @@ import { MusicManager } from '@systems/MusicManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { RainEffect } from '@systems/RainEffect';
 import { CloudEffect } from '@systems/CloudEffect';
+import { Afflicted } from '@entities/Afflicted';
 
 const TEXT_DEPTH = DEPTH.UI;
-
-interface WanderSprite {
-  sprite: Phaser.GameObjects.Sprite;
-  vx: number;
-  vy: number;
-  timer: number;
-  changeInterval: number;
-}
 
 export class MenuScene extends Phaser.Scene {
   private started = false;
   private rain: RainEffect | null = null;
   private cloudEffect: CloudEffect | null = null;
-  private wanderers: WanderSprite[] = [];
+  private wanderers: Afflicted[] = [];
   private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
 
@@ -154,6 +147,7 @@ export class MenuScene extends Phaser.Scene {
       this.rain = null;
       this.cloudEffect?.destroy();
       this.cloudEffect = null;
+      for (const a of this.wanderers) a.destroy();
       this.wanderers = [];
       this.edgeShadows?.destroy();
       this.edgeShadows = undefined;
@@ -171,7 +165,8 @@ export class MenuScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.rain?.update(delta);
     this.cloudEffect?.update(delta);
-    this.updateWanderers(delta);
+    // Pass a far-off player position so afflicted stay in wandering state
+    for (const a of this.wanderers) a.updateAI(-9999, -9999);
   }
 
   // ── Title room background ────────────────────────────────────────────────
@@ -202,8 +197,14 @@ export class MenuScene extends Phaser.Scene {
 
     this.buildEdgeShadows(map.width, map.height);
 
-    this.wanderers.push(this.makeWanderer(320, 450, 'afflicted-walker', 0x5577cc));
-    this.wanderers.push(this.makeWanderer(900, 560, 'afflicted-husk',   0x997755));
+    this.wanderers.push(this.makeWanderer('menu-walker', 320, 450, 'walker', 0x5577cc));
+    this.wanderers.push(this.makeWanderer('menu-husk',   900, 560, 'husk',   0x997755));
+
+    if (this.collisionLayer) {
+      for (const a of this.wanderers) {
+        this.physics.add.collider(a, this.collisionLayer);
+      }
+    }
   }
 
   private buildEdgeShadows(mapWidth: number, mapHeight: number): void {
@@ -243,60 +244,15 @@ export class MenuScene extends Phaser.Scene {
     this.edgeShadows = rt;
   }
 
-  private makeWanderer(x: number, y: number, texture: string, tint: number): WanderSprite {
-    const sprite = this.add.sprite(x, y, texture, 0);
-    sprite.setDepth(DEPTH.ENTITIES);
-    sprite.setTint(tint);
-    sprite.setScrollFactor(0);
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 80 + Math.random() * 40;
-    return {
-      sprite,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      timer: 0,
-      changeInterval: 2000 + Math.random() * 3000,
-    };
-  }
-
-  private updateWanderers(delta: number): void {
-    const dt = delta / 1000;
-    const margin = 128;
-    const W = GAME_CONFIG.WIDTH;
-    const H = GAME_CONFIG.HEIGHT;
-
-    for (const w of this.wanderers) {
-      w.timer += delta;
-      if (w.timer >= w.changeInterval) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = 80 + Math.random() * 40;
-        w.vx = Math.cos(angle) * speed;
-        w.vy = Math.sin(angle) * speed;
-        w.timer = 0;
-        w.changeInterval = 2000 + Math.random() * 3000;
-      }
-
-      const nx = w.sprite.x + w.vx * dt;
-      const ny = w.sprite.y + w.vy * dt;
-
-      const hitX = this.isSolid(nx, w.sprite.y);
-      const hitY = this.isSolid(w.sprite.x, ny);
-
-      if (hitX) { w.vx = -w.vx; } else { w.sprite.x = nx; }
-      if (hitY) { w.vy = -w.vy; } else { w.sprite.y = ny; }
-
-      // Hard screen-edge clamp as fallback
-      if (w.sprite.x < margin)     { w.sprite.x = margin;     w.vx =  Math.abs(w.vx); }
-      if (w.sprite.x > W - margin) { w.sprite.x = W - margin; w.vx = -Math.abs(w.vx); }
-      if (w.sprite.y < margin)     { w.sprite.y = margin;     w.vy =  Math.abs(w.vy); }
-      if (w.sprite.y > H - margin) { w.sprite.y = H - margin; w.vy = -Math.abs(w.vy); }
-    }
-  }
-
-  private isSolid(x: number, y: number): boolean {
-    if (!this.collisionLayer) return false;
-    const tile = this.collisionLayer.getTileAtWorldXY(x, y);
-    return tile !== null && tile.index > 0;
+  private makeWanderer(id: string, x: number, y: number, variant: string, tint: number): Afflicted {
+    const afflicted = new Afflicted(this, {
+      id, variant,
+      name: '', role: '', x, y,
+      behaviorLoop: 'wander',
+    }, 'wandering');
+    afflicted.setTint(tint);
+    afflicted.setScrollFactor(0);
+    return afflicted;
   }
 
   // ── Navigation ──────────────────────────────────────────────────────────

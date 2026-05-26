@@ -19,6 +19,7 @@ export interface DoorDefinition {
   requiredKeys?: string[];
   lockedMessage?: string;
   unlockedMessage?: string;
+  interactRadius?: number;
 }
 
 export interface ItemDef {
@@ -64,6 +65,7 @@ export interface InteractableDef {
   y: number;
   type: string;
   text: string;
+  interactRadius?: number;
   item?: ItemDef;
   tileFrame?: number;
   /** Which tileset spritesheet for the tileFrame sprite. Omit for the core 'tileset'. */
