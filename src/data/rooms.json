@@ -474,7 +474,7 @@
           "y": 212,
           "type": "sign",
           "tileFrame": 7,
-          "text": "Flashlight: Pick it up, press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nDrop it (Q) and another can use it.\nIt keeps the afflicted at bay."
+          "text": "Flashlight: Pick it up, press 'F' to toggle.\nBattery: Refill at chargers or with fuel.\nDrop it (Q) and another can use it.\nIt keeps the afflicted at bay.\nDirect the beam — they react to light.\nA moving cone is harder for them to track.\nStay near walls when the battery is low.\nKeep moving. Standing still gets you cornered.\nRecharge stations are marked in each building.\nThe charger in this room still works."
         },
         {
           "id": "desk-note",

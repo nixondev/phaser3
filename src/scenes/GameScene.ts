@@ -10,7 +10,7 @@ import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef } from '@/types';
+import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef, DialogMessage, DialogMessageType } from '@/types';
 import { debug } from '@utils/Debug';
 import { WeatherManager } from '@systems/WeatherManager';
 // SaveManager is intentionally not called — every run starts fresh.
@@ -37,6 +37,7 @@ export class GameScene extends Phaser.Scene {
   private nearDoor: DoorDefinition | null = null;
   private isTransitioning = false;
   private dialogOpen = false;
+  private messageQueue: DialogMessage[] = [];
   private cureCooldown = false;  // prevents multi-afflicted same-frame double-trigger
   private lockedDoorCooldown = 0;
   private itemSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
@@ -78,6 +79,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.isTransitioning = false;
     this.dialogOpen = false;
+    this.messageQueue = [];
     this.lockedDoorCooldown = 0;
     this.inventoryMode = false;
     this.inventoryCursor = 0;
@@ -145,10 +147,30 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private paginateText(text: string, maxLines = 6): string[] {
+    const lines = text.split('\n');
+    if (lines.length <= maxLines) return [text];
+    const pages: string[] = [];
+    for (let i = 0; i < lines.length; i += maxLines) {
+      pages.push(lines.slice(i, i + maxLines).join('\n'));
+    }
+    return pages;
+  }
+
+  private openDialog(text: string, type?: DialogMessageType): void {
+    const pages = this.paginateText(text);
+    if (this.dialogOpen) {
+      for (const page of pages) this.messageQueue.push({ text: page, type });
+      return;
+    }
+    this.dialogOpen = true;
+    this.events.emit('dialog-open', { text: pages[0], type } as DialogMessage);
+    for (let i = 1; i < pages.length; i++) this.messageQueue.push({ text: pages[i], type });
+  }
+
   private showTutorialDialog(): void {
     this.rsm.setTutorialShown(true);
-    this.dialogOpen = true;
-    this.events.emit('dialog-open', "Welcome. Controls: WASD to move, E to interact, TAB for inventory, F to toggle Flashlight, ESC for menu.");
+    this.openDialog("Welcome. Controls: WASD to move, E to interact, TAB for inventory, F to toggle Flashlight, ESC for menu.", 'system');
   }
 
   update(_time: number, delta: number): void {
@@ -193,8 +215,13 @@ export class GameScene extends Phaser.Scene {
       const origin = this.player.getFlashlightOrigin();
       this.flashlight.update(origin.x, origin.y, this.player.getFacingAngle(), delta);
       if (input.action || input.menu) {
-        this.dialogOpen = false;
-        this.events.emit('dialog-close');
+        if (this.messageQueue.length > 0) {
+          const next = this.messageQueue.shift()!;
+          this.events.emit('dialog-open', next);
+        } else {
+          this.dialogOpen = false;
+          this.events.emit('dialog-close');
+        }
       }
       return;
     }
@@ -335,12 +362,11 @@ export class GameScene extends Phaser.Scene {
       this.cameras.main.shake(200, 0.006);
       this.emitInventoryChanged();
       this.dropHeldItems(afflicted);
-      this.dialogOpen = true;
       const clue = afflicted.getCuredClue();
       const msg = clue
         ? `The ${item.name} shattered on impact.\n${afflicted.getName()} slumps against the wall.\n\n${clue}`
         : `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.\nThey seem to need some time alone.`;
-      this.events.emit('dialog-open', msg);
+      this.openDialog(msg, 'narrative');
 
       return;
     }
@@ -433,8 +459,7 @@ export class GameScene extends Phaser.Scene {
 
     if (item.category === 'key') {
       this.exitInventory();
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', 'Keys are used automatically\nat locked doors.');
+      this.openDialog('Keys are used automatically\nat locked doors.', 'system');
       return;
     }
 
@@ -449,24 +474,21 @@ export class GameScene extends Phaser.Scene {
           if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
           this.dropHeldItems(nearest);
           this.exitInventory();
-          this.dialogOpen = true;
           const clue = nearest.getCuredClue();
           const msg = clue
             ? `You applied the ${item.name}.\n${nearest.getName()} slumps against the wall.\n\n${clue}`
             : `You applied the ${item.name}.\n${nearest.getName()} seems to be calming down.\nThey seem to need some time alone.`;
-          this.events.emit('dialog-open', msg);
+          this.openDialog(msg, 'narrative');
           this.emitInventoryChanged();
           return;
         } else {
           this.exitInventory();
-          this.dialogOpen = true;
-          this.events.emit('dialog-open', `This cure doesn't seem\nright for ${nearest.getName()}.`);
+          this.openDialog(`This cure doesn't seem\nright for ${nearest.getName()}.`, 'system');
           return;
         }
       } else {
         this.exitInventory();
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', 'Nobody nearby to cure.');
+        this.openDialog('Nobody nearby to cure.', 'system');
         return;
       }
     }
@@ -479,8 +501,7 @@ export class GameScene extends Phaser.Scene {
 
     // Generic tool/fuel/component — show the item's text if available, then consume if flagged.
     this.exitInventory();
-    this.dialogOpen = true;
-    this.events.emit('dialog-open', item.content ? item.content : "Nothing to use this on right now.");
+    this.openDialog(item.content ?? "Nothing to use this on right now.", item.content ? 'lore' : 'system');
     if (item.consumedOnUse) {
       this.rsm.removeFromInventory(slot);
       this.emitInventoryChanged();
@@ -626,8 +647,7 @@ export class GameScene extends Phaser.Scene {
       const result = checkRequires(conditions, this.rsm);
 
       if (!result.met) {
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', result.message);
+        this.openDialog(result.message, 'system');
         this.events.emit('hide-interact-prompt');
         return;
       }
@@ -644,8 +664,7 @@ export class GameScene extends Phaser.Scene {
       if (inter.type === 'item' && inter.item) {
         const slot = this.rsm.addToInventory(inter.item);
         if (slot < 0) {
-          this.dialogOpen = true;
-          this.events.emit('dialog-open', 'Inventory is full!\nDrop something first. (TAB)');
+          this.openDialog('Inventory is full!\nDrop something first. (TAB)', 'system');
           return;
         }
         this.rsm.collectItem(inter.id);
@@ -664,8 +683,7 @@ export class GameScene extends Phaser.Scene {
         this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
       }
 
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', inter.text);
+      this.openDialog(inter.text, 'lore');
       this.events.emit('hide-interact-prompt');
       this.emitInventoryChanged();
 
@@ -677,12 +695,10 @@ export class GameScene extends Phaser.Scene {
       this.handleItemPickup(inter);
     } else if (inter.type === 'recharge') {
       this.flashlight.recharge();
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', inter.text);
+      this.openDialog(inter.text, 'lore');
       this.events.emit('hide-interact-prompt');
     } else {
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', inter.text);
+      this.openDialog(inter.text, 'lore');
       this.events.emit('hide-interact-prompt');
     }
   }
@@ -700,8 +716,7 @@ export class GameScene extends Phaser.Scene {
       // If they have a home room and we're not in it yet, they're just dazed.
       // The clue was already shown at cure time. Walk through a door to find them there.
       if (associatedRoom && associatedRoom !== currentRoom) {
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', `${name} stares past you. They seem distant.\nMaybe they need somewhere familiar.`);
+        this.openDialog(`${name} stares past you. They seem distant.\nMaybe they need somewhere familiar.`, 'narrative');
         this.events.emit('hide-interact-prompt');
         return;
       }
@@ -735,16 +750,14 @@ export class GameScene extends Phaser.Scene {
         this.afflictedGroup.remove(afflicted);
         this.refreshParkedBodies();
 
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', finalText);
+        this.openDialog(finalText, 'narrative');
         this.events.emit('hide-interact-prompt');
         this.events.emit('roster-changed', this.rsm.getRoster());
         this.events.emit('inventory-changed', this.rsm.getInventory());
-  
+
       } else {
         // Still in conversation — show current page, advance counter
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', pages[page]);
+        this.openDialog(pages[page], 'narrative');
         this.events.emit('hide-interact-prompt');
         this.recoveryPage.set(id, page + 1);
       }
@@ -756,8 +769,7 @@ export class GameScene extends Phaser.Scene {
         // Inter-character conversation path
         const page = this.conversationPage.get(id) ?? 0;
         const isLast = page >= convDialog.length - 1;
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', convDialog[page]);
+        this.openDialog(convDialog[page], 'narrative');
         this.events.emit('hide-interact-prompt');
 
         if (isLast) {
@@ -776,8 +788,7 @@ export class GameScene extends Phaser.Scene {
         }
       } else {
         // Solo response — partner not present or no conversation defined
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', `${name}\n"I'm ready when you are."`);
+        this.openDialog(`${name}\n"I'm ready when you are."`, 'narrative');
         this.events.emit('hide-interact-prompt');
       }
     }
@@ -854,14 +865,12 @@ export class GameScene extends Phaser.Scene {
     if (!inter.item) return;
     const slot = this.rsm.addToInventory(inter.item);
     if (slot < 0) {
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', 'Inventory is full!\nDrop something first. (TAB)');
+      this.openDialog('Inventory is full!\nDrop something first. (TAB)', 'system');
       return;
     }
     this.rsm.collectItem(inter.id);
     this.removeItemSprite(inter.id);
-    this.dialogOpen = true;
-    this.events.emit('dialog-open', inter.text);
+    this.openDialog(inter.text, 'lore');
     this.events.emit('hide-interact-prompt');
     this.events.emit('inventory-changed', this.rsm.getInventory());
 
@@ -870,8 +879,7 @@ export class GameScene extends Phaser.Scene {
   private handleDroppedItemPickup(dropped: DroppedItemState): void {
     const slot = this.rsm.addToInventory(dropped.item);
     if (slot < 0) {
-      this.dialogOpen = true;
-      this.events.emit('dialog-open', 'Inventory is full!');
+      this.openDialog('Inventory is full!', 'system');
       return;
     }
     this.rsm.removeDroppedItem(this.rsm.getCurrentRoom(), dropped.instanceId);
@@ -1121,8 +1129,7 @@ export class GameScene extends Phaser.Scene {
       } else {
         if (this.lockedDoorCooldown > 0) return;
         this.lockedDoorCooldown = 90;
-        this.dialogOpen = true;
-        this.events.emit('dialog-open', doorDef.lockedMessage ?? 'This door is locked.\nYou need a key to open it.');
+        this.openDialog(doorDef.lockedMessage ?? 'This door is locked.\nYou need a key to open it.', 'system');
         (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
         return;
       }

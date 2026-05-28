@@ -202,3 +202,10 @@ export interface TextSequenceEntry {
   produces?: ProduceEffect[];
   afterDelay?: number;
 }
+
+export type DialogMessageType = 'narrative' | 'system' | 'lore';
+
+export interface DialogMessage {
+  text: string;
+  type?: DialogMessageType;
+}

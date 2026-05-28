@@ -1,6 +1,6 @@
 ﻿import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, INVENTORY_CONFIG } from '@utils/Constants';
-import { ItemDef, CharacterState } from '@/types';
+import { ItemDef, CharacterState, DialogMessage } from '@/types';
 import { resolveTileSprite } from '@utils/TilesetResolver';
 import { GameScene } from './GameScene';
 
@@ -14,8 +14,11 @@ const GRID_Y = 16;
 export class UIScene extends Phaser.Scene {
   private roomNameText!: Phaser.GameObjects.Text;
   private roomNameTween?: Phaser.Tweens.Tween;
+  private doorUnlockText!: Phaser.GameObjects.Text;
+  private doorUnlockTween?: Phaser.Tweens.Tween;
   private interactPrompt!: Phaser.GameObjects.Text;
-  private dialogBox!: Phaser.GameObjects.Container;
+  private dismissPrompt!: Phaser.GameObjects.Text;
+  private dialogBg!: Phaser.GameObjects.Rectangle;
   private dialogText!: Phaser.GameObjects.Text;
   private batteryBar!: Phaser.GameObjects.Graphics;
   private batteryLabel!: Phaser.GameObjects.Text;
@@ -50,6 +53,11 @@ export class UIScene extends Phaser.Scene {
       .text(w / 2, 80, '', { fontSize: '40px', color: '#ffffff', fontFamily: 'monospace' })
       .setOrigin(0.5).setAlpha(0);
 
+    // Door unlock feedback — separate element so it never stomps the room name
+    this.doorUnlockText = this.add
+      .text(w / 2, 136, '', { fontSize: '36px', color: '#ffdd88', fontFamily: 'monospace' })
+      .setOrigin(0.5).setAlpha(0);
+
     // Interact prompt
     this.interactPrompt = this.add
       .text(w / 2, h - 160, 'E', {
@@ -59,17 +67,20 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(0.5).setVisible(false);
     this.tweens.add({ targets: this.interactPrompt, alpha: { from: 1, to: 0.5 }, duration: 600, yoyo: true, repeat: -1 });
 
-    // Dialog box
-    const boxH = 240;
-    const boxY = h - boxH / 2 - 32;
-    const bg = this.add.rectangle(w / 2, boxY, w - 64, boxH, 0x111133, 0.85).setStrokeStyle(8, 0x4488cc);
-    this.dialogText = this.add.text(64, boxY - boxH / 2 + 32, '', {
+    // Dialog box — plain dark surface, no border, sized dynamically in showDialog
+    this.dialogBg = this.add.rectangle(0, 0, w - 64, 0, 0x000000, 0.75).setVisible(false);
+    this.dialogText = this.add.text(0, 0, '', {
       fontSize: '36px', color: '#ffffff', fontFamily: 'monospace', lineSpacing: 16, wordWrap: { width: w - 160 },
-    });
-    const hint = this.add.text(w - 64, boxY + boxH / 2 - 24, '[E / ESC]', {
-      fontSize: '28px', color: '#8888aa', fontFamily: 'monospace',
-    }).setOrigin(1, 1);
-    this.dialogBox = this.add.container(0, 0, [bg, this.dialogText, hint]).setVisible(false);
+    }).setVisible(false);
+
+    // Dismiss prompt — positioned dynamically alongside the dialog box
+    this.dismissPrompt = this.add
+      .text(0, 0, 'E', {
+        fontSize: '32px', color: '#ffffff', fontFamily: 'monospace',
+        backgroundColor: '#00000088', padding: { x: 24, y: 12 },
+      })
+      .setOrigin(0.5).setVisible(false);
+    this.tweens.add({ targets: this.dismissPrompt, alpha: { from: 1, to: 0.5 }, duration: 600, yoyo: true, repeat: -1 });
 
     // â”€â”€ Battery Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     this.batteryLabel = this.add.text(16, 16, 'PWR', { fontSize: '24px', color: '#8888aa', fontFamily: 'monospace' }).setVisible(false);
@@ -215,14 +226,36 @@ export class UIScene extends Phaser.Scene {
     this.roomNameTween = this.tweens.add({ targets: this.roomNameText, alpha: 0, delay: 2000, duration: 500 });
   }
 
-  private showDialog(text: string): void {
-    this.dialogText.setText(text);
-    this.dialogBox.setVisible(true);
+  private showDialog(payload: DialogMessage): void {
+    const w = GAME_CONFIG.WIDTH;
+    const h = GAME_CONFIG.HEIGHT;
+    const PAD_X = 64;
+    const PAD_Y = 40;
+    const BOX_BOTTOM = h - 32;
+    const BOX_WIDTH = w - 64;
+
+    this.dialogText.setText(payload.text);
+    const textH = this.dialogText.height;
+    const boxH = Math.max(120, textH + PAD_Y * 2);
+    const boxTop = BOX_BOTTOM - boxH;
+
+    this.dialogBg
+      .setPosition(w / 2, BOX_BOTTOM - boxH / 2)
+      .setSize(BOX_WIDTH, boxH)
+      .setVisible(true);
+    this.dialogText
+      .setPosition(PAD_X, boxTop + PAD_Y)
+      .setVisible(true);
+    this.dismissPrompt
+      .setPosition(w - 80, BOX_BOTTOM - 36)
+      .setVisible(true);
     this.interactPrompt.setVisible(false);
   }
 
   private hideDialog(): void {
-    this.dialogBox.setVisible(false);
+    this.dialogBg.setVisible(false);
+    this.dialogText.setVisible(false);
+    this.dismissPrompt.setVisible(false);
   }
 
   private onInventoryChanged(inventory: (ItemDef | null)[]): void {
@@ -249,9 +282,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   private onDoorUnlocked(message: string): void {
-    this.roomNameText.setText(message).setAlpha(1);
-    if (this.roomNameTween) this.roomNameTween.destroy();
-    this.roomNameTween = this.tweens.add({ targets: this.roomNameText, alpha: 0, delay: 1200, duration: 400 });
+    this.doorUnlockText.setText(message).setAlpha(1);
+    if (this.doorUnlockTween) this.doorUnlockTween.destroy();
+    this.doorUnlockTween = this.tweens.add({ targets: this.doorUnlockText, alpha: 0, delay: 1200, duration: 400 });
   }
 
   private onRosterChanged(roster: CharacterState[]): void {
