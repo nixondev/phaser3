@@ -81,15 +81,38 @@ export interface InteractableDef {
 
 export type AfflictedStatus = 'wandering' | 'agitated' | 'frightened' | 'cured' | 'recovered';
 
+/**
+ * wander   — drifts randomly within wanderRadius of origin; agitates on proximity.
+ * sentinel — stands still; agitates on proximity; immune to flashlight-frighten.
+ * drift    — roams widely (3× wanderRadius) with no pause; never agitates.
+ * pace     — walks back and forth between origin and a point defined by paceAngle + paceLength.
+ * circle   — orbits origin at wanderRadius; agitates on proximity.
+ */
+export type BehaviorLoop = 'wander' | 'sentinel' | 'drift' | 'pace' | 'circle';
+
 export interface AfflictedDef {
   id: string;
   name: string;
   role: string;
   x: number;
   y: number;
-  behaviorLoop: string;
+  behaviorLoop: BehaviorLoop;
   variant?: string;
   playerVariant?: string;
+  /** Radius from origin used for wander target picking. Default 128px. Drift uses 3×. Circle uses as orbit radius. */
+  wanderRadius?: number;
+  /** Speed multiplier applied to all movement speeds. Default 1.0. */
+  speedMult?: number;
+  /** Room ID passed to the proximity sound system. Defaults to 'city-street'. */
+  soundRoom?: string;
+  /** For 'pace': direction of the patrol path in degrees (0=right, 90=down). Default 0. */
+  paceAngle?: number;
+  /** For 'pace': distance from origin to the far end of the patrol path in pixels. Default 128. */
+  paceLength?: number;
+  /** For 'circle': orbital speed in degrees per second. Default 45. */
+  circleSpeed?: number;
+  /** For 'circle': starting angle on the orbit in degrees (0=right). Default 0. */
+  circleStartAngle?: number;
   cureCondition?: string;
   recoveryUnlock?: string;
   associatedRoom?: string;

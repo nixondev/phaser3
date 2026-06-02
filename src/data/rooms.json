@@ -28,8 +28,7 @@
           "spawnX": 1536,
           "spawnY": 3712,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -56,8 +55,7 @@
           "spawnX": 4608,
           "spawnY": 3712,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -84,8 +82,7 @@
           "spawnX": 704,
           "spawnY": 1984,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -100,8 +97,7 @@
           "spawnX": 704,
           "spawnY": 3264,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -116,8 +112,7 @@
           "spawnX": 5184,
           "spawnY": 1088,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -132,8 +127,7 @@
           "spawnX": 5312,
           "spawnY": 1984,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -148,8 +142,7 @@
           "spawnX": 5312,
           "spawnY": 3264,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -164,8 +157,7 @@
           "spawnX": 3776,
           "spawnY": 3712,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -180,8 +172,7 @@
           "spawnX": 5312,
           "spawnY": 3712,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         },
         {
@@ -196,8 +187,7 @@
           "spawnX": 576,
           "spawnY": 3712,
           "requiredKeys": [
-            "skeleton-key",
-            "master-key"
+            "skeleton-key"
           ]
         }
       ],
@@ -415,6 +405,36 @@
               "content": "Hand-written stock count.\nSection 3 still sealed.\nGenerator fuel: 4 cans — basement, east wall.\nNote: don't trust the east corridor after dark."
             }
           ]
+        },
+        {
+          "id": "street-sentinel-1",
+          "name": "Unknown",
+          "role": "",
+          "x": 5354,
+          "y": 925,
+          "behaviorLoop": "sentinel",
+          "variant": "walker"
+        },
+        {
+          "id": "street-pacer-1",
+          "name": "Unknown",
+          "role": "",
+          "x": 5021,
+          "y": 3871,
+          "behaviorLoop": "pace",
+          "variant": "walker",
+          "paceAngle": 0,
+          "paceLength": 256
+        },
+        {
+          "id": "street-drifter-1",
+          "name": "Unknown",
+          "role": "",
+          "x": 676,
+          "y": 4061,
+          "behaviorLoop": "drift",
+          "variant": "walker",
+          "wanderRadius": 192
         }
       ],
       "dark": true,
@@ -709,7 +729,6 @@
           "item": {
             "name": "Skeleton Key",
             "tileFrame": 8,
-
             "category": "key",
             "keyId": "skeleton-key",
             "consumedOnUse": false

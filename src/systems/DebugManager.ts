@@ -30,6 +30,8 @@ export class DebugManager {
     U: Phaser.Input.Keyboard.Key;
     C: Phaser.Input.Keyboard.Key;
     SHIFT: Phaser.Input.Keyboard.Key;
+    CTRL: Phaser.Input.Keyboard.Key;
+    FORWARD_SLASH: Phaser.Input.Keyboard.Key;
     F4: Phaser.Input.Keyboard.Key;
     F5: Phaser.Input.Keyboard.Key;
     UP: Phaser.Input.Keyboard.Key;
@@ -64,6 +66,8 @@ export class DebugManager {
       U: kb.addKey(Phaser.Input.Keyboard.KeyCodes.U),
       C: kb.addKey(Phaser.Input.Keyboard.KeyCodes.C),
       SHIFT: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+      CTRL: kb.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL),
+      FORWARD_SLASH: kb.addKey(Phaser.Input.Keyboard.KeyCodes.FORWARD_SLASH),
       F4: kb.addKey(Phaser.Input.Keyboard.KeyCodes.F4),
       F5: kb.addKey(Phaser.Input.Keyboard.KeyCodes.F5),
       UP: kb.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
@@ -171,6 +175,20 @@ export class DebugManager {
       }
     }
 
+    // TODO: remove before ship — unlock ALL doors across all rooms (Ctrl+Shift+/)
+    if (Phaser.Input.Keyboard.JustDown(this.keys.FORWARD_SLASH) && this.keys.CTRL.isDown && this.keys.SHIFT.isDown) {
+      const allRooms = RoomManager.getRoomsData().rooms;
+      let count = 0;
+      Object.values(allRooms).forEach(room => {
+        room.doors.forEach(door => {
+          this.stateManager.unlockDoor(door.id);
+          count++;
+        });
+      });
+      console.log(`[DEBUG] All ${count} doors unlocked across all rooms`);
+      this.showToast(`All ${count} doors unlocked`);
+    }
+
     // Audio Editing
     if (this.isVisible) {
       this.handleAudioControls();
@@ -273,7 +291,8 @@ export class DebugManager {
       `  GIDs: ${gids}`,
       'Controls:',
       '  H·HUD  V·vis  L·reload  U·unlock  C·cure',
-      '  R·reverb  []·rev±  -+·vol  Sh+Clk·warp'
+      '  R·reverb  []·rev±  -+·vol  Sh+Clk·warp',
+      '  Ctrl+Sh+/·unlock ALL doors'
     ]);
   }
   

@@ -345,6 +345,7 @@ export class EditorUI {
           <button class="btn layer-btn" data-layer-key="2">2 Coll.</button>
           <button class="btn layer-btn" data-layer-key="3">3 Above</button>
           <button class="btn layer-btn" data-layer-key="4">4 OnGnd</button>
+          <button class="btn layer-btn" data-layer-key="5">5 OnColl.</button>
         </div>
         <h3>Tools</h3>
         <div class="row col">

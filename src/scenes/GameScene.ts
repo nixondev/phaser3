@@ -31,7 +31,9 @@ export class GameScene extends Phaser.Scene {
   private transitionManager!: TransitionManager;
   private rsm!: RoomStateManager;
   private collider?: Phaser.Physics.Arcade.Collider;
+  private onCollisionCollider?: Phaser.Physics.Arcade.Collider;
   private afflictedCollider?: Phaser.Physics.Arcade.Collider;
+  private afflictedOnCollisionCollider?: Phaser.Physics.Arcade.Collider;
   private playerAfflictedCollider?: Phaser.Physics.Arcade.Collider;
   private doorOverlaps: Phaser.Physics.Arcade.Collider[] = [];
   private nearDoor: DoorDefinition | null = null;
@@ -68,6 +70,11 @@ export class GameScene extends Phaser.Scene {
 
   private weatherManager!: WeatherManager;
 
+  // TODO: remove before ship — Ctrl+Shift+/ unlock-all debug keys
+  private dbgCtrlKey?: Phaser.Input.Keyboard.Key;
+  private dbgShiftKey?: Phaser.Input.Keyboard.Key;
+  private dbgSlashKey?: Phaser.Input.Keyboard.Key;
+
   constructor() {
     super(SCENES.GAME);
   }
@@ -85,6 +92,11 @@ export class GameScene extends Phaser.Scene {
     this.inventoryCursor = 0;
 
     this.inputManager = new InputManager(this);
+    // TODO: remove before ship — Ctrl+Shift+/ unlock-all debug shortcut
+    const kb = this.input.keyboard!;
+    this.dbgCtrlKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL);
+    this.dbgShiftKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    this.dbgSlashKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.FORWARD_SLASH);
     this.roomManager = new RoomManager(this);
     this.transitionManager = new TransitionManager(this);
     this.rsm = RoomStateManager.getInstance();
@@ -174,6 +186,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    // TODO: remove before ship — Ctrl+Shift+/ unlocks all doors across all rooms
+    if (this.dbgSlashKey && Phaser.Input.Keyboard.JustDown(this.dbgSlashKey) &&
+        this.dbgCtrlKey?.isDown && this.dbgShiftKey?.isDown) {
+      const allRooms = RoomManager.getRoomsData().rooms;
+      let count = 0;
+      Object.values(allRooms).forEach(room => room.doors.forEach(door => { this.rsm.unlockDoor(door.id); count++; }));
+      this.openDialog(`[DEBUG] All ${count} doors unlocked.`, 'system');
+    }
+
     this.weatherManager.update(delta);
     const cam = this.cameras.main;
     this.darknessOverlay.update(
@@ -294,6 +315,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.afflictedGroup.clear(true, true);
     if (this.afflictedCollider) this.afflictedCollider.destroy();
+    if (this.afflictedOnCollisionCollider) { this.afflictedOnCollisionCollider.destroy(); this.afflictedOnCollisionCollider = undefined; }
     if (this.playerAfflictedCollider) this.playerAfflictedCollider.destroy();
 
     const roomDef = this.roomManager.getCurrentRoomDef();
@@ -335,6 +357,10 @@ export class GameScene extends Phaser.Scene {
     // Collide afflicted with world
     const collisionLayer = this.roomManager.getCollisionLayer();
     this.afflictedCollider = this.physics.add.collider(this.afflictedGroup, collisionLayer);
+    const onCollisionLayer = this.roomManager.getOnCollisionLayer();
+    if (onCollisionLayer) {
+      this.afflictedOnCollisionCollider = this.physics.add.collider(this.afflictedGroup, onCollisionLayer);
+    }
 
     // Check for player reaching afflicted -> restart at home
     this.playerAfflictedCollider = this.physics.add.overlap(this.player, this.afflictedGroup, this.handleAfflictedCollision, undefined, this);
@@ -464,33 +490,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (item.category === 'cure') {
-      const nearest = this.getNearestAfflicted();
-      if (nearest && (nearest.getStatus() === 'wandering' || nearest.getStatus() === 'agitated')) {
-        if (!item.useTarget || item.useTarget === nearest.getId()) {
-          this.rsm.removeFromInventory(slot);
-          this.rsm.cureResident(nearest.getId());
-          nearest.setStatus('cured');
-          const associatedRoom = nearest.getAssociatedRoom();
-          if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
-          this.dropHeldItems(nearest);
-          this.exitInventory();
-          const clue = nearest.getCuredClue();
-          const msg = clue
-            ? `You applied the ${item.name}.\n${nearest.getName()} slumps against the wall.\n\n${clue}`
-            : `You applied the ${item.name}.\n${nearest.getName()} seems to be calming down.\nThey seem to need some time alone.`;
-          this.openDialog(msg, 'narrative');
-          this.emitInventoryChanged();
-          return;
-        } else {
-          this.exitInventory();
-          this.openDialog(`This cure doesn't seem\nright for ${nearest.getName()}.`, 'system');
-          return;
-        }
-      } else {
-        this.exitInventory();
-        this.openDialog('Nobody nearby to cure.', 'system');
-        return;
-      }
+      this.exitInventory();
+      this.openDialog('Walk into them to administer the cure.', 'system');
+      return;
     }
 
     if (item.category === 'document') {
@@ -1063,11 +1065,17 @@ export class GameScene extends Phaser.Scene {
 
   private setupCollisions(): void {
     if (this.collider) this.collider.destroy();
+    if (this.onCollisionCollider) { this.onCollisionCollider.destroy(); this.onCollisionCollider = undefined; }
     this.doorOverlaps.forEach((o) => o.destroy());
     this.doorOverlaps = [];
 
     const collisionLayer = this.roomManager.getCollisionLayer();
     this.collider = this.physics.add.collider(this.player, collisionLayer);
+
+    const onCollisionLayer = this.roomManager.getOnCollisionLayer();
+    if (onCollisionLayer) {
+      this.onCollisionCollider = this.physics.add.collider(this.player, onCollisionLayer);
+    }
 
     // Doors are now E-to-enter; nearDoor is updated each frame in checkInteractables.
   }

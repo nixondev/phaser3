@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Entity } from './Entity';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
-import { AfflictedDef, AfflictedStatus, ItemDef, ProduceEffect, Position } from '@/types';
+import { AfflictedDef, AfflictedStatus, BehaviorLoop, ItemDef, ProduceEffect, Position } from '@/types';
 import { MusicManager } from '@systems/MusicManager';
 import { Direction } from './Direction';
 
@@ -24,11 +24,19 @@ export class Afflicted extends Entity {
   private residentName: string;
   private role: string;
   private status: AfflictedStatus;
-  private behaviorLoop: string;
+  private behaviorLoop: BehaviorLoop;
+  private wanderRadius: number;
+  private speedMult: number;
   private variant: string;
   private origin: Position;
   private wanderTarget: Position | null = null;
   private wanderTimer?: Phaser.Time.TimerEvent;
+  // pace
+  private paceEndpointB: Position | null = null;
+  private pacingToB: boolean = true;
+  // circle
+  private circleAngle: number = 0;
+  private circleAngularSpeed: number = 0; // rad/s
   private baseScale: number;
   private currentDir: Direction = Direction.DOWN;
   private playerVariant: string | null;
@@ -53,6 +61,8 @@ export class Afflicted extends Entity {
     this.residentName   = def.name;
     this.role           = def.role;
     this.behaviorLoop   = def.behaviorLoop;
+    this.wanderRadius   = def.wanderRadius ?? WANDER_RANGE;
+    this.speedMult      = def.speedMult ?? 1.0;
     this.status         = initialStatus;
     this.variant        = variant;
     this.playerVariant  = def.playerVariant || null;
@@ -66,6 +76,20 @@ export class Afflicted extends Entity {
     this.conversationProduces = def.conversationProduces || [];
     this.origin         = { x: def.x, y: def.y };
 
+    if (def.behaviorLoop === 'pace') {
+      const angleRad = ((def.paceAngle ?? 0) * Math.PI) / 180;
+      const length   = def.paceLength ?? 128;
+      this.paceEndpointB = {
+        x: this.origin.x + Math.cos(angleRad) * length,
+        y: this.origin.y + Math.sin(angleRad) * length,
+      };
+    }
+
+    if (def.behaviorLoop === 'circle') {
+      this.circleAngle        = ((def.circleStartAngle ?? 0) * Math.PI) / 180;
+      this.circleAngularSpeed = ((def.circleSpeed ?? 45) * Math.PI) / 180;
+    }
+
     this.setDepth(DEPTH.ENTITIES);
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setSize(28, 24);
@@ -75,13 +99,21 @@ export class Afflicted extends Entity {
     this.createAnimations();
     this.setupVisuals();
 
+    // When spawning already-cured/recovered (room re-entry), apply the player texture
+    // immediately. setStatus() handles this on live transitions but is never called here.
+    if ((initialStatus === 'cured' || initialStatus === 'recovered') && this.playerVariant) {
+      this.createCuredAnimations();
+      this.setTexture(`player-${this.playerVariant}`, 0);
+      this.play(`player-${this.playerVariant}-idle-${this.currentDir}`, true);
+    }
+
     if (this.status === 'wandering') {
       this.startWandering();
     } else if (this.status === 'cured' || this.status === 'recovered') {
       this.stopMovement();
     }
 
-    MusicManager.getInstance().playProximity(this.afflictedId, 'goblins', 'city-street');
+    MusicManager.getInstance().playProximity(this.afflictedId, 'goblins', def.soundRoom ?? 'city-street');
   }
 
   private createAnimations(): void {
@@ -222,8 +254,11 @@ export class Afflicted extends Entity {
   }
 
   private pickWanderTarget(): void {
-    const angle = Math.random() * Math.PI * 2;
-    const dist  = Math.random() * WANDER_RANGE;
+    // pace, sentinel, and circle manage their own movement — no random target needed
+    if (this.behaviorLoop === 'pace' || this.behaviorLoop === 'sentinel' || this.behaviorLoop === 'circle') return;
+    const angle  = Math.random() * Math.PI * 2;
+    const radius = this.behaviorLoop === 'drift' ? this.wanderRadius * 3 : this.wanderRadius;
+    const dist   = Math.random() * radius;
     this.wanderTarget = {
       x: this.origin.x + Math.cos(angle) * dist,
       y: this.origin.y + Math.sin(angle) * dist,
@@ -258,7 +293,8 @@ export class Afflicted extends Entity {
     }
 
     // ── State transitions ────────────────────────────────────────────────────
-    if (this.status === 'wandering' && dist < AGITATE_RANGE) {
+    // Drift afflicted never agitate — they ignore the player entirely
+    if (this.status === 'wandering' && dist < AGITATE_RANGE && this.behaviorLoop !== 'drift') {
       this.setStatus('agitated');
       return;
     }
@@ -277,7 +313,7 @@ export class Afflicted extends Entity {
     if (this.status === 'agitated') {
       // Chase the player
       const angle = Phaser.Math.Angle.Between(this.x, this.y, playerX, playerY);
-      body.setVelocity(Math.cos(angle) * AGITATE_SPEED, Math.sin(angle) * AGITATE_SPEED);
+      body.setVelocity(Math.cos(angle) * AGITATE_SPEED * this.speedMult, Math.sin(angle) * AGITATE_SPEED * this.speedMult);
       this.updateAnimation();
       return;
     }
@@ -285,24 +321,62 @@ export class Afflicted extends Entity {
     if (this.status === 'frightened') {
       // Flee from the player
       const angle = Phaser.Math.Angle.Between(playerX, playerY, this.x, this.y);
-      body.setVelocity(Math.cos(angle) * FRIGHTEN_SPEED, Math.sin(angle) * FRIGHTEN_SPEED);
+      body.setVelocity(Math.cos(angle) * FRIGHTEN_SPEED * this.speedMult, Math.sin(angle) * FRIGHTEN_SPEED * this.speedMult);
       this.updateAnimation();
       return;
     }
 
     // ── Wandering ────────────────────────────────────────────────────────────
+    if (this.behaviorLoop === 'sentinel') {
+      body.setVelocity(0, 0);
+      this.updateAnimation();
+      return;
+    }
+
+    if (this.behaviorLoop === 'pace' && this.paceEndpointB) {
+      const target = this.pacingToB ? this.paceEndpointB : this.origin;
+      const d = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
+      if (d < 6) {
+        this.pacingToB = !this.pacingToB;
+      } else {
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, target.x, target.y);
+        body.setVelocity(Math.cos(angle) * WANDER_SPEED * this.speedMult, Math.sin(angle) * WANDER_SPEED * this.speedMult);
+      }
+      this.updateAnimation();
+      return;
+    }
+
+    if (this.behaviorLoop === 'circle') {
+      const delta = this.scene.game.loop.delta / 1000;
+      this.circleAngle += this.circleAngularSpeed * delta;
+      const tx = this.origin.x + Math.cos(this.circleAngle) * this.wanderRadius;
+      const ty = this.origin.y + Math.sin(this.circleAngle) * this.wanderRadius;
+      const steerAngle = Phaser.Math.Angle.Between(this.x, this.y, tx, ty);
+      const steerDist  = Phaser.Math.Distance.Between(this.x, this.y, tx, ty);
+      // Arc speed + correction term to pull back onto the orbit after any collision
+      const arcSpeed = this.wanderRadius * this.circleAngularSpeed * this.speedMult;
+      body.setVelocity(Math.cos(steerAngle) * (arcSpeed + steerDist * 4), Math.sin(steerAngle) * (arcSpeed + steerDist * 4));
+      this.updateAnimation();
+      return;
+    }
+
     if (this.wanderTarget) {
       const d = Phaser.Math.Distance.Between(this.x, this.y, this.wanderTarget.x, this.wanderTarget.y);
       if (d < 4) {
         body.setVelocity(0, 0);
         this.wanderTarget = null;
-        const pause = WANDER_PAUSE_MIN + Math.random() * (WANDER_PAUSE_MAX - WANDER_PAUSE_MIN);
-        this.wanderTimer = this.scene.time.delayedCall(pause, () => {
-          if (this.active && this.status === 'wandering') this.pickWanderTarget();
-        });
+        if (this.behaviorLoop === 'drift') {
+          // No pause — immediately pick the next target
+          this.pickWanderTarget();
+        } else {
+          const pause = WANDER_PAUSE_MIN + Math.random() * (WANDER_PAUSE_MAX - WANDER_PAUSE_MIN);
+          this.wanderTimer = this.scene.time.delayedCall(pause, () => {
+            if (this.active && this.status === 'wandering') this.pickWanderTarget();
+          });
+        }
       } else {
         const angle = Phaser.Math.Angle.Between(this.x, this.y, this.wanderTarget.x, this.wanderTarget.y);
-        body.setVelocity(Math.cos(angle) * WANDER_SPEED, Math.sin(angle) * WANDER_SPEED);
+        body.setVelocity(Math.cos(angle) * WANDER_SPEED * this.speedMult, Math.sin(angle) * WANDER_SPEED * this.speedMult);
       }
     }
     this.updateAnimation();
@@ -310,6 +384,8 @@ export class Afflicted extends Entity {
 
   setStatus(newStatus: AfflictedStatus): void {
     if (this.status === newStatus) return;
+    // Sentinels are not frightened by light — they only react to proximity
+    if (newStatus === 'frightened' && this.behaviorLoop === 'sentinel') return;
     this.status = newStatus;
     this.scene.tweens.killTweensOf(this);
     this.setScale(this.baseScale);

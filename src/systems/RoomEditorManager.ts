@@ -57,6 +57,7 @@ export class RoomEditorManager {
     TWO: Phaser.Input.Keyboard.Key;
     THREE: Phaser.Input.Keyboard.Key;
     FOUR: Phaser.Input.Keyboard.Key;
+    FIVE: Phaser.Input.Keyboard.Key;
     X: Phaser.Input.Keyboard.Key;
     Q: Phaser.Input.Keyboard.Key;
     E: Phaser.Input.Keyboard.Key;
@@ -124,6 +125,7 @@ export class RoomEditorManager {
       TWO: kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
       THREE: kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
       FOUR: kb.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
+      FIVE: kb.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE),
       X: kb.addKey(Phaser.Input.Keyboard.KeyCodes.X),
       Q: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
       E: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
@@ -1072,6 +1074,11 @@ export class RoomEditorManager {
       this.currentLayerName = LAYER_NAMES.ON_GROUND;
       layerChanged = true;
     }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.FIVE)) {
+      this.roomManager.ensureOnCollisionLayer();
+      this.currentLayerName = LAYER_NAMES.ON_COLLISION;
+      layerChanged = true;
+    }
 
     if (layerChanged) {
       this.updateLayerOpacities();
@@ -1339,7 +1346,7 @@ export class RoomEditorManager {
       }
     }
 
-    if (changed && this.currentLayerName === LAYER_NAMES.COLLISION) {
+    if (changed && (this.currentLayerName === LAYER_NAMES.COLLISION || this.currentLayerName === LAYER_NAMES.ON_COLLISION)) {
       this.refreshCollision();
     }
   }
@@ -1348,7 +1355,11 @@ export class RoomEditorManager {
     const collisionLayer = this.roomManager.getCollisionLayer();
     if (collisionLayer) {
       collisionLayer.setCollisionByExclusion([-1]);
-      // We might need to notify GameScene to update the collider, 
+    }
+    const onCollisionLayer = this.roomManager.getOnCollisionLayer();
+    if (onCollisionLayer) {
+      onCollisionLayer.setCollisionByExclusion([-1]);
+      // We might need to notify GameScene to update the collider,
       // but usually Phaser's collider works on the layer itself which is now updated.
     }
   }
@@ -1421,16 +1432,18 @@ export class RoomEditorManager {
     const ground = this.roomManager.getGroundLayer();
     const onGround = this.roomManager.getOnGroundLayer();
     const collision = this.roomManager.getCollisionLayer();
+    const onCollision = this.roomManager.getOnCollisionLayer();
     const above = this.roomManager.getAboveLayer();
 
     const layerMap: Record<string, Phaser.Tilemaps.TilemapLayer | null> = {
       [LAYER_NAMES.GROUND]: ground,
       [LAYER_NAMES.ON_GROUND]: onGround,
       [LAYER_NAMES.COLLISION]: collision,
+      [LAYER_NAMES.ON_COLLISION]: onCollision,
       [LAYER_NAMES.ABOVE]: above,
     };
 
-    [ground, onGround, collision, above].forEach(layer => {
+    [ground, onGround, collision, onCollision, above].forEach(layer => {
       if (!layer) return;
       if (!this.isActive) {
         layer.setAlpha(1);
@@ -1557,7 +1570,7 @@ export class RoomEditorManager {
       }
     }
 
-    if (state.layer === LAYER_NAMES.COLLISION) {
+    if (state.layer === LAYER_NAMES.COLLISION || state.layer === LAYER_NAMES.ON_COLLISION) {
       this.refreshCollision();
     }
     this.updateLayerOpacities();
@@ -1671,7 +1684,7 @@ export class RoomEditorManager {
     }
 
     if (changed) {
-      if (layer === LAYER_NAMES.COLLISION) this.refreshCollision();
+      if (layer === LAYER_NAMES.COLLISION || layer === LAYER_NAMES.ON_COLLISION) this.refreshCollision();
       const count = (endX - startX + 1) * (endY - startY + 1);
       this.showToast(`Rect filled ${count} tiles`);
     }
@@ -1719,7 +1732,7 @@ export class RoomEditorManager {
       }
     }
 
-    if (count > 0 && layer === LAYER_NAMES.COLLISION) {
+    if (count > 0 && (layer === LAYER_NAMES.COLLISION || layer === LAYER_NAMES.ON_COLLISION)) {
       this.refreshCollision();
     }
     this.showToast(`Filled ${count} tiles`);

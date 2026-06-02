@@ -298,8 +298,8 @@ The long-term goal is that **world state is persistent, but player understanding
 State machine with 5 states:
 
 - **wandering** — drifts slowly near origin point, blue tint, gentle wobble. Emits proximity sound.
-- **agitated** — triggered at 40px player proximity, flees from player, red tint, fast wobble. Calms at 80px distance. Faster than wandering. Emits proximity sound.
-- **frightened** — triggered when the flashlight cone hits a wandering or agitated afflicted. They flee. Transitions back to wandering/agitated when out of cone.
+- **agitated** — triggered at 240px player proximity, chases the player, red tint, fast wobble (300px/s). Calms at 480px distance. Emits proximity sound.
+- **frightened** — triggered when the flashlight cone hits a wandering or agitated afflicted. They flee (400px/s). Transitions back to wandering when far enough from player (600px). Sentinels are immune to this state.
 - **cured** — stands still, green tint. Interactable (E prompt). Proximity sound stops.
 - **recovered** — stands still, no tint. Interactable (repeat dialog / role delivery / character unlock logic). No proximity sound.
 
@@ -757,7 +757,7 @@ This section captures only what's still genuinely undecided.
   - **Escape with hope.** Enough residents recovered, exit opened in a way that makes outside rescue possible. You didn't just escape — you made return possible.
   - **Escape with understanding.** Caves descended, the thing seen, spectra-vision read, all recoverable residents cured. The ending reflects complete knowledge of what Warden was and what happened. Not a better escape mechanically — a complete one.
   - **Stay.** A fourth ending for a player who understands everything and chooses resolution over escape. What resolution means for the thing in the caves is a late-game authoring decision.
-  - The gun is the primary differentiator. Residents killed with the gun cannot contribute their knowledge or their keys. Enough absences make certain endings unreachable. The game never explains why.
+  - The cure economy is the primary differentiator. Crystals are limited. The order and target of cures determines which endings remain reachable. The game never explains the consequences of any individual decision.
 - **Soft-doom states.** How clearly should the game signal that a run
   is still informative but no longer winning? Not blocking anything.
 - **Run-reset escalation.** Whether/when the game ever becomes
@@ -766,7 +766,6 @@ This section captures only what's still genuinely undecided.
 - **Final canonical solve route.** Specific story / characters /
   items / room geography. Will be authored when the tools support it
   end-to-end (Phase 8 in `ROADMAP.md`).
-- **The one gun / one bullet.** Where it is placed, whether the player can use it on an afflicted before they know curing is possible, and how that permanent outcome is handled narratively. The game should not flag this as a mistake in the moment. It simply is.
 - **Cave descent as win condition.** Whether reaching the exit requires descending to the containment chamber, or whether descent is optional depth. The answer affects the final convergence pattern (#10 in PARADIGM.md).
 - **What the contained thing is.** Geological, biological, or stranger. Undecided. Will be answered when the cave rooms are authored.
 
@@ -880,9 +879,9 @@ The name predates anyone who can explain it. Nobody living in Warden knew why it
 
 ### What happened
 
-The thing in the caves beneath Warden was never gone. It was *managed*. Management lapsed — not through sabotage or malice, but through the slow erosion of understanding over generations. The contained thing expanded slightly past its boundary for the first time in decades. That was enough.
+The affliction was not caused by simple proximity to a containment breach. It was caused by a botched ritual attempt. A small inner circle of residents had pieced together that a better, more complete version of the original containment ritual was possible — one that would actually resolve what was being managed rather than merely continue managing it. They attempted it without the complete picture. They said it wrong. The affliction is the consequence: the incomplete ritual still running in the people who performed it. Their looping behavior is the unfinished procedure, echoing in them indefinitely.
 
-The incident happened in a single room deep in the cave complex — the facility's primary containment chamber. The workers present when it broke containment were afflicted immediately and en masse. They did not die. They began to loop.
+The original containment ritual had been performed for generations without anyone understanding what they were doing or why it worked. Pure inherited protocol — a cargo cult of rote procedure. Improved mining technology had recently broken into an older stratum, closer to whatever is below. The research labs found materials they couldn't classify. A small group began to understand that a different approach was possible. They went to the ritual place and tried. They were missing something. The something mattered.
 
 The evacuation alarm sounded — the alarm that had been practiced for generations, the drill that most residents privately considered ceremonial. It worked. The city evacuated faithfully and completely, the outer gates were sealed by the people who fled.
 
@@ -900,6 +899,20 @@ The cave system beneath Warden is the spine of the mystery. The surface town is 
 
 The player is not required to descend to finish the game, but the caves are where full understanding lives. A player who leaves without going down knows how to escape. A player who goes down knows *why*.
 
+There are three distinct underground layers, each with its own access culture:
+
+- **The mine** — industrial, known to all residents. The site where improved mining technology broke into an older stratum closer to the contained thing. Miners who found unusual crystals in the walls brought them to the lab. They had no idea what they'd found.
+- **The research labs underground** — known to a professional/clearance circle. Scientists and technicians studying what the mine breach exposed. They use a codename for whatever is below. Most lab personnel know the codename but not the deeper place.
+- **The ritual place** — known only to the inner circle, accessed through the lab levels but not on any official map. Circle membership comes from three sources: heritage (families who have tended this site for generations), merit (people who figured out enough that the circle had to bring them in), and status (rank-based access, the least reliable). Each person's relationship to the knowledge is colored by how they entered.
+
+### The crystals
+
+The cure for affliction is a crystal native to the stratum below — of the same origin as whatever is contained there. The research lab had samples and was studying them as a material: spectrographic analysis, hardness, composition, anomalous energy readings. They had the answer in their hands and were asking the wrong questions about it. Raw crystals exist in the mine walls, invisible to normal light. The spectra-vision adapter reveals them. Processed samples exist in the lab.
+
+### The Brink lineage
+
+One family — the Brinks — has been part of the inner ritual circle for generations, their membership inherited rather than earned. They were the keepers. The name predates anyone who can explain its origin. The last Brink in the circle either knew more than anyone else or inherited the role without inheriting full understanding — this is an open question to resolve during character writing.
+
 ### The flashlight adapter (spectra-vision)
 
 The spectra-vision adapter is not an invention — it is standard facility equipment. It was issued to personnel who understood what Warden was actually for, and used to read things invisible to the naked eye: resonance signatures, boundary conditions, the infrastructure of containment. The player finds one because someone who knew dropped it, or left it deliberately.
@@ -908,10 +921,12 @@ With the adapter, the player can see what the original wardens could see. This r
 
 ### The one gun
 
-Somewhere in Warden there is a gun with one bullet. It is findable before the player understands that the afflicted can be cured. If used on an afflicted resident, that is permanent. The game does not punish this mechanically. It remembers.
+~~This mechanic has been cut.~~ The moral weight the gun was meant to carry is now handled by the cure economy: one crystal accessible in the city, limited additional crystals requiring the mine and the spectra-vision adapter to find. Resource scarcity and the order of cure decisions carry the consequence instead.
 
 ### Open narrative questions (not yet decided)
 
-- What the thing in the caves actually is — geological, biological, or stranger.
+- **What the ancient event was** — thousands of years ago — that made the original ritual necessary. This is the spine the entire lore hangs on and should be developed before character writing begins.
+- **The exact nature of what is in the cave** — geological, biological, or stranger. The ritual place should make this legible to a player who reaches it.
+- **What the original ritual participants actually knew vs. what they were missing.** The gap between those two things is the game's central tragedy.
 - Whether descending to the caves is required for the winning exit condition or strictly optional.
 - The exact nature of the final exit and what knowing the city's full history does or doesn't change about it.

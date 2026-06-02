@@ -17,6 +17,7 @@ export const PLAYER_CONFIG = {
 export const DEPTH = {
   GROUND: 0,
   ON_GROUND: 0.3,
+  ON_COLLISION: 2,
   ENTITIES: 10,
   PLAYER: 20,
   ABOVE: 30,
@@ -31,6 +32,7 @@ export const LAYER_NAMES = {
   GROUND: 'Ground',
   ON_GROUND: 'OnGround',
   COLLISION: 'Collision',
+  ON_COLLISION: 'OnCollision',
   ABOVE: 'Above',
 } as const;
 
