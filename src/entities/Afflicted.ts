@@ -48,6 +48,7 @@ export class Afflicted extends Entity {
   private conversationRequires: string | null;
   private conversationDialog: string[];
   private conversationProduces: ProduceEffect[];
+  private traits: string[];
 
   constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
     const variant = def.variant || 'walker';
@@ -74,6 +75,7 @@ export class Afflicted extends Entity {
     this.conversationRequires = def.conversationRequires || null;
     this.conversationDialog  = def.conversationDialog || [];
     this.conversationProduces = def.conversationProduces || [];
+    this.traits              = def.traits || [];
     this.origin         = { x: def.x, y: def.y };
 
     if (def.behaviorLoop === 'pace') {
@@ -424,5 +426,6 @@ export class Afflicted extends Entity {
   getHolds():               ItemDef[]        { return this.holds;                }
   getConversationRequires():string | null    { return this.conversationRequires; }
   getConversationDialog():  string[]         { return this.conversationDialog;   }
+  getTraits():              string[]         { return this.traits;               }
   getConversationProduces():ProduceEffect[]  { return this.conversationProduces; }
 }

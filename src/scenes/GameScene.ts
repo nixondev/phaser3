@@ -16,7 +16,7 @@ import { WeatherManager } from '@systems/WeatherManager';
 // SaveManager is intentionally not called — every run starts fresh.
 // The serialize/loadFrom infrastructure is preserved for future use.
 // import { SaveManager } from '@utils/SaveManager';
-import { checkRequires, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
+import { checkRequires, checkRequiresAny, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 const CLINIC_DOOR_X     = 672;
@@ -44,6 +44,7 @@ export class GameScene extends Phaser.Scene {
   private lockedDoorCooldown = 0;
   private itemSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
   private itemShadows: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private hiddenSprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
 
   // Afflicted
   private afflictedGroup!: Phaser.Physics.Arcade.Group;
@@ -235,6 +236,7 @@ export class GameScene extends Phaser.Scene {
       this.player.playIdle();
       const origin = this.player.getFlashlightOrigin();
       this.flashlight.update(origin.x, origin.y, this.player.getFacingAngle(), delta);
+      this.updateHiddenLayer();
       if (input.action || input.menu) {
         if (this.messageQueue.length > 0) {
           const next = this.messageQueue.shift()!;
@@ -261,6 +263,9 @@ export class GameScene extends Phaser.Scene {
     const facingAngle = this.player.getFacingAngle();
     const origin = this.player.getFlashlightOrigin();
     this.flashlight.update(origin.x, origin.y, facingAngle, delta);
+    if (this.flashlight.isOn) this.rsm.setFlag('flashlight-on');
+    else this.rsm.clearFlag('flashlight-on');
+    this.updateHiddenLayer();
 
     // Update afflicted AI
     this.afflictedGroup.getChildren().forEach((child) => {
@@ -452,6 +457,7 @@ export class GameScene extends Phaser.Scene {
     this.player.playIdle();
     const origin = this.player.getFlashlightOrigin();
     this.flashlight.update(origin.x, origin.y, this.player.getFacingAngle(), delta);
+    this.updateHiddenLayer();
 
     const input = this.inputManager.getTapState();
     const cols = 6;
@@ -575,8 +581,10 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    const adaptedMode = this.flashlight.isOn && this.rsm.hasItemWithKeyId('spectra-adapter');
     for (const inter of interactables) {
       if (inter.type === 'item' && this.rsm.isItemCollected(inter.id)) continue;
+      if (inter.hidden && !adaptedMode) continue;
       const radius = inter.interactRadius ?? defaultRadius;
       const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, inter.x, inter.y);
       if (dist < radius && dist < nearestDist) {
@@ -640,27 +648,37 @@ export class GameScene extends Phaser.Scene {
    * when those fields are present; falls back to legacy type-switch otherwise.
    */
   private handleInteractable(inter: InteractableDef): void {
+    const roomId = this.rsm.getCurrentRoom();
     const hasRequires = inter.requires !== undefined;
+    const hasRequiresAny = inter.requiresAny !== undefined && inter.requiresAny.length > 0;
     const hasProduces = inter.produces !== undefined && inter.produces.length > 0;
+    const hasPages = inter.pages !== undefined && inter.pages.length > 0;
 
-    if (hasRequires || hasProduces) {
+    if (hasRequires || hasRequiresAny || hasProduces || hasPages) {
       // Resolver path ──────────────────────────────────────────────────────
-      const conditions = inter.requires ?? [];
-      const result = checkRequires(conditions, this.rsm);
 
+      // AND check — all must pass
+      const conditions = inter.requires ?? [];
+      const result = checkRequires(conditions, this.rsm, roomId);
       if (!result.met) {
         this.openDialog(result.message, 'system');
         this.events.emit('hide-interact-prompt');
         return;
       }
 
-      // Conditions met — consume items, apply effects, show text
+      // OR check — at least one must pass
+      if (hasRequiresAny) {
+        const anyResult = checkRequiresAny(inter.requiresAny!, this.rsm, roomId);
+        if (!anyResult.met) {
+          this.openDialog(anyResult.message, 'system');
+          this.events.emit('hide-interact-prompt');
+          return;
+        }
+      }
+
+      // Conditions met — consume items, apply top-level effects
       consumeRequires(conditions, this.rsm);
-      const newDropped = applyProduces(
-        inter.produces ?? [],
-        this.rsm,
-        this.rsm.getCurrentRoom(),
-      );
+      const newDropped = applyProduces(inter.produces ?? [], this.rsm, roomId, this);
 
       // If item-type pickup, also give the item
       if (inter.type === 'item' && inter.item) {
@@ -685,14 +703,49 @@ export class GameScene extends Phaser.Scene {
         this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
       }
 
-      this.openDialog(inter.text, 'lore');
+      // Pages: multi-page sequence with per-page requires and produces
+      if (hasPages) {
+        const texts: string[] = [];
+        for (const rawPage of inter.pages!) {
+          if (typeof rawPage === 'string') {
+            texts.push(rawPage);
+          } else {
+            // Check per-page requires
+            if (rawPage.requires && rawPage.requires.length > 0) {
+              const pageCheck = checkRequires(rawPage.requires, this.rsm, roomId);
+              if (!pageCheck.met) {
+                if (rawPage.fallback) texts.push(rawPage.fallback);
+                // No fallback → skip this page entirely
+                continue;
+              }
+            }
+            // Apply per-page produces immediately
+            if (rawPage.produces && rawPage.produces.length > 0) {
+              const pageDropped = applyProduces(rawPage.produces, this.rsm, roomId, this);
+              for (const dropped of pageDropped) {
+                const r = resolveTileSprite(dropped.item.tileFrame, dropped.item.tilesetKey);
+                this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
+              }
+            }
+            texts.push(rawPage.text);
+          }
+        }
+        if (texts.length > 0) {
+          this.openDialog(texts[0], 'lore');
+          for (let i = 1; i < texts.length; i++) {
+            this.messageQueue.push({ text: texts[i], type: 'lore' });
+          }
+        }
+      } else {
+        this.openDialog(inter.text, 'lore');
+      }
+
       this.events.emit('hide-interact-prompt');
       this.emitInventoryChanged();
-
       return;
     }
 
-    // Legacy path — no requires/produces ────────────────────────────────
+    // Legacy path — no requires/produces/pages ────────────────────────────
     if (inter.type === 'item') {
       this.handleItemPickup(inter);
     } else if (inter.type === 'recharge') {
@@ -740,6 +793,7 @@ export class GameScene extends Phaser.Scene {
           roomId: currentRoom,
           x: afflicted.x,
           y: afflicted.y,
+          traits: afflicted.getTraits(),
         };
         this.rsm.addToRoster(charState);
 
@@ -991,9 +1045,24 @@ export class GameScene extends Phaser.Scene {
     this.itemSprites.clear();
     this.itemShadows.forEach((s) => s.destroy());
     this.itemShadows.clear();
+    this.hiddenSprites.forEach((s) => s.destroy());
+    this.hiddenSprites.clear();
+
     const roomDef = this.roomManager.getCurrentRoomDef();
     for (const inter of roomDef.interactables || []) {
       if (inter.consumed && this.rsm.isItemCollected(inter.id)) continue;
+      if (inter.hidden) {
+        // Hidden interactable — sprite lives on HIDDEN layer, revealed by spectra-vision cone
+        if (inter.tileFrame !== undefined) {
+          const r = resolveTileSprite(inter.tileFrame, inter.tilesetKey);
+          const s = this.add.sprite(inter.x, inter.y, r.key, r.frame);
+          s.setDepth(DEPTH.HIDDEN);
+          s.setScale(GAME_CONFIG.WORLD_SCALE);
+          s.setAlpha(0);
+          this.hiddenSprites.set(inter.id, s);
+        }
+        continue;
+      }
       if (inter.type === 'item' && inter.item && !this.rsm.isItemCollected(inter.id)) {
         const r = resolveTileSprite(inter.item.tileFrame, inter.item.tilesetKey);
         this.createItemSprite(inter.id, r.key, r.frame, inter.x, inter.y);
@@ -1001,6 +1070,14 @@ export class GameScene extends Phaser.Scene {
         const r = resolveTileSprite(inter.tileFrame, inter.tilesetKey);
         this.createSignSprite(inter.id, r.key, r.frame, inter.x, inter.y);
       }
+    }
+    for (const vis of roomDef.hiddenVisuals || []) {
+      const r = resolveTileSprite(vis.tileFrame, vis.tilesetKey);
+      const s = this.add.sprite(vis.x, vis.y, r.key, r.frame);
+      s.setDepth(DEPTH.HIDDEN);
+      s.setScale(GAME_CONFIG.WORLD_SCALE);
+      s.setAlpha(0);
+      this.hiddenSprites.set(vis.id, s);
     }
     for (const dropped of this.rsm.getDroppedItems(this.rsm.getCurrentRoom())) {
       const r = resolveTileSprite(dropped.item.tileFrame, dropped.item.tilesetKey);
@@ -1180,6 +1257,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
+
+  private updateHiddenLayer(): void {
+    const adaptedMode = this.flashlight.isOn && this.rsm.hasItemWithKeyId('spectra-adapter');
+    for (const [, sprite] of this.hiddenSprites) {
+      sprite.setAlpha(adaptedMode && this.flashlight.isInCone(sprite.x, sprite.y) ? 1 : 0);
+    }
+  }
 
   private emitFullState(roomName: string): void {
     this.events.emit('room-changed', roomName);

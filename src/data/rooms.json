@@ -536,13 +536,34 @@
           "x": 608,
           "y": 224,
           "type": "item",
-          "tileFrame": 9,
+          "tileFrame": 90,
           "text": "A small vial. Clinical label, hand-annotated.\n'Stabiliser — administer at close range.'",
           "item": {
             "name": "Cure Vial",
-            "tileFrame": 9,
+            "tileFrame": 90,
             "category": "cure"
           }
+        },
+        {
+          "id": "spectra-adapter-pickup",
+          "x": 352,
+          "y": 224,
+          "type": "item",
+          "text": "A clip-on optical filter. Facility issue.\nSomething is written on the side: 'DO NOT LOSE'.",
+          "item": {
+            "name": "Spectra Adapter",
+            "tileFrame": 89,
+            "category": "tool",
+            "keyId": "spectra-adapter"
+          }
+        }
+      ],
+      "hiddenVisuals": [
+        {
+          "id": "test-hidden-mark",
+          "x": 768,
+          "y": 608,
+          "tileFrame": 12
         }
       ],
       "dark": true,

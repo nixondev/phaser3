@@ -44,19 +44,44 @@ export interface DroppedItemState {
 
 /** One condition that must be true before an interaction can succeed. */
 export interface RequireCondition {
-  type: 'item' | 'character' | 'flag' | 'flagAbsent';
-  value: string;        // keyId for item, character id, or flag name
-  consume?: boolean;    // if true and type===item, remove from inventory on success
+  type:
+    | 'item'             // active character has item (keyId or name)
+    | 'itemAbsent'       // active character does NOT have item (keyId or name)
+    | 'itemInRoom'       // a dropped item with this keyId/name exists in current room
+    | 'character'        // active character is this id
+    | 'characterPresent' // named character's roomId matches current room (parked or active)
+    | 'characterCarries' // named character (any, not just active) has item in their inventory
+    | 'characterCount'   // number of roster members in current room satisfies min/max
+    | 'flag'             // world flag is set
+    | 'flagAbsent'       // world flag is NOT set
+    | 'trait'            // active character has this trait
+    | 'traitPresent';    // any roster member in the current room has this trait
+  value: string;         // keyId / character id / flag name / trait name
+  consume?: boolean;     // if true and type===item, remove from inventory on success
+  characterId?: string;  // for characterCarries: whose inventory to check
+  min?: number;          // for characterCount: minimum roster members present (inclusive)
+  max?: number;          // for characterCount: maximum roster members present (inclusive)
 }
 
 /** One effect that fires after a successful interaction. */
 export interface ProduceEffect {
-  type: 'setFlag' | 'clearFlag' | 'unlockDoor' | 'dropItem' | 'setFlagDuration' | 'setFlagAfterDelay' | 'toggleFlag';
-  value: string;        // flag name / door id / item keyId
-  duration?: number;    // milliseconds — used by setFlagDuration
+  type:
+    | 'setFlag'              // set a world flag permanently
+    | 'clearFlag'            // clear a world flag
+    | 'toggleFlag'           // flip a flag: set if absent, clear if present
+    | 'setFlagDuration'      // set a flag that auto-clears after duration ms
+    | 'setFlagAfterDelay'    // set a flag after a delay (duration ms)
+    | 'unlockDoor'           // unlock a door by id
+    | 'dropItem'             // drop an item into the world at x/y
+    | 'giveCharacterItem'    // add item directly to a named character's inventory
+    | 'consumeCharacterItem' // remove item (by keyId) from a named character's inventory
+    | 'grantTrait';          // grant a trait to the active character
+  value: string;        // flag name / door id / item keyId / character id / trait name
+  duration?: number;    // milliseconds — used by setFlagDuration / setFlagAfterDelay
   x?: number;          // world position for dropItem
   y?: number;
-  item?: ItemDef;       // item definition for dropItem
+  item?: ItemDef;       // item definition for dropItem / giveCharacterItem
+  characterId?: string; // for giveCharacterItem / consumeCharacterItem: target character
 }
 
 export interface InteractableDef {
@@ -70,13 +95,18 @@ export interface InteractableDef {
   tileFrame?: number;
   /** Which tileset spritesheet for the tileFrame sprite. Omit for the core 'tileset'. */
   tilesetKey?: string;
+  /** All conditions must be true (AND). */
   requires?: RequireCondition[];
+  /** At least one condition must be true (OR). Evaluated after requires passes. */
+  requiresAny?: RequireCondition[];
   produces?: ProduceEffect[];
   consumed?: boolean;
   hint?: string;
   textAfter?: string;
   pages?: (string | InteractablePage)[];
   textSequence?: (string | TextSequenceEntry)[];
+  /** If true, sprite renders at DEPTH.HIDDEN and is only visible inside the spectra-vision cone. */
+  hidden?: boolean;
 }
 
 export type AfflictedStatus = 'wandering' | 'agitated' | 'frightened' | 'cured' | 'recovered';
@@ -131,6 +161,8 @@ export interface AfflictedDef {
   conversationDialog?: string[];
   /** Effects applied once when the conversation reaches its final page. */
   conversationProduces?: ProduceEffect[];
+  /** Trait tags copied to CharacterState on recovery. Used for trait require conditions. */
+  traits?: string[];
 }
 
 /** One effect applied when a specific world flag is set, evaluated at room load. */
@@ -156,6 +188,7 @@ export interface CharacterState {
   roomId: string;
   x: number;
   y: number;
+  traits?: string[];
 }
 
 export interface RoomDefinition {
@@ -179,6 +212,8 @@ export interface RoomDefinition {
   drips?: Array<{ x: number; y: number }>;
   /** Applied at room load: if the flag is set, mutate the live tilemap/state. */
   flagConditions?: FlagCondition[];
+  /** Purely decorative sprites revealed only inside the spectra-vision cone. No interaction. */
+  hiddenVisuals?: Array<{ id: string; x: number; y: number; tileFrame: number; tilesetKey?: string }>;
   /**
    * Additional tileset names for this room (beyond the core 'tileset').
    * Each entry must have a matching PNG at `assets/tilemaps/<name>.png`.
@@ -216,6 +251,10 @@ export interface InputState {
 
 export interface InteractablePage {
   text: string;
+  /** All conditions must pass for this page to be shown. If they fail, show fallback instead (or skip if no fallback). */
+  requires?: RequireCondition[];
+  /** Shown in place of text when requires conditions fail. Omit to skip the page entirely. */
+  fallback?: string;
   produces?: ProduceEffect[];
 }
 

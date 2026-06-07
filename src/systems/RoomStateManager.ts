@@ -150,6 +150,10 @@ export class RoomStateManager {
     return this.inventory.some((item) => item !== null && item.keyId === keyId);
   }
 
+  hasItemWithCategory(category: string): boolean {
+    return this.inventory.some((item) => item !== null && item.category === category);
+  }
+
   // ── Dropped items ───────────────────────────────────────────────────────
 
   addDroppedItem(roomId: string, dropped: DroppedItemState): void {
@@ -216,12 +220,44 @@ export class RoomStateManager {
     return this.roster.find(c => c.id === id);
   }
 
+  getActiveCharacterTraits(): string[] {
+    const state = this.roster.find(c => c.id === this.activeCharacterId);
+    return state?.traits ?? [];
+  }
+
+  grantTrait(trait: string): void {
+    const state = this.roster.find(c => c.id === this.activeCharacterId);
+    if (!state) return;
+    if (!state.traits) state.traits = [];
+    if (!state.traits.includes(trait)) state.traits.push(trait);
+  }
+
+  anyInRoomHasTrait(roomId: string, trait: string): boolean {
+    return this.roster.some(c => c.roomId === roomId && c.traits?.includes(trait));
+  }
+
   getCharacterInventory(id: string): (ItemDef | null)[] {
     if (id === this.activeCharacterId) return this.inventory;
     if (!this.characterInventories.has(id)) {
       this.characterInventories.set(id, new Array(12).fill(null));
     }
     return this.characterInventories.get(id)!;
+  }
+
+  addToCharacterInventory(id: string, item: ItemDef): number {
+    const inv = this.getCharacterInventory(id);
+    const slot = inv.indexOf(null);
+    if (slot === -1) return -1;
+    inv[slot] = { ...item };
+    return slot;
+  }
+
+  removeFromCharacterInventory(id: string, keyId: string): boolean {
+    const inv = this.getCharacterInventory(id);
+    const slot = inv.findIndex(i => i !== null && (i.keyId === keyId || i.name === keyId));
+    if (slot < 0) return false;
+    inv[slot] = null;
+    return true;
   }
 
   // ── World flags (Phase 5) ───────────────────────────────────────────────

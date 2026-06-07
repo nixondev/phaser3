@@ -11,33 +11,104 @@ export interface ResolveResult {
   droppedItems: DroppedItemState[];
 }
 
+function hasItem(inv: (import('@/types').ItemDef | null)[], value: string): boolean {
+  return inv.some(i => i !== null && (i.keyId === value || i.name === value));
+}
+
 /**
- * Check a requires[] list against current game state.
- * Returns the first unmet condition with a hint message, or met=true.
+ * Check a single RequireCondition. Returns true if met.
+ * roomId is required for room-scoped conditions (characterPresent, itemInRoom, characterCount).
+ */
+function checkOne(cond: RequireCondition, rsm: RoomStateManager, roomId: string): boolean {
+  switch (cond.type) {
+    case 'item':
+      return hasItem(rsm.getInventory(), cond.value);
+    case 'itemAbsent':
+      return !hasItem(rsm.getInventory(), cond.value);
+    case 'itemInRoom':
+      return rsm.getDroppedItems(roomId).some(
+        d => d.item.keyId === cond.value || d.item.name === cond.value,
+      );
+    case 'character':
+      return rsm.getActiveCharacterId() === cond.value;
+    case 'characterPresent': {
+      const state = rsm.getCharacterState(cond.value);
+      return state !== undefined && state.roomId === roomId;
+    }
+    case 'characterCarries': {
+      if (!cond.characterId) return false;
+      return hasItem(rsm.getCharacterInventory(cond.characterId), cond.value);
+    }
+    case 'characterCount': {
+      const count = rsm.getRoster().filter(
+        c => c.id !== rsm.getActiveCharacterId() && c.roomId === roomId,
+      ).length;
+      if (cond.min !== undefined && count < cond.min) return false;
+      if (cond.max !== undefined && count > cond.max) return false;
+      return true;
+    }
+    case 'flag':
+      return rsm.hasFlag(cond.value);
+    case 'flagAbsent':
+      return !rsm.hasFlag(cond.value);
+    case 'trait':
+      return rsm.getActiveCharacterTraits().includes(cond.value);
+    case 'traitPresent':
+      return rsm.anyInRoomHasTrait(roomId, cond.value);
+    default:
+      return false;
+  }
+}
+
+function hintFor(cond: RequireCondition): string {
+  switch (cond.type) {
+    case 'character':
+    case 'characterPresent':
+    case 'characterCarries':
+    case 'characterCount':
+    case 'trait':
+    case 'traitPresent':
+      return 'Someone else might know what to do here.';
+    default:
+      return 'Something here, but not like this.';
+  }
+}
+
+/**
+ * Check a requires[] list (AND logic). Returns met=true only if all pass.
+ * roomId must be the current room for room-scoped conditions.
  */
 export function checkRequires(
   conditions: RequireCondition[],
   rsm: RoomStateManager,
+  roomId = '',
 ): { met: boolean; message: string } {
   for (const cond of conditions) {
-    if (cond.type === 'item') {
-      const slot = rsm.getInventory().findIndex(
-        i => i !== null && (i.keyId === cond.value || i.name === cond.value),
-      );
-      if (slot < 0) return { met: false, message: 'Something here, but not like this.' };
-    } else if (cond.type === 'character') {
-      if (rsm.getActiveCharacterId() !== cond.value)
-        return { met: false, message: 'Someone else might know what to do here.' };
-    } else if (cond.type === 'flag') {
-      if (!rsm.hasFlag(cond.value))
-        return { met: false, message: 'Something here, but not like this.' };
+    if (!checkOne(cond, rsm, roomId)) {
+      return { met: false, message: hintFor(cond) };
     }
   }
   return { met: true, message: '' };
 }
 
 /**
+ * Check a requiresAny[] list (OR logic). Returns met=true if any single condition passes.
+ */
+export function checkRequiresAny(
+  conditions: RequireCondition[],
+  rsm: RoomStateManager,
+  roomId = '',
+): { met: boolean; message: string } {
+  if (conditions.length === 0) return { met: true, message: '' };
+  for (const cond of conditions) {
+    if (checkOne(cond, rsm, roomId)) return { met: true, message: '' };
+  }
+  return { met: false, message: 'Something here, but not like this.' };
+}
+
+/**
  * Consume items from requires[] that have consume:true.
+ * Handles both active-character items and characterCarries consumption.
  * Call only after checkRequires returns met=true.
  */
 export function consumeRequires(conditions: RequireCondition[], rsm: RoomStateManager): void {
@@ -47,18 +118,22 @@ export function consumeRequires(conditions: RequireCondition[], rsm: RoomStateMa
         i => i !== null && (i.keyId === cond.value || i.name === cond.value),
       );
       if (slot >= 0) rsm.removeFromInventory(slot);
+    } else if (cond.type === 'characterCarries' && cond.consume && cond.characterId) {
+      rsm.removeFromCharacterInventory(cond.characterId, cond.value);
     }
   }
 }
 
 /**
  * Apply produces[] effects to game state.
+ * scene is required for setFlagAfterDelay (uses Phaser time.delayedCall).
  * Returns any items that should be dropped into the world (caller handles sprites).
  */
 export function applyProduces(
   effects: ProduceEffect[],
   rsm: RoomStateManager,
   roomId: string,
+  scene?: Phaser.Scene,
 ): DroppedItemState[] {
   const newDropped: DroppedItemState[] = [];
 
@@ -67,15 +142,22 @@ export function applyProduces(
       case 'setFlag':
         rsm.setFlag(effect.value);
         break;
-      case 'setFlagDuration':
-        if (effect.duration !== undefined) {
-          rsm.setFlagWithDuration(effect.value, effect.duration);
-        } else {
-          rsm.setFlag(effect.value);
-        }
-        break;
       case 'clearFlag':
         rsm.clearFlag(effect.value);
+        break;
+      case 'toggleFlag':
+        if (rsm.hasFlag(effect.value)) rsm.clearFlag(effect.value);
+        else rsm.setFlag(effect.value);
+        break;
+      case 'setFlagDuration':
+        rsm.setFlagWithDuration(effect.value, effect.duration ?? 5000);
+        break;
+      case 'setFlagAfterDelay':
+        if (scene) {
+          scene.time.delayedCall(effect.duration ?? 0, () => rsm.setFlag(effect.value));
+        } else {
+          setTimeout(() => rsm.setFlag(effect.value), effect.duration ?? 0);
+        }
         break;
       case 'unlockDoor':
         rsm.unlockDoor(effect.value);
@@ -92,6 +174,19 @@ export function applyProduces(
         newDropped.push(dropped);
         break;
       }
+      case 'giveCharacterItem': {
+        if (!effect.item || !effect.characterId) break;
+        rsm.addToCharacterInventory(effect.characterId, effect.item);
+        break;
+      }
+      case 'consumeCharacterItem': {
+        if (!effect.characterId) break;
+        rsm.removeFromCharacterInventory(effect.characterId, effect.value);
+        break;
+      }
+      case 'grantTrait':
+        rsm.grantTrait(effect.value);
+        break;
     }
   }
 
