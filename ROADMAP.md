@@ -124,7 +124,7 @@ both reference it.
 
 ## What works today (build on this)
 
-- Room transitions, collision layers, door zones, tilemaps.
+- Room transitions, collision layers (Collision only), door zones, tilemaps.
 - 12-slot per-character inventory with category-aware items.
 - Afflicted state machine (wandering → agitated → frightened → cured → recovered).
 - Per-room reverb and music driven from `rooms.json`.
@@ -139,16 +139,16 @@ both reference it.
   Depth stack: LIGHTING=35 (darkness), beam glow=36, WEATHER=37 (always above darkness).
 - `associatedRoom` spawn gating: uncured afflicted are invisible in their associated room;
   cured afflicted only appear there.
-- **Dedicated EditorScene** (press `?` on the title screen). Gameplay is gameplay; editor
+- **Dedicated EditorScene** (press ? on title). Select mode (M) default allows safe selection and dragging of doors, interactables, and afflicted.
   is editor — no in-game overlay modes. DOM panels (top bar, room list, layer/tool buttons,
   keyboard cheatsheet, live status bar) wrap the Phaser canvas. Camera pan via middle-click
   drag or WASD; Ctrl+Wheel zooms. Right-click erases tiles. Status bar shows current
-  layer/tile/tool/room dimensions every frame.
+  layer/tile/tool/room dimensions every frame. Docked tile/color preview in the right panel.
 - Editor primitives: paint, layer isolation, stamp tool (T), tile palette (P), flood fill (F),
   rectangle tool (R), eyedropper (Alt+click or middle-click), resize (Shift+Arrow /
-  Ctrl+Shift+Arrow), undo/redo (Ctrl+Z / Ctrl+Shift+Z, up to 50 steps per session),
+  rectangle tool (R), eyedropper (M-click), actual-view peek (hold G), color mode (K), resize (Shift+Arrow /
   door pairer (O), warp picker (button or F4), save-to-clipboard (X / Save button),
-  map audit (Audit button), hot-reload (L / Reload button).
+  door pairer (O), warp picker (button or F4), Smart Save (X -- awaits object positions before tilemap save),
 - `npm run new-room <id> [w] [h]` CLI — creates the rooms.json stub, default tilemap,
   and `public/music/<id>/` directory. Atomic.
 - Persistent dropped items per room.
@@ -396,7 +396,7 @@ any chain the design wants.
 - **GameScene is large and does too much.** Extract things only when a
   phase actually needs to. Phase 1 will likely pull out the interaction
   resolver.
-- **Editor edits don't survive HMR.** Vite re-evaluates `rooms.json`
+- **Editor edits and Vite HMR.** Smart Save (X) prevents reload abortions by saving objects first; object-only moves do not trigger a reload.
   on hot-reload and resets the in-memory clone. Workflow: save (X),
   then full-reload page. Acceptable.
 - **Reverb hot-swap can click.** Cosmetic; address whenever audio

@@ -34,12 +34,16 @@ export const LAYER_NAMES = {
   COLLISION: 'Collision',
   ON_COLLISION: 'OnCollision',
   ABOVE: 'Above',
+  ON_ABOVE: 'OnAbove',
+  SPECTRA: 'Spectra',
 } as const;
 
 export type LayerName = typeof LAYER_NAMES[keyof typeof LAYER_NAMES];
 
 export const LAYER_CONFIG = {
   ON_GROUND_DEFAULT_ALPHA: 0.2,
+  ON_COLLISION_DEFAULT_ALPHA: 1.0,
+  ON_ABOVE_DEFAULT_ALPHA: 1.0,
   EDITOR_INACTIVE_ALPHA: 0.2,
 } as const;
 

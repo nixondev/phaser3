@@ -5,6 +5,12 @@ import { DEPTH, GAME_CONFIG, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils
 import { InputState } from '@/types';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
+/** Current editor selection, rendered as a thumbnail/swatch in the DOM panel. */
+export type EditorPreviewState =
+  | { kind: 'none' }
+  | { kind: 'color'; rgb: number }
+  | { kind: 'tile'; textureKey: string; frame: number; gid: number };
+
 export class RoomEditorManager {
   private scene: Phaser.Scene;
   private roomManager: RoomManager;
@@ -25,7 +31,6 @@ export class RoomEditorManager {
   private currentLayerName: LayerName = LAYER_NAMES.GROUND;
   private editorText: Phaser.GameObjects.Text;
   private tileCursor: Phaser.GameObjects.Graphics;
-  private tilePreview: Phaser.GameObjects.Image;
   private mapOutline: Phaser.GameObjects.Graphics;
   private toastText!: Phaser.GameObjects.Text;
   private toastTween?: Phaser.Tweens.Tween;
@@ -58,6 +63,8 @@ export class RoomEditorManager {
     THREE: Phaser.Input.Keyboard.Key;
     FOUR: Phaser.Input.Keyboard.Key;
     FIVE: Phaser.Input.Keyboard.Key;
+    SIX: Phaser.Input.Keyboard.Key;
+    SEVEN: Phaser.Input.Keyboard.Key;
     X: Phaser.Input.Keyboard.Key;
     Q: Phaser.Input.Keyboard.Key;
     E: Phaser.Input.Keyboard.Key;
@@ -77,14 +84,24 @@ export class RoomEditorManager {
     F: Phaser.Input.Keyboard.Key;
     R: Phaser.Input.Keyboard.Key;
     Z: Phaser.Input.Keyboard.Key;
+    K: Phaser.Input.Keyboard.Key;
+    G: Phaser.Input.Keyboard.Key;
+    M: Phaser.Input.Keyboard.Key;
     ENTER: Phaser.Input.Keyboard.Key;
   };
 
-  private dirtyObjects = new Map<string, { type: 'afflicted' | 'interactable'; id: string; x: number; y: number }>();
+  private dirtyObjects = new Map<string, {
+    type: 'afflicted' | 'interactable' | 'door';
+    id: string; x: number; y: number; spawnX?: number; spawnY?: number;
+  }>();
   private pendingRoomSize: { width: number; height: number } | null = null;
+  // True once tiles/colors have changed since the last save. Object-only moves
+  // leave this false, so X can persist them without rewriting the tilemap (which
+  // would trigger a Vite page reload).
+  private tilemapDirty = false;
 
   private placementMode: 'interactable' | 'afflicted' | null = null;
-  private activeTool: 'paint' | 'rect' | 'fill' = 'paint';
+  private activeTool: 'paint' | 'rect' | 'fill' | 'select' = 'select'; // open in safe Select mode
   private afflictedVariantIndex: number = 0;
   private readonly afflictedVariants = [
     'walker',
@@ -100,6 +117,16 @@ export class RoomEditorManager {
   private rectStart: { x: number; y: number } | null = null;
   private rectGraphics: Phaser.GameObjects.Graphics;
   private selectedTiles: number[][] = [[0]]; // 2D array of GIDs for stamping
+
+  // Color tile mode — paints solid-color squares via RoomManager (persistent,
+  // game-rendered). The editor only holds the current color + mode flag.
+  private colorMode: boolean = false;
+  private selectedColor: number = 0xff4444;
+
+  // Actual-view: while held (`G` key or the UI button), render every layer at
+  // full alpha (as in-game) and hide editor chrome for a quick preview.
+  private actualView: boolean = false;
+  private actualViewHeld: boolean = false; // set by the EditorUI button (press/release)
 
   // Door-pairing state machine. `O` enters this flow.
   private pairPhase: 'idle' | 'pick-target' | 'place-source' | 'place-target' = 'idle';
@@ -126,6 +153,8 @@ export class RoomEditorManager {
       THREE: kb.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
       FOUR: kb.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
       FIVE: kb.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE),
+      SIX: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SIX),
+      SEVEN: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SEVEN),
       X: kb.addKey(Phaser.Input.Keyboard.KeyCodes.X),
       Q: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
       E: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
@@ -145,6 +174,9 @@ export class RoomEditorManager {
       F: kb.addKey(Phaser.Input.Keyboard.KeyCodes.F),
       R: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
       Z: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
+      K: kb.addKey(Phaser.Input.Keyboard.KeyCodes.K),
+      G: kb.addKey(Phaser.Input.Keyboard.KeyCodes.G),
+      M: kb.addKey(Phaser.Input.Keyboard.KeyCodes.M),
       ENTER: kb.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     };
 
@@ -159,11 +191,8 @@ export class RoomEditorManager {
     this.tileCursor = this.scene.add.graphics();
     this.tileCursor.setDepth(DEPTH.UI + 199).setVisible(false);
 
-    this.tilePreview = this.scene.add.image(GAME_CONFIG.WIDTH - 80, GAME_CONFIG.HEIGHT - 160, 'tileset-sprites')
-      .setScrollFactor(0)
-      .setDepth(DEPTH.UI + 201)
-      .setVisible(false)
-      .setScale(GAME_CONFIG.ENTITY_WORLD_SCALE); // 1.5x tile size for better visibility
+    // Tile/color preview now lives in the DOM right panel (EditorUI), not on the
+    // canvas — see getPreviewState() / EditorUI.setPreview().
 
     this.mapOutline = this.scene.add.graphics();
     this.mapOutline.setDepth(DEPTH.UI + 198).setVisible(false);
@@ -190,6 +219,18 @@ export class RoomEditorManager {
     this.paletteContainer = this.scene.add.container(this.palettePosX, this.palettePosY);
     this.paletteContainer.setScrollFactor(0).setDepth(DEPTH.UI + 210).setVisible(false);
     this.paletteHighlight = this.scene.add.graphics();
+
+    // Install global debug helpers
+    (window as any).dumpEditorState = () => {
+      const data = this.buildExportData();
+      console.log('[Editor] Current state:', data);
+      return data;
+    };
+    (window as any).dumpRoomsData = () => {
+      const data = RoomManager.getRoomsData();
+      console.log('[Editor] roomsData:', data);
+      return data;
+    };
 
     this.scene.input.on('wheel', this.onWheel, this);
     // Track whether the current pointer press originated on the canvas, not on a DOM UI button.
@@ -227,6 +268,20 @@ export class RoomEditorManager {
     return this.isActive;
   }
 
+  /** Current tool ('paint' | 'rect' | 'fill' | 'select') — EditorUI reflects this on its buttons. */
+  getActiveTool(): 'paint' | 'rect' | 'fill' | 'select' {
+    return this.activeTool;
+  }
+
+  /**
+   * Choosing a tile/color (palette, Q/E, wheel, color picker, color mode) is a
+   * paint-intent action — leave Select mode so the choice is actually usable.
+   * Rect/Fill are left alone: they legitimately use the selected tile.
+   */
+  private exitSelectForPaint(): void {
+    if (this.activeTool === 'select') this.activeTool = 'paint';
+  }
+
   /** Clear undo/redo history and palette cache — call when loading a new room. */
   clearHistory(): void {
     this.history = [];
@@ -246,7 +301,6 @@ export class RoomEditorManager {
       this.isActive = !this.isActive;
       this.editorText.setVisible(false); // status is shown in the DOM status bar
       this.tileCursor.setVisible(this.isActive);
-      this.tilePreview.setVisible(this.isActive);
       this.mapOutline.setVisible(this.isActive);
       this.doorHandles.setVisible(this.isActive);
       // Palette also hides when the editor closes; reopens on next P press.
@@ -256,6 +310,9 @@ export class RoomEditorManager {
         this.paletteHighlight.clear();
         this.doorHandles.clear();
         this.selectedDoor = null;
+        this.colorMode = false;
+        this.actualView = false;
+        this.roomManager.setColorEditorDim(null); // restore full alpha for game view
       }
 
       this.updateLayerOpacities();
@@ -269,6 +326,12 @@ export class RoomEditorManager {
 
     if (!this.isActive) return;
 
+    // Actual-view freezes editing — it's a read-only in-game preview. Only the
+    // toggle itself is processed so the user can flip back to editing.
+    this.handleActualView();
+    if (this.actualView) return;
+
+    this.handleColorMode();
     this.handleLayerSwitching(input);
     this.handleToolSwitching();
     this.handleResize();
@@ -301,6 +364,54 @@ export class RoomEditorManager {
     this.handleTilePainting();
   }
 
+  private handleColorMode(): void {
+    if (!Phaser.Input.Keyboard.JustDown(this.keys.K)) return;
+    this.colorMode = !this.colorMode;
+    if (this.colorMode) this.exitSelectForPaint(); // entering color = paint intent
+    this.showToast(this.colorMode ? 'Color mode on  K to exit' : 'Tile mode');
+    this.updatePreview();
+  }
+
+  /** Hold-to-preview: actual-view is on while `G` is held or the UI button is pressed. */
+  private handleActualView(): void {
+    const want = this.keys.G.isDown || this.actualViewHeld;
+    if (want !== this.actualView) this.setActualView(want);
+  }
+
+  /** Called by the EditorUI button on press (true) / release (false). */
+  public setActualViewHeld(held: boolean): void {
+    this.actualViewHeld = held;
+    this.handleActualView();
+  }
+
+  private setActualView(on: boolean): void {
+    if (!this.isActive) return;
+    this.actualView = on;
+    // Hide editor chrome for a clean preview; restore it on exit.
+    this.tileCursor.setVisible(!on);
+    this.mapOutline.setVisible(!on);
+    this.doorHandles.setVisible(!on);
+    if (on) {
+      this.paletteContainer.setVisible(false);
+      this.paletteHighlight.setVisible(false);
+    } else {
+      if (this.paletteVisible) {
+        this.paletteContainer.setVisible(true);
+        this.paletteHighlight.setVisible(true);
+      }
+    }
+    this.updateLayerOpacities(); // full alpha when on, dim when off (tiles + colors)
+    if (on) this.showToast('Actual view (hold)');
+  }
+
+  /** Called by EditorUI color picker — sets the overlay color and enters color mode. */
+  public setCurrentColor(rgb: number): void {
+    this.selectedColor = rgb;
+    this.colorMode = true;
+    this.exitSelectForPaint();
+    this.updatePreview();
+  }
+
   private handleToolSwitching(): void {
     if (Phaser.Input.Keyboard.JustDown(this.keys.F)) {
       this.activeTool = this.activeTool === 'fill' ? 'paint' : 'fill';
@@ -309,6 +420,10 @@ export class RoomEditorManager {
     if (Phaser.Input.Keyboard.JustDown(this.keys.R)) {
       this.activeTool = this.activeTool === 'rect' ? 'paint' : 'rect';
       this.showToast(`Tool: ${this.activeTool.toUpperCase()}`);
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.M)) {
+      this.activeTool = this.activeTool === 'select' ? 'paint' : 'select';
+      this.showToast(this.activeTool === 'select' ? 'Tool: SELECT (no paint)' : 'Tool: PAINT');
     }
     if (this.keys.ESC.isDown) {
       if (this.activeTool !== 'paint') {
@@ -599,6 +714,7 @@ export class RoomEditorManager {
   private handlePaletteToggle(): void {
     if (Phaser.Input.Keyboard.JustDown(this.keys.P)) {
       this.paletteVisible = !this.paletteVisible;
+      if (this.paletteVisible) this.exitSelectForPaint(); // opening the palette = paint intent
       if (this.paletteVisible && !this.paletteBuilt) this.buildPalette();
       this.paletteContainer.setVisible(this.paletteVisible);
       this.paletteHighlight.setVisible(this.paletteVisible);
@@ -665,7 +781,9 @@ export class RoomEditorManager {
           const paletteRow = Math.floor(local / this.paletteCols);
           this.paletteSelectionStart = { x: paletteCol, y: paletteRow };
           this.paletteSelectionEnd = { x: paletteCol, y: paletteRow };
-          // Directly set selection to this GID
+          // Picking a tile always returns to tile mode (and out of Select).
+          this.colorMode = false;
+          this.exitSelectForPaint();
           this.selectedTileIndex = gid;
           this.selectedTiles = [[gid]];
           this.updatePreview();
@@ -716,6 +834,8 @@ export class RoomEditorManager {
     }
 
     this.selectedTiles = newTiles;
+    this.colorMode = false;
+    this.exitSelectForPaint();
     this.updatePreview();
     this.updatePaletteHighlight();
   }
@@ -847,17 +967,23 @@ export class RoomEditorManager {
 
     const oldW = map.width;
     const oldH = map.height;
-    const result = this.roomManager.resizeMap(newW, newH, offX, offY);
-    if (!result) return;
+    try {
+      const result = this.roomManager.resizeMap(newW, newH, offX, offY);
+      if (!result) return;
 
-    const scene = this.scene as any;
-    if (typeof scene.refreshAfterResize === 'function') {
-      scene.refreshAfterResize(result.pixelOffsetX, result.pixelOffsetY);
+      const scene = this.scene as any;
+      if (typeof scene.refreshAfterResize === 'function') {
+        scene.refreshAfterResize(result.pixelOffsetX, result.pixelOffsetY);
+      }
+      this.peekAtChangedEdge(oldW, oldH, newW, newH, offX, offY);
+      console.log(`[Editor] Resized map ${oldW}x${oldH} -> ${newW}x${newH} (offset ${offX},${offY})`);
+      this.pendingRoomSize = { width: newW, height: newH };
+      this.tilemapDirty = true; // dimensions + tile data changed
+      this.showToast(`Resized ${newW}×${newH} — press X to save`);
+    } catch (err: any) {
+      console.error('[Editor] Resize failed:', err);
+      this.showToast(`Resize failed: ${err.message}`);
     }
-    this.peekAtChangedEdge(oldW, oldH, newW, newH, offX, offY);
-    console.log(`[Editor] Resized map ${oldW}x${oldH} -> ${newW}x${newH} (offset ${offX},${offY})`);
-    this.pendingRoomSize = { width: newW, height: newH };
-    this.showToast(`Resized ${newW}×${newH} — press X to save`);
   }
 
   /**
@@ -895,6 +1021,9 @@ export class RoomEditorManager {
   public getStatusText(): string {
     const map = this.roomManager.getMap();
     const dims = map ? `${map.width}×${map.height}` : '?';
+    if (this.actualView) {
+      return `ACTUAL VIEW (in-game preview) — release G to resume editing  |  ${dims}`;
+    }
     let ctx = '';
     if (this.placementMode) {
       ctx = `armed: ${this.placementMode}  (Esc cancel)`;
@@ -905,7 +1034,10 @@ export class RoomEditorManager {
     } else if (this.pairPhase === 'place-target') {
       ctx = `pair: click target door in ${this.pairTargetRoomId}`;
     }
-    const base = `${this.currentLayerName} · tile ${this.selectedTileIndex} · ${this.activeTool} · ${dims}`;
+    const tileInfo = this.colorMode
+      ? `color #${this.selectedColor.toString(16).padStart(6, '0').toUpperCase()}`
+      : `tile ${this.selectedTileIndex}`;
+    const base = `${this.currentLayerName} · ${tileInfo} · ${this.activeTool} · ${dims}`;
     return ctx ? `${ctx}  |  ${base}` : base;
   }
 
@@ -935,7 +1067,19 @@ export class RoomEditorManager {
         }
       }
 
-      // 2. Check door zones (grab handle is 16×16 at zone center)
+      // 2. Check Interactables (placeholder sprites exposed by EditorScene)
+      const getInteractables = (this.scene as any).getInteractablePlaceholders;
+      if (typeof getInteractables === 'function') {
+        const sprites = getInteractables.call(this.scene) as Phaser.GameObjects.Sprite[];
+        const hit = sprites.find(s =>
+          Phaser.Geom.Rectangle.Contains(s.getBounds(), worldPoint.x, worldPoint.y));
+        if (hit) {
+          this.select(hit, 'interactable');
+          return;
+        }
+      }
+
+      // 3. Check door zones (grab handle is 16×16 at zone center)
       for (const zone of this.roomManager.getDoorZones()) {
         const body = zone.body as Phaser.Physics.Arcade.StaticBody;
         if (Phaser.Geom.Rectangle.Contains(
@@ -955,34 +1099,29 @@ export class RoomEditorManager {
     const pointer = this.scene.input.activePointer;
     const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
 
-    // Afflicted drag
+    // Afflicted / interactable drag — drop deselects so the next object is
+    // immediately grabbable (doors already auto-deselect in releaseDoorDrag).
     if (this.selectedObject) {
       if (pointer.primaryDown) {
         this.selectedObject.sprite.x = worldPoint.x - this.dragOffset.x;
         this.selectedObject.sprite.y = worldPoint.y - this.dragOffset.y;
       } else {
-        if (justUp) this.logObjectSnippet();
+        if (justUp) {
+          this.logObjectSnippet();
+          this.deselect();
+        }
       }
       if (this.keys.ESC.isDown) this.deselect();
     }
 
-    // Door drag
+    // Door drag — free placement, lands exactly where released (no grid snap).
     if (this.selectedDoor) {
       if (pointer.primaryDown) {
-        const map = this.roomManager.getMap();
-        const T = GAME_CONFIG.TILE_SIZE;
-        if (map) {
-          // Snap to tile grid while dragging
-          const wx = worldPoint.x - this.dragOffset.x;
-          const wy = worldPoint.y - this.dragOffset.y;
-          const tileX = map.worldToTileX(wx) ?? 0;
-          const tileY = map.worldToTileY(wy) ?? 0;
-          const snappedX = tileX * T;
-          const snappedY = tileY * T;
-          this.selectedDoor.zone.setPosition(snappedX + T / 2, snappedY + T / 2);
-          const body = this.selectedDoor.zone.body as Phaser.Physics.Arcade.StaticBody;
-          body.reset(snappedX, snappedY);
-        }
+        const cx = worldPoint.x - this.dragOffset.x;
+        const cy = worldPoint.y - this.dragOffset.y;
+        this.selectedDoor.zone.setPosition(cx, cy);
+        const body = this.selectedDoor.zone.body as Phaser.Physics.Arcade.StaticBody;
+        body.reset(cx - body.width / 2, cy - body.height / 2);
       } else {
         if (justUp) this.releaseDoorDrag();
       }
@@ -1020,20 +1159,29 @@ export class RoomEditorManager {
     if (!room) { this.selectedDoor = null; return; }
     const door = (room.doors || []).find((d: any) => d.id === doorId);
     if (door) {
-      (door as any).x = body.x;
-      (door as any).y = body.y;
-      // Recalculate spawnX/Y based on new position and existing direction
+      // Exact placement — no tile snap. Spawn is offset one tile out from the
+      // door's far edge along its direction (matches buildDoorRect's geometry).
       const T = GAME_CONFIG.TILE_SIZE;
-      const tileX = Math.round(body.x / T);
-      const tileY = Math.round(body.y / T);
-      const rect = this.buildDoorRect(tileX, tileY, (door as any).direction ?? 'up', T);
-      (door as any).spawnX = rect.spawnX;
-      (door as any).spawnY = rect.spawnY;
-      // Re-emit the full updated room so the user can paste it
-      const updated: any = JSON.parse(JSON.stringify(room));
-      const fragment = `"${roomId}": ${JSON.stringify(updated, null, 2)}`;
-      console.log(`[Editor] Moved door "${doorId}" to (${body.x}, ${body.y}). Replace entry in rooms.json:\n${fragment}`);
-      this.copyAndToast(fragment, `Door moved.\nReplace "${roomId}" entry in rooms.json.`);
+      const w = body.width, h = body.height;
+      const cx = body.x + w / 2, cy = body.y + h / 2;
+      const dir = (door as any).direction ?? 'up';
+      let spawnX = cx, spawnY = cy;
+      if (dir === 'up')    { spawnY = body.y + h + T; spawnX = cx; }
+      if (dir === 'down')  { spawnY = body.y - T;     spawnX = cx; }
+      if (dir === 'left')  { spawnX = body.x + w + T; spawnY = cy; }
+      if (dir === 'right') { spawnX = body.x - T;     spawnY = cy; }
+      // Update the in-memory door (a live reference into rooms.json) and queue
+      // it for disk save on X — same flow as interactables/afflicted.
+      (door as any).x = Math.round(body.x);
+      (door as any).y = Math.round(body.y);
+      (door as any).spawnX = Math.round(spawnX);
+      (door as any).spawnY = Math.round(spawnY);
+      this.dirtyObjects.set(doorId, {
+        type: 'door', id: doorId,
+        x: (door as any).x, y: (door as any).y,
+        spawnX: (door as any).spawnX, spawnY: (door as any).spawnY,
+      });
+      this.showToast(`Moved door ${doorId} — press X to save`);
     }
     this.selectedDoor = null;
   }
@@ -1062,21 +1210,31 @@ export class RoomEditorManager {
       layerChanged = true;
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.TWO)) {
-      this.currentLayerName = LAYER_NAMES.COLLISION;
-      layerChanged = true;
-    }
-    if (Phaser.Input.Keyboard.JustDown(this.keys.THREE)) {
-      this.currentLayerName = LAYER_NAMES.ABOVE;
-      layerChanged = true;
-    }
-    if (Phaser.Input.Keyboard.JustDown(this.keys.FOUR)) {
       this.roomManager.ensureOnGroundLayer();
       this.currentLayerName = LAYER_NAMES.ON_GROUND;
       layerChanged = true;
     }
-    if (Phaser.Input.Keyboard.JustDown(this.keys.FIVE)) {
+    if (Phaser.Input.Keyboard.JustDown(this.keys.THREE)) {
+      this.currentLayerName = LAYER_NAMES.COLLISION;
+      layerChanged = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.FOUR)) {
       this.roomManager.ensureOnCollisionLayer();
       this.currentLayerName = LAYER_NAMES.ON_COLLISION;
+      layerChanged = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.FIVE)) {
+      this.currentLayerName = LAYER_NAMES.ABOVE;
+      layerChanged = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.SIX)) {
+      this.roomManager.ensureOnAboveLayer();
+      this.currentLayerName = LAYER_NAMES.ON_ABOVE;
+      layerChanged = true;
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.SEVEN)) {
+      this.roomManager.ensureSpectraLayer();
+      this.currentLayerName = LAYER_NAMES.SPECTRA;
       layerChanged = true;
     }
 
@@ -1084,16 +1242,23 @@ export class RoomEditorManager {
       this.updateLayerOpacities();
     }
 
-    // Use input state from InputManager to avoid JustDown consumption conflict
-    if (input.drop) { // Q
-      this.selectedTileIndex = Math.max(1, this.selectedTileIndex - 1);
-      this.updatePreview();
-      this.updatePaletteHighlight();
-    }
-    if (input.action) { // E
-      this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
-      this.updatePreview();
-      this.updatePaletteHighlight();
+    // Q/E cycle tile index — and always snap back to tile mode (skip while
+    // arming an afflicted, where Q/E cycles the variant instead).
+    if (this.placementMode !== 'afflicted') {
+      if (input.drop) { // Q
+        this.colorMode = false;
+        this.exitSelectForPaint();
+        this.selectedTileIndex = Math.max(1, this.selectedTileIndex - 1);
+        this.updatePreview();
+        this.updatePaletteHighlight();
+      }
+      if (input.action) { // E
+        this.colorMode = false;
+        this.exitSelectForPaint();
+        this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
+        this.updatePreview();
+        this.updatePaletteHighlight();
+      }
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.keys.X)) {
@@ -1126,28 +1291,38 @@ export class RoomEditorManager {
       map.fill(-1, 1, 1, w - 2, h - 2, false, LAYER_NAMES.COLLISION);
     }
     this.refreshCollision();
+    this.roomManager.clearAllColorTiles();
+    this.tilemapDirty = true;
     this.showToast('Room stamped: floor + perimeter walls. Git to undo.');
   }
 
   private buildExportData(): any {
     const map = this.roomManager.getMap();
     if (!map) return null;
-    return {
+    const exportData: any = {
       compressionlevel: -1,
       height: map.height,
       infinite: false,
-      layers: map.layers.map((layer, index) => ({
-        data: layer.data.flat().map(tile => (tile && tile.index !== -1) ? tile.index : 0),
-        height: layer.height,
-        id: index + 1,
-        name: layer.name,
-        opacity: 1,
-        type: 'tilelayer',
-        visible: true,
-        width: layer.width,
-        x: 0,
-        y: 0
-      })),
+      layers: map.layers.map((layer, index) => {
+        const data = layer.data.flat().map(tile => {
+          if (!tile || tile.index === -1) return 0;
+          if (tile.index >= 0x01000000) return 0; // safety: strip any stale color-tile GIDs
+          return tile.index;
+        });
+        console.log(`[Editor] Exporting layer ${layer.name}: ${data.filter(d => d !== 0).length} non-zero tiles.`);
+        return {
+          data,
+          height: layer.height,
+          id: index + 1,
+          name: layer.name,
+          opacity: 1,
+          type: 'tilelayer',
+          visible: true,
+          width: layer.width,
+          x: 0,
+          y: 0
+        };
+      }),
       nextlayerid: map.layers.length + 1,
       nextobjectid: 1,
       orientation: 'orthogonal',
@@ -1156,7 +1331,7 @@ export class RoomEditorManager {
       tileheight: map.tileHeight,
       tilesets: map.tilesets.map(ts => ({
         columns: ts.columns,
-        firstgid: 1,
+        firstgid: ts.firstgid,
         image: ts.name + ".png",
         imageheight: ts.image ? (ts.image.getSourceImage() as any).height : 512,
         imagewidth: ts.image ? (ts.image.getSourceImage() as any).width : 512,
@@ -1172,21 +1347,49 @@ export class RoomEditorManager {
       version: '1.10',
       width: map.width
     };
+
+    // Persist color tiles as a side-channel key (Phaser ignores unknown keys;
+    // layer `data` arrays stay valid Tiled GIDs). Omit when empty.
+    const colorTiles = this.roomManager.getColorTilesData();
+    if (Object.keys(colorTiles).length) {
+      exportData.colorTiles = colorTiles;
+    }
+
+    return exportData;
   }
 
-  private exportTilemap(): void {
-    const exportData = this.buildExportData();
-    if (!exportData) return;
+  private async exportTilemap(): Promise<void> {
     const roomId = this.roomManager.getCurrentRoomId();
-    const path = `public/assets/tilemaps/${roomId}.json`;
-    const json = JSON.stringify(exportData, null, 2);
-    
-    if (import.meta.env.DEV) {
-      this.saveTilemapToDisk(roomId, exportData);
-      this.flushDirtyState(roomId);
-    } else {
+
+    if (!import.meta.env.DEV) {
+      const exportData = this.buildExportData();
+      if (!exportData) return;
+      const path = `public/assets/tilemaps/${roomId}.json`;
+      const json = JSON.stringify(exportData, null, 2);
       console.log(`[Editor] Tilemap JSON for ${path}:\n`, exportData);
       this.copyAndToast(json, `Tilemap copied. Paste into:\n${path}`);
+      return;
+    }
+
+    const hadObjects = this.dirtyObjects.size > 0 || this.pendingRoomSize !== null;
+
+    // Object positions / room size write src/data/rooms.json, which is
+    // watch-ignored (no reload). Do these first and await them — both so they
+    // finish before any tilemap reload, and so concurrent writes don't clobber
+    // each other in the read-modify-write endpoint.
+    await this.flushDirtyState(roomId);
+
+    if (this.tilemapDirty) {
+      const exportData = this.buildExportData();
+      if (exportData) {
+        this.tilemapDirty = false;
+        // Writes public/ → triggers a Vite full reload. Done last.
+        await this.saveTilemapToDisk(roomId, exportData);
+      }
+    } else if (hadObjects) {
+      this.showToast('Saved object positions.');
+    } else {
+      this.showToast('Nothing to save.');
     }
   }
 
@@ -1227,14 +1430,16 @@ export class RoomEditorManager {
     }
   }
 
-  private flushDirtyState(roomId: string): void {
+  private async flushDirtyState(roomId: string): Promise<void> {
+    // Await sequentially: the endpoint does a read-modify-write on rooms.json,
+    // so concurrent saves would clobber each other.
     if (this.pendingRoomSize) {
       const { width, height } = this.pendingRoomSize;
-      this.saveRoomSizeToDisk(roomId, width, height);
+      await this.saveRoomSizeToDisk(roomId, width, height);
       this.pendingRoomSize = null;
     }
     for (const entry of this.dirtyObjects.values()) {
-      this.saveObjectToDisk(entry.type, entry.id, entry.x, entry.y);
+      await this.saveObjectToDisk(entry);
     }
     this.dirtyObjects.clear();
   }
@@ -1242,6 +1447,7 @@ export class RoomEditorManager {
   public clearDirtyState(): void {
     this.pendingRoomSize = null;
     this.dirtyObjects.clear();
+    this.tilemapDirty = false;
   }
 
   private handleTilePainting(): void {
@@ -1268,60 +1474,83 @@ export class RoomEditorManager {
     }
 
     // Update cursor
-    this.tileCursor.setVisible(true);
-    this.tileCursor.clear();
-    this.tileCursor.lineStyle(4, 0xffff00, 0.8);
     const tw = map.tileWidth * (map.layers[0]?.tilemapLayer?.scaleX || 1);
     const th = map.tileHeight * (map.layers[0]?.tilemapLayer?.scaleY || 1);
-    
-    // Draw cursor for multi-tile selection
     const rows = this.selectedTiles.length;
     const cols = this.selectedTiles[0].length;
-    this.tileCursor.strokeRect(tileX * tw, tileY * th, tw * cols, th * rows);
+    this.tileCursor.setVisible(true);
+    this.tileCursor.clear();
+
+    if (this.activeTool === 'select') {
+      // Select mode: a single-cell green outline signals "no painting".
+      this.tileCursor.lineStyle(4, 0x44ff88, 0.9);
+      this.tileCursor.strokeRect(tileX * tw, tileY * th, tw, th);
+    } else {
+      this.tileCursor.lineStyle(4, this.colorMode ? this.selectedColor : 0xffff00, 0.8);
+      // Draw cursor for multi-tile selection
+      this.tileCursor.strokeRect(tileX * tw, tileY * th, tw * cols, th * rows);
+    }
 
     if (this.selectedObject) return; // Don't paint while dragging
     if (this.activeTool !== 'paint') return; // Don't paint while using other tools
 
     let changed = false;
 
-    // Eyedropper: Middle Click or Alt + Left Click
+    // Eyedropper: Middle Click or Alt + Left Click. Mode-agnostic — samples
+    // whatever is under the cursor and switches mode to match. When both a
+    // color and a tile occupy the cell, prefer the kind matching the current
+    // mode so repeated sampling is stable.
     const isAlt = this.keys.ALT.isDown;
     if (pointer.middleButtonDown() || (pointer.leftButtonDown() && isAlt)) {
+      const colorAt = this.roomManager.getColorTile(this.currentLayerName, tileX, tileY);
       const tile = map.getTileAt(tileX, tileY, true, this.currentLayerName);
-      if (tile && tile.index !== -1) {
-        this.selectedTileIndex = tile.index;
-        this.updatePreview();
-        this.updatePaletteHighlight();
+      const tileIdx = (tile && tile.index !== -1) ? tile.index : null;
+      const pickColor = () => { this.colorMode = true; this.selectedColor = colorAt!; };
+      const pickTile  = () => { this.colorMode = false; this.selectedTileIndex = tileIdx!; };
+      if (this.colorMode) {
+        if (colorAt !== undefined) pickColor();
+        else if (tileIdx !== null) pickTile();
+      } else {
+        if (tileIdx !== null) pickTile();
+        else if (colorAt !== undefined) pickColor();
       }
-    } 
+      this.updatePreview();
+      this.updatePaletteHighlight();
+    }
     // Left Click: Paint (only if NOT alt, and only if press originated on canvas)
     else if (pointer.leftButtonDown() && this.pointerDownOnCanvas) {
-      if (this.justDown) {
-        this.pushHistory();
-      }
-      
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const tx = tileX + c;
-          const ty = tileY + r;
-          if (tx >= map.width || ty >= map.height) continue;
+      if (this.colorMode) {
+        // Color paint: delegate to RoomManager (persistent, never touches tilemap data)
+        this.roomManager.setColorTile(this.currentLayerName, tileX, tileY, this.selectedColor);
+        this.tilemapDirty = true;
+      } else {
+        if (this.justDown) {
+          this.pushHistory();
+        }
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const tx = tileX + c;
+            const ty = tileY + r;
+            if (tx >= map.width || ty >= map.height) continue;
 
-          const safeIndex = this.selectedTiles[r][c];
-          const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
-          // currentTile is null when the slot was fully erased (removeTileAt with replaceWithNull=true).
-          // Phaser's nonNull flag only returns a -1 tile for index=-1 objects, not null slots.
-          if (!currentTile || currentTile.index !== safeIndex) {
-            if (safeIndex <= 0) {
-              if (currentTile && currentTile.index !== -1) {
-                map.removeTileAt(tx, ty, true, true, this.currentLayerName);
-                changed = true;
-              }
-            } else {
-              try {
-                map.putTileAt(safeIndex, tx, ty, true, this.currentLayerName);
-                changed = true;
-              } catch (e) {
-                console.warn('[Editor] putTileAt failed', { safeIndex, tx, ty, layer: this.currentLayerName, err: e });
+            const safeIndex = this.selectedTiles[r][c];
+            const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
+            // currentTile is null when the slot was fully erased (removeTileAt with replaceWithNull=true).
+            if (!currentTile || currentTile.index !== safeIndex) {
+              if (safeIndex <= 0) {
+                if (currentTile && currentTile.index !== -1) {
+                  map.removeTileAt(tx, ty, true, true, this.currentLayerName);
+                  changed = true;
+                }
+              } else {
+                try {
+                  map.putTileAt(safeIndex, tx, ty, true, this.currentLayerName);
+                  // A real tile replaces any color in this cell (mutually exclusive).
+                  this.roomManager.clearColorTile(this.currentLayerName, tx, ty);
+                  changed = true;
+                } catch (e) {
+                  console.warn('[Editor] putTileAt failed', { safeIndex, tx, ty, layer: this.currentLayerName, err: e });
+                }
               }
             }
           }
@@ -1331,50 +1560,61 @@ export class RoomEditorManager {
 
     // Right Click: Erase
     if (pointer.rightButtonDown()) {
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const tx = tileX + c;
-          const ty = tileY + r;
-          if (tx >= map.width || ty >= map.height) continue;
-          
-          const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
-          if (currentTile && currentTile.index !== -1) {
-            map.removeTileAt(tx, ty, true, true, this.currentLayerName);
-            changed = true;
+      if (this.colorMode) {
+        this.roomManager.clearColorTile(this.currentLayerName, tileX, tileY);
+        this.tilemapDirty = true;
+      } else {
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const tx = tileX + c;
+            const ty = tileY + r;
+            if (tx >= map.width || ty >= map.height) continue;
+            const currentTile = map.getTileAt(tx, ty, true, this.currentLayerName);
+            if (currentTile && currentTile.index !== -1) {
+              map.removeTileAt(tx, ty, true, true, this.currentLayerName);
+              changed = true;
+            }
+            // Erase clears a color cell too, regardless of mode.
+            if (this.roomManager.getColorTile(this.currentLayerName, tx, ty) !== undefined) {
+              this.roomManager.clearColorTile(this.currentLayerName, tx, ty);
+              this.tilemapDirty = true;
+            }
           }
         }
       }
     }
 
-    if (changed && (this.currentLayerName === LAYER_NAMES.COLLISION || this.currentLayerName === LAYER_NAMES.ON_COLLISION)) {
-      this.refreshCollision();
+    if (changed) {
+      this.tilemapDirty = true;
+      if (this.currentLayerName === LAYER_NAMES.COLLISION || this.currentLayerName === LAYER_NAMES.ON_COLLISION) {
+        this.refreshCollision();
+      }
     }
   }
 
   private refreshCollision(): void {
+    // Only the Collision layer blocks movement; OnCollision is decorative.
     const collisionLayer = this.roomManager.getCollisionLayer();
-    if (collisionLayer) {
-      collisionLayer.setCollisionByExclusion([-1]);
-    }
-    const onCollisionLayer = this.roomManager.getOnCollisionLayer();
-    if (onCollisionLayer) {
-      onCollisionLayer.setCollisionByExclusion([-1]);
-      // We might need to notify GameScene to update the collider,
-      // but usually Phaser's collider works on the layer itself which is now updated.
-    }
+    if (collisionLayer) collisionLayer.setCollisionByExclusion([-1]);
   }
-  private async saveObjectToDisk(kind: 'afflicted' | 'interactable', id: string, x: number, y: number): Promise<void> {
+  private async saveObjectToDisk(entry: {
+    type: 'afflicted' | 'interactable' | 'door';
+    id: string; x: number; y: number; spawnX?: number; spawnY?: number;
+  }): Promise<void> {
     if (!import.meta.env.DEV) return;
     const roomId = this.roomManager.getCurrentRoomId();
     try {
       const resp = await fetch('/__editor/save-object', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, kind, id, x, y })
+        body: JSON.stringify({
+          roomId, kind: entry.type, id: entry.id, x: entry.x, y: entry.y,
+          spawnX: entry.spawnX, spawnY: entry.spawnY,
+        })
       });
       const result = await resp.json();
       if (!result.ok) throw new Error(result.error || 'Unknown error');
-      this.showToast(`Saved ${kind} "${id}" position.`);
+      this.showToast(`Saved ${entry.type} "${entry.id}" position.`);
     } catch (err: any) {
       console.error('[Editor] Object save failed:', err);
       this.showToast(`Disk save failed: ${err.message}`);
@@ -1395,6 +1635,13 @@ export class RoomEditorManager {
     if (!id) {
       console.warn('[Editor] Cannot persist drag — selected object has no id');
       return;
+    }
+
+    // Update the in-memory def (a live reference into rooms.json) so the editor
+    // reflects the new position immediately, even without a page reload.
+    if (this.selectedObject.originalData) {
+      this.selectedObject.originalData.x = x;
+      this.selectedObject.originalData.y = y;
     }
 
     this.dirtyObjects.set(id, { type, id, x, y });
@@ -1434,6 +1681,8 @@ export class RoomEditorManager {
     const collision = this.roomManager.getCollisionLayer();
     const onCollision = this.roomManager.getOnCollisionLayer();
     const above = this.roomManager.getAboveLayer();
+    const onAbove = this.roomManager.getOnAboveLayer();
+    const spectra = this.roomManager.getSpectraLayer();
 
     const layerMap: Record<string, Phaser.Tilemaps.TilemapLayer | null> = {
       [LAYER_NAMES.GROUND]: ground,
@@ -1441,11 +1690,17 @@ export class RoomEditorManager {
       [LAYER_NAMES.COLLISION]: collision,
       [LAYER_NAMES.ON_COLLISION]: onCollision,
       [LAYER_NAMES.ABOVE]: above,
+      [LAYER_NAMES.ON_ABOVE]: onAbove,
+      [LAYER_NAMES.SPECTRA]: spectra,
     };
 
-    [ground, onGround, collision, onCollision, above].forEach(layer => {
+    // In actual-view (or when the editor is closed), every layer renders at full
+    // alpha exactly as in-game; otherwise the active layer is full and the rest dim.
+    const showAll = !this.isActive || this.actualView;
+
+    [ground, onGround, collision, onCollision, above, onAbove, spectra].forEach(layer => {
       if (!layer) return;
-      if (!this.isActive) {
+      if (showAll) {
         layer.setAlpha(1);
         return;
       }
@@ -1454,37 +1709,56 @@ export class RoomEditorManager {
       if (layer === activeLayer) {
         layer.setAlpha(1);
       } else {
-        layer.setAlpha(LAYER_CONFIG.EDITOR_INACTIVE_ALPHA);
+        // Find which layerName this layer object belongs to
+        let layerName: string | undefined;
+        for (const [name, obj] of Object.entries(layerMap)) {
+          if (obj === layer) {
+            layerName = name;
+            break;
+          }
+        }
+
+        // Apply decorative alpha if defined for this layer, otherwise use default inactive alpha.
+        const room = this.roomManager.getCurrentRoomDef();
+        let baseAlpha = 1.0;
+        if (layerName === LAYER_NAMES.ON_GROUND) baseAlpha = room.onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA;
+        if (layerName === LAYER_NAMES.ON_COLLISION) baseAlpha = room.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA;
+        if (layerName === LAYER_NAMES.ON_ABOVE) baseAlpha = room.onAboveAlpha ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA;
+
+        layer.setAlpha(baseAlpha * LAYER_CONFIG.EDITOR_INACTIVE_ALPHA);
       }
     });
+
+    // Mirror the dimming onto the color overlays (null = full alpha).
+    this.roomManager.setColorEditorDim(showAll ? null : this.currentLayerName);
   }
 
-  private updatePreview(): void {
-    if (!this.isActive) {
-      this.tilePreview.setVisible(false);
-      return;
-    }
-    this.tilePreview.setVisible(true);
+  /**
+   * Preview is rendered in the DOM right panel now (EditorUI.setPreview), pulled
+   * each frame via getPreviewState(). Kept as a no-op so the many call sites that
+   * nudge "the preview changed" remain valid without extra plumbing.
+   */
+  private updatePreview(): void { /* see getPreviewState() + EditorUI.setPreview() */ }
+
+  /** Current selection as a renderable preview for the DOM panel. */
+  public getPreviewState(): EditorPreviewState {
+    if (!this.isActive) return { kind: 'none' };
+    if (this.colorMode) return { kind: 'color', rgb: this.selectedColor };
 
     const gid = this.selectedTileIndex;
     if (gid > 0) {
-      // Resolve which tileset owns this GID and compute local frame.
+      // Resolve which tileset owns this GID and compute its local frame.
       const map = this.roomManager.getMap();
       const tilesets = map?.tilesets ?? [];
       let owningTs = tilesets[0];
       for (const ts of tilesets) {
         if (ts.firstgid <= gid) owningTs = ts;
       }
-      const localFrame = owningTs ? gid - owningTs.firstgid : gid - 1;
-      const key = tilesetSpritesheetKey(owningTs?.name ?? 'tileset');
-      this.tilePreview.setTexture(key, localFrame);
-      this.tilePreview.setAlpha(1);
-    } else {
-      this.tilePreview.setTexture('tileset-sprites', 0);
-      this.tilePreview.setAlpha(0.3);
+      const frame = owningTs ? gid - owningTs.firstgid : gid - 1;
+      const textureKey = tilesetSpritesheetKey(owningTs?.name ?? 'tileset');
+      return { kind: 'tile', textureKey, frame, gid };
     }
-
-    this.tilePreview.setPosition(this.editorText.x + 740, this.editorText.y + 24);
+    return { kind: 'tile', textureKey: 'tileset-sprites', frame: 0, gid: 0 };
   }
 
   private handleUndoRedo(input: InputState): void {
@@ -1573,6 +1847,7 @@ export class RoomEditorManager {
     if (state.layer === LAYER_NAMES.COLLISION || state.layer === LAYER_NAMES.ON_COLLISION) {
       this.refreshCollision();
     }
+    this.tilemapDirty = true;
     this.updateLayerOpacities();
   }
 
@@ -1666,8 +1941,20 @@ export class RoomEditorManager {
     const endX = Math.max(x1, x2);
     const endY = Math.max(y1, y2);
 
-    this.pushHistory();
+    const count = (endX - startX + 1) * (endY - startY + 1);
 
+    if (this.colorMode) {
+      for (let y = startY; y <= endY; y++) {
+        for (let x = startX; x <= endX; x++) {
+          this.roomManager.setColorTile(this.currentLayerName, x, y, this.selectedColor);
+        }
+      }
+      this.tilemapDirty = true;
+      this.showToast(`Color rect: ${count} tiles`);
+      return;
+    }
+
+    this.pushHistory();
     const layer = this.currentLayerName;
     const fillIndex = this.selectedTileIndex;
     let changed = false;
@@ -1679,13 +1966,14 @@ export class RoomEditorManager {
         } else {
           map.putTileAt(fillIndex, x, y, true, layer);
         }
+        this.roomManager.clearColorTile(layer, x, y); // tile replaces color
         changed = true;
       }
     }
 
     if (changed) {
+      this.tilemapDirty = true;
       if (layer === LAYER_NAMES.COLLISION || layer === LAYER_NAMES.ON_COLLISION) this.refreshCollision();
-      const count = (endX - startX + 1) * (endY - startY + 1);
       this.showToast(`Rect filled ${count} tiles`);
     }
   }
@@ -1693,6 +1981,30 @@ export class RoomEditorManager {
   private executeFloodFill(startX: number, startY: number): void {
     const map = this.roomManager.getMap();
     if (!map) return;
+
+    if (this.colorMode) {
+      const layerName = this.currentLayerName;
+      const targetColor = this.roomManager.getColorTile(layerName, startX, startY); // undefined = no color
+      const fillColor = this.selectedColor;
+      if (targetColor === fillColor) return;
+      const stack: Array<[number, number]> = [[startX, startY]];
+      const visited = new Set<string>();
+      let count = 0;
+      while (stack.length > 0) {
+        const [x, y] = stack.pop()!;
+        if (x < 0 || x >= map.width || y < 0 || y >= map.height) continue;
+        const key = `${x},${y}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+        if (this.roomManager.getColorTile(layerName, x, y) !== targetColor) continue;
+        this.roomManager.setColorTile(layerName, x, y, fillColor);
+        count++;
+        stack.push([x-1, y], [x+1, y], [x, y-1], [x, y+1]);
+      }
+      if (count > 0) this.tilemapDirty = true;
+      this.showToast(`Color flood: ${count} tiles`);
+      return;
+    }
 
     const layer = this.currentLayerName;
     const targetTile = map.getTileAt(startX, startY, true, layer);
@@ -1723,6 +2035,7 @@ export class RoomEditorManager {
         } else {
           map.putTileAt(fillIndex, x, y, true, layer);
         }
+        this.roomManager.clearColorTile(layer, x, y); // tile replaces color
         count++;
 
         if (x > 0) stack.push([x - 1, y]);
@@ -1732,13 +2045,16 @@ export class RoomEditorManager {
       }
     }
 
-    if (count > 0 && (layer === LAYER_NAMES.COLLISION || layer === LAYER_NAMES.ON_COLLISION)) {
-      this.refreshCollision();
+    if (count > 0) {
+      this.tilemapDirty = true;
+      if (layer === LAYER_NAMES.COLLISION || layer === LAYER_NAMES.ON_COLLISION) this.refreshCollision();
     }
     this.showToast(`Filled ${count} tiles`);
   }
   private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown[], _dx: number, dy: number): void {
     if (!this.isActive || !this.paletteVisible) return;
+    this.colorMode = false; // scrolling the palette is a tile-selection action
+    this.exitSelectForPaint();
     if (dy > 0) {
       this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
     } else if (dy < 0) {
@@ -1755,7 +2071,6 @@ export class RoomEditorManager {
     this.toastTween?.stop();
     this.editorText?.destroy();
     this.tileCursor?.destroy();
-    this.tilePreview?.destroy();
     this.mapOutline?.destroy();
     this.doorHandles?.destroy();
     this.toastText?.destroy();

@@ -37,7 +37,7 @@ A full-screen overlay with the Phaser canvas in the middle:
   all door connections), **Reload** (L key), **Exit**.
 - **Left panel** — clickable list of every room in `rooms.json`. Click
   a room to warp into it instantly.
-- **Right panel** — Layer buttons (1/2/3), Tools, and a keyboard
+- **Right panel** -- Layer buttons (1-5), Tools (Select/Paint/Fill/Color), and a keyboard cheatsheet.
   cheatsheet. When you click an interactable or NPC placeholder in the
   canvas, the top of the right panel shows a **Properties** inspector
   with that object's full JSON and a Copy button.
@@ -84,9 +84,13 @@ console, and shows a summary toast with door counts: `[OK]` / `[TODO]`
 
 | Key | Layer |
 |-----|-------|
-| **1** | Ground — floor tiles |
-| **2** | Collision — walls and obstacles |
-| **3** | Above — renders over the player (lamps, ceiling, signs) |
+| **1** | Ground -- floor tiles |
+| **2** | OnGround -- decorative detail on Ground layer |
+| **3** | Collision -- walls and physical obstacles |
+| **4** | OnCollision -- decorative detail on walls (non-blocking) |
+| **5** | Above -- renders over the player (lamps, ceiling, signs) |
+| **6** | OnAbove -- decorative detail on Above layer |
+| **7** | Spectra -- visible only via Flashlight + Adapter |
 
 Inactive layers dim to 20% so the active one stands out.
 
@@ -98,17 +102,20 @@ Inactive layers dim to 20% so the active one stands out.
   to select it, or **click-drag** across the core section to select a
   block for multi-tile stamping. Press P again to hide.
 - **Q / E** — cycle selected tile index down / up (spans all tilesets).
-- **Middle-click** or **Alt + Left-click** — eyedropper; picks the
+  tile under the cursor on the active layer. Works for color tiles too.
   tile under the cursor on the active layer.
 
 ### Paint tools
 
 | Key | Tool |
 |-----|------|
-| *(default)* | **Paint** — Left-click to paint, right-click to erase, drag to fill. |
-| **F** | **Flood fill** — fills a contiguous same-tile area. |
-| **R** | **Rectangle** — click-drag to fill a rectangle. |
-| **Esc** | Reset to Paint tool. |
+| **M** | **Select mode** (default) -- Safe mode; click to inspect, drag to move. No paint. |
+| **Paint** | *(any selection)* -- Left-click to paint, right-click to erase. |
+| **F** | **Flood fill** -- fills a contiguous area with tile or color. |
+| **R** | **Rectangle** -- click-drag to fill a rectangle. |
+| **K** | **Color mode** -- paints solid persistent colors instead of tiles. |
+| **G** | **Actual view** -- hold to peek at in-game alpha with chrome hidden. |
+| **Esc** | Reset to Select mode. |
 
 ### Undo / Redo
 
@@ -139,8 +146,8 @@ or door wiring. Git is the undo.
 
 ### Save the tilemap
 
-Press **X** (or the **Save** button in the top bar).
-
+- **Smart Save (X)** -- auto-saves object positions first, then tilemap if dirty.
+- **Reload (L)** -- hot-reloads the current room from disk.
 - **Dev mode** — attempts to auto-save to
   `public/assets/tilemaps/<roomId>.json`. A toast confirms.
 - **Fallback** — if auto-save is unavailable, a toast appears:
@@ -182,7 +189,7 @@ it before any door connects: click it in the left panel.
    matching clipboard content. Save. Reload. Walk through.
 
 Doors come pre-wired with `targetRoom`, `targetDoor`, inferred
-`direction`, and sensible `spawnX/Y`. **Esc** at any phase to cancel.
+Left-click and drag the cyan crosshair handle on the door. Movement is exact (no grid snap).
 
 ### Move an existing door
 
@@ -219,8 +226,8 @@ into `rooms.json`.
 3. Click a tile. Snippet copies to clipboard.
 4. Paste under `rooms.<roomId>.afflicted` in `rooms.json`.
 5. Edit `name`, `role`, and any optional fields (backstory, holds, etc.).
-6. Reload.
-
+Left-click and drag the NPC or interactable placeholder sprite. Movement is exact.
+On release, the new position is queued for disk save on X.
 ### Move an existing NPC
 
 **Left-click and drag** the NPC placeholder sprite. On release, a

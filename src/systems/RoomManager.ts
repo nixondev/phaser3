@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_CONFIG, DEPTH, LAYER_NAMES, LAYER_CONFIG } from '@utils/Constants';
+import { GAME_CONFIG, DEPTH, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils/Constants';
 import { RoomDefinition, RoomsData } from '@/types';
 import { debug } from '@utils/Debug';
 import roomsDataRaw from '@/data/rooms.json';
@@ -9,6 +9,18 @@ import { RoomStateManager } from './RoomStateManager';
 // take effect — Vite / esbuild may export the imported JSON as a frozen
 // object, which would silently drop our `room.width = newWidth` writes.
 const roomsData = JSON.parse(JSON.stringify(roomsDataRaw)) as RoomsData;
+
+// Color tiles render just above their own tile layer (+0.05) but below the
+// next layer, so a Ground color sits under the player and an Above color over it.
+const COLOR_OVERLAY_DEPTH: Record<string, number> = {
+  [LAYER_NAMES.GROUND]: DEPTH.GROUND + 0.05,
+  [LAYER_NAMES.ON_GROUND]: DEPTH.ON_GROUND + 0.05,
+  [LAYER_NAMES.COLLISION]: DEPTH.GROUND + 1.05,
+  [LAYER_NAMES.ON_COLLISION]: DEPTH.ON_COLLISION + 0.05,
+  [LAYER_NAMES.ABOVE]: DEPTH.ABOVE + 0.05,
+  [LAYER_NAMES.ON_ABOVE]: DEPTH.ABOVE + 0.5,
+  [LAYER_NAMES.SPECTRA]: DEPTH.HIDDEN + 0.05,
+};
 
 export interface ResizeResult {
   pixelOffsetX: number;
@@ -26,9 +38,19 @@ export class RoomManager {
     collision: Phaser.Tilemaps.TilemapLayer;
     onCollision: Phaser.Tilemaps.TilemapLayer | null;
     above: Phaser.Tilemaps.TilemapLayer;
+    onAbove: Phaser.Tilemaps.TilemapLayer | null;
+    spectra: Phaser.Tilemaps.TilemapLayer | null;
   } | null = null;
   private doorZones: Phaser.GameObjects.Zone[] = [];
   private currentRoomId: string = '';
+
+  // Color tiles: persistent solid-color squares that behave like real tiles.
+  // layerName -> ("x,y" -> rgbInt). Rendered via per-layer Graphics; collision
+  // layers get invisible static bodies. See COLOR_TILES_PLAN.md.
+  private colorTiles: Map<string, Map<string, number>> = new Map();
+  private colorGraphics: Map<string, Phaser.GameObjects.Graphics> = new Map();
+  private colorCollisionBodies: Phaser.GameObjects.Zone[] = [];
+  private editorDimActiveLayer: string | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -40,6 +62,7 @@ export class RoomManager {
 
   loadRoom(roomId: string): void {
     this.unloadCurrentRoom();
+    this.currentRoomId = roomId;
 
     const room = roomsData.rooms[roomId];
     if (!room) {
@@ -66,10 +89,14 @@ export class RoomManager {
     const ground = this.currentMap.createLayer(LAYER_NAMES.GROUND, tilesets, 0, 0);
     const collision = this.currentMap.createLayer(LAYER_NAMES.COLLISION, tilesets, 0, 0);
     const above = this.currentMap.createLayer(LAYER_NAMES.ABOVE, tilesets, 0, 0);
+    const hasOnAbove = this.currentMap.getLayerIndexByName(LAYER_NAMES.ON_ABOVE) !== null;
+    const onAbove = hasOnAbove ? this.currentMap.createLayer(LAYER_NAMES.ON_ABOVE, tilesets, 0, 0) ?? null : null;
     const hasOnGround = this.currentMap.getLayerIndexByName(LAYER_NAMES.ON_GROUND) !== null;
     const onGround = hasOnGround ? this.currentMap.createLayer(LAYER_NAMES.ON_GROUND, tilesets, 0, 0) ?? null : null;
     const hasOnCollision = this.currentMap.getLayerIndexByName(LAYER_NAMES.ON_COLLISION) !== null;
     const onCollision = hasOnCollision ? this.currentMap.createLayer(LAYER_NAMES.ON_COLLISION, tilesets, 0, 0) ?? null : null;
+    const hasSpectra = this.currentMap.getLayerIndexByName(LAYER_NAMES.SPECTRA) !== null;
+    const spectra = hasSpectra ? this.currentMap.createLayer(LAYER_NAMES.SPECTRA, tilesets, 0, 0) ?? null : null;
 
     if (!ground || !collision || !above) {
       throw new Error('Failed to create tilemap layers — check layer names: Ground, Collision, Above');
@@ -79,24 +106,39 @@ export class RoomManager {
     ground.setScale(visualScale);
     collision.setScale(visualScale);
     above.setScale(visualScale);
+    if (onAbove) onAbove.setScale(visualScale);
     if (onGround) onGround.setScale(visualScale);
     if (onCollision) onCollision.setScale(visualScale);
+    if (spectra) spectra.setScale(visualScale);
 
-    this.currentLayers = { ground, onGround, collision, onCollision, above };
+    this.currentLayers = { ground, onGround, collision, onCollision, above, onAbove, spectra };
 
     ground.setDepth(DEPTH.GROUND);
     collision.setDepth(DEPTH.GROUND + 1);
     above.setDepth(DEPTH.ABOVE);
+    if (onAbove) {
+      onAbove.setDepth(DEPTH.ABOVE + 0.5);
+      onAbove.setAlpha(room.onAboveAlpha ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA);
+    }
     if (onGround) {
       onGround.setDepth(DEPTH.ON_GROUND);
       onGround.setAlpha(room.onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA);
     }
     if (onCollision) {
+      // OnCollision is a decorative overlay (wall-top detail) — it never blocks.
       onCollision.setDepth(DEPTH.ON_COLLISION);
-      onCollision.setCollisionByExclusion([-1]);
+      onCollision.setAlpha(room.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA);
+    }
+    if (spectra) {
+      spectra.setDepth(DEPTH.HIDDEN);
+      // Visible only via spectra-adapter in GameScene, but fully visible in Editor.
     }
 
     collision.setCollisionByExclusion([-1]);
+
+    this.loadColorTiles(room.mapKey);
+    this.stripTilesUnderColors();
+    this.renderColorTiles();
 
     const roomW = room.width * GAME_CONFIG.TILE_SIZE;
     const roomH = room.height * GAME_CONFIG.TILE_SIZE;
@@ -114,7 +156,6 @@ export class RoomManager {
       return zone;
     });
 
-    this.currentRoomId = roomId;
     debug('Room loaded:', roomId, `(${roomW}x${roomH}px)`);
   }
 
@@ -122,13 +163,16 @@ export class RoomManager {
     this.doorZones.forEach((z) => z.destroy());
     this.doorZones = [];
 
+    this.teardownColorTiles();
+
     if (this.currentLayers) {
       this.currentLayers.ground.destroy();
       this.currentLayers.onGround?.destroy();
       this.currentLayers.collision.destroy();
       this.currentLayers.onCollision?.destroy();
       this.currentLayers.above.destroy();
-      this.currentLayers = null;
+      this.currentLayers.onAbove?.destroy();
+      this.currentLayers.spectra?.destroy();
     }
 
     if (this.currentMap) {
@@ -143,6 +187,180 @@ export class RoomManager {
 
   getDoorZones(): Phaser.GameObjects.Zone[] {
     return this.doorZones;
+  }
+
+  // ── Color tiles ───────────────────────────────────────────────────────────
+
+  /** Read persisted color tiles from the cached tilemap JSON's `colorTiles` key. */
+  private loadColorTiles(mapKey: string): void {
+    this.colorTiles = new Map();
+    const cached: any = this.scene.cache.tilemap.get(mapKey);
+    const ct = cached?.data?.colorTiles;
+    if (!ct || typeof ct !== 'object') return;
+    for (const [layerName, cells] of Object.entries(ct)) {
+      if (!cells || typeof cells !== 'object') continue;
+      const m = new Map<string, number>();
+      for (const [key, val] of Object.entries(cells as Record<string, number>)) {
+        if (typeof val === 'number') m.set(key, val);
+      }
+      if (m.size) this.colorTiles.set(layerName, m);
+    }
+  }
+
+  private teardownColorTiles(): void {
+    this.colorGraphics.forEach((g) => g.destroy());
+    this.colorGraphics.clear();
+    this.colorCollisionBodies.forEach((z) => z.destroy());
+    this.colorCollisionBodies = [];
+  }
+
+  /**
+   * Enforce the color/tile mutual-exclusion invariant: remove any real tile that
+   * sits under a color cell. Cleans up legacy data where colors were painted as
+   * an overlay on top of existing tiles (and keeps exports lean).
+   */
+  private stripTilesUnderColors(): void {
+    if (!this.currentMap) return;
+    for (const [layerName, cells] of this.colorTiles) {
+      if (this.currentMap.getLayerIndexByName(layerName) === null) continue;
+      for (const key of cells.keys()) {
+        const ci = key.indexOf(',');
+        const tx = parseInt(key, 10);
+        const ty = parseInt(key.slice(ci + 1), 10);
+        this.currentMap.removeTileAt(tx, ty, true, false, layerName);
+      }
+    }
+  }
+
+  private colorOverlayAlphaFor(layerName: string): number {
+    const room = this.getCurrentRoomDef();
+    let baseAlpha = 1.0;
+    if (layerName === LAYER_NAMES.ON_GROUND) baseAlpha = room?.onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA;
+    if (layerName === LAYER_NAMES.ON_COLLISION) baseAlpha = room?.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA;
+    if (layerName === LAYER_NAMES.ON_ABOVE) baseAlpha = room?.onAboveAlpha ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA;
+
+    if (this.editorDimActiveLayer === null) return baseAlpha; // game mode: use base decorative alpha
+    return layerName === this.editorDimActiveLayer ? baseAlpha : baseAlpha * LAYER_CONFIG.EDITOR_INACTIVE_ALPHA;
+  }
+
+  private getOrCreateColorGraphics(layerName: string): Phaser.GameObjects.Graphics {
+    let g = this.colorGraphics.get(layerName);
+    if (!g) {
+      g = this.scene.add.graphics();
+      g.setDepth(COLOR_OVERLAY_DEPTH[layerName] ?? DEPTH.GROUND + 0.05);
+      this.colorGraphics.set(layerName, g);
+    }
+    return g;
+  }
+
+  /** Redraw one layer's color overlay in place (cheap; used during editor paint). */
+  private redrawColorLayer(layerName: string): void {
+    const cells = this.colorTiles.get(layerName);
+    const existing = this.colorGraphics.get(layerName);
+    if (!cells || !cells.size) {
+      existing?.clear();
+      return;
+    }
+    const g = this.getOrCreateColorGraphics(layerName);
+    g.clear();
+    const T = GAME_CONFIG.TILE_SIZE;
+    const alpha = this.colorOverlayAlphaFor(layerName);
+    for (const [key, color] of cells) {
+      const ci = key.indexOf(',');
+      const tx = parseInt(key, 10);
+      const ty = parseInt(key.slice(ci + 1), 10);
+      g.fillStyle(color, alpha);
+      g.fillRect(tx * T, ty * T, T, T);
+    }
+  }
+
+  /** Full rebuild of every layer's overlay + collision bodies. */
+  renderColorTiles(): void {
+    this.teardownColorTiles();
+    for (const layerName of this.colorTiles.keys()) {
+      this.redrawColorLayer(layerName);
+    }
+    this.rebuildColorCollision();
+  }
+
+  /** Recreate invisible static bodies for color cells on the Collision layer. */
+  private rebuildColorCollision(): void {
+    this.colorCollisionBodies.forEach((z) => z.destroy());
+    this.colorCollisionBodies = [];
+    const T = GAME_CONFIG.TILE_SIZE;
+    // Only the Collision layer blocks; OnCollision is decorative.
+    for (const layerName of [LAYER_NAMES.COLLISION]) {
+      const cells = this.colorTiles.get(layerName);
+      if (!cells) continue;
+      for (const key of cells.keys()) {
+        const ci = key.indexOf(',');
+        const tx = parseInt(key, 10);
+        const ty = parseInt(key.slice(ci + 1), 10);
+        const zone = this.scene.add.zone(tx * T + T / 2, ty * T + T / 2, T, T);
+        this.scene.physics.world.enable(zone, Phaser.Physics.Arcade.STATIC_BODY);
+        this.colorCollisionBodies.push(zone);
+      }
+    }
+  }
+
+  getColorCollisionBodies(): Phaser.GameObjects.Zone[] {
+    return this.colorCollisionBodies;
+  }
+
+  getColorTile(layerName: string, tileX: number, tileY: number): number | undefined {
+    return this.colorTiles.get(layerName)?.get(`${tileX},${tileY}`);
+  }
+
+  setColorTile(layerName: string, tileX: number, tileY: number, rgb: number): void {
+    let cells = this.colorTiles.get(layerName);
+    if (!cells) {
+      cells = new Map();
+      this.colorTiles.set(layerName, cells);
+    }
+    cells.set(`${tileX},${tileY}`, rgb);
+    // A color tile replaces any real tile in the same cell — they are mutually
+    // exclusive, so the underlying tile must not linger in the layer data.
+    this.currentMap?.removeTileAt(tileX, tileY, true, false, layerName);
+    this.redrawColorLayer(layerName);
+    if (layerName === LAYER_NAMES.COLLISION) {
+      this.rebuildColorCollision();
+    }
+  }
+
+  clearColorTile(layerName: string, tileX: number, tileY: number): void {
+    const cells = this.colorTiles.get(layerName);
+    if (!cells) return;
+    if (cells.delete(`${tileX},${tileY}`)) {
+      this.redrawColorLayer(layerName);
+      if (layerName === LAYER_NAMES.COLLISION || layerName === LAYER_NAMES.ON_COLLISION) {
+        this.rebuildColorCollision();
+      }
+    }
+  }
+
+  clearAllColorTiles(): void {
+    this.colorTiles = new Map();
+    this.renderColorTiles();
+  }
+
+  /** Serialize non-empty layers for export into the tilemap JSON's `colorTiles` key. */
+  getColorTilesData(): Record<string, Record<string, number>> {
+    const out: Record<string, Record<string, number>> = {};
+    for (const [layerName, cells] of this.colorTiles) {
+      if (!cells.size) continue;
+      const obj: Record<string, number> = {};
+      for (const [key, color] of cells) obj[key] = color;
+      out[layerName] = obj;
+    }
+    return out;
+  }
+
+  /** Editor: dim color overlays to match tile-layer dimming. null = game (full alpha). */
+  setColorEditorDim(activeLayer: string | null): void {
+    this.editorDimActiveLayer = activeLayer;
+    for (const layerName of this.colorTiles.keys()) {
+      this.redrawColorLayer(layerName);
+    }
   }
 
   getCurrentRoomDef(): RoomDefinition {
@@ -202,12 +420,64 @@ export class RoomManager {
 
     onCollision.setScale(GAME_CONFIG.WORLD_SCALE);
     onCollision.setDepth(DEPTH.ON_COLLISION);
-    onCollision.setCollisionByExclusion([-1]);
+    const room = this.getCurrentRoomDef();
+    onCollision.setAlpha(room?.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA);
+    // OnCollision is decorative — no collision.
     this.currentLayers.onCollision = onCollision;
     return onCollision;
   }
 
   getAboveLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.above || null; }
+
+  getOnAboveLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.onAbove ?? null; }
+
+  getSpectraLayer(): Phaser.Tilemaps.TilemapLayer | null { return this.currentLayers?.spectra ?? null; }
+
+  /**
+   * Returns the Spectra layer, creating it first if it doesn't exist yet.
+   */
+  ensureSpectraLayer(): Phaser.Tilemaps.TilemapLayer | null {
+    if (!this.currentMap || !this.currentLayers) return null;
+    if (this.currentLayers.spectra) return this.currentLayers.spectra;
+
+    const tilesets = this.currentMap.tilesets;
+    if (!tilesets.length) return null;
+
+    const spectra = this.currentMap.createBlankLayer(
+      LAYER_NAMES.SPECTRA, tilesets, 0, 0,
+      this.currentMap.width, this.currentMap.height
+    );
+    if (!spectra) return null;
+
+    spectra.setScale(GAME_CONFIG.WORLD_SCALE);
+    spectra.setDepth(DEPTH.HIDDEN);
+    this.currentLayers.spectra = spectra;
+    return spectra;
+  }
+
+  /**
+   * Returns the OnAbove layer, creating it first if it doesn't exist yet.
+   */
+  ensureOnAboveLayer(): Phaser.Tilemaps.TilemapLayer | null {
+    if (!this.currentMap || !this.currentLayers) return null;
+    if (this.currentLayers.onAbove) return this.currentLayers.onAbove;
+
+    const tilesets = this.currentMap.tilesets;
+    if (!tilesets.length) return null;
+
+    const onAbove = this.currentMap.createBlankLayer(
+      LAYER_NAMES.ON_ABOVE, tilesets, 0, 0,
+      this.currentMap.width, this.currentMap.height
+    );
+    if (!onAbove) return null;
+
+    onAbove.setScale(GAME_CONFIG.WORLD_SCALE);
+    onAbove.setDepth(DEPTH.ABOVE + 0.5);
+    const room = this.getCurrentRoomDef();
+    onAbove.setAlpha(room?.onAboveAlpha ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA);
+    this.currentLayers.onAbove = onAbove;
+    return onAbove;
+  }
 
   getCurrentRoomId(): string {
     return this.currentRoomId;
@@ -254,14 +524,22 @@ export class RoomManager {
 
     const captureLayer = (layer: Phaser.Tilemaps.TilemapLayer): number[][] => {
       const data: number[][] = [];
+      let nonZeroCount = 0;
+      let firstFew: number[] = [];
       for (let y = 0; y < oldH; y++) {
         const row: number[] = [];
         for (let x = 0; x < oldW; x++) {
           const tile = layer.getTileAt(x, y, true);
-          row.push(tile && tile.index !== -1 ? tile.index : -1);
+          const idx = tile && tile.index !== -1 ? tile.index : 0;
+          row.push(idx);
+          if (idx !== 0) {
+            nonZeroCount++;
+            if (firstFew.length < 5) firstFew.push(idx);
+          }
         }
         data.push(row);
       }
+      console.log(`[RoomManager] Captured layer ${layer.name}: ${nonZeroCount} non-zero tiles. Samples: ${firstFew.join(', ')}`);
       return data;
     };
 
@@ -270,6 +548,8 @@ export class RoomManager {
     const collisionData = captureLayer(this.currentLayers.collision);
     const onCollisionData = this.currentLayers.onCollision ? captureLayer(this.currentLayers.onCollision) : null;
     const aboveData = captureLayer(this.currentLayers.above);
+    const onAboveData = this.currentLayers.onAbove ? captureLayer(this.currentLayers.onAbove) : null;
+    const spectraData = this.currentLayers.spectra ? captureLayer(this.currentLayers.spectra) : null;
 
     const pixelOffsetX = offsetX * GAME_CONFIG.TILE_SIZE;
     const pixelOffsetY = offsetY * GAME_CONFIG.TILE_SIZE;
@@ -296,6 +576,21 @@ export class RoomManager {
     for (const inter of room.interactables || []) shift(inter);
     for (const aff of room.afflicted || []) shift(aff);
 
+    // Shift color tiles by the tile offset, dropping any that fall out of bounds.
+    const shiftedColorTiles = new Map<string, Map<string, number>>();
+    for (const [layerName, cells] of this.colorTiles) {
+      const m = new Map<string, number>();
+      for (const [key, color] of cells) {
+        const ci = key.indexOf(',');
+        const nx = parseInt(key, 10) + offsetX;
+        const ny = parseInt(key.slice(ci + 1), 10) + offsetY;
+        if (nx < 0 || nx >= newWidth || ny < 0 || ny >= newHeight) continue;
+        m.set(`${nx},${ny}`, color);
+      }
+      if (m.size) shiftedColorTiles.set(layerName, m);
+    }
+    this.colorTiles = shiftedColorTiles;
+
     // Shift dropped items belonging to this room
     const rsm = RoomStateManager.getInstance();
     const dropped = rsm.getDroppedItems(this.currentRoomId);
@@ -304,14 +599,27 @@ export class RoomManager {
       d.y += pixelOffsetY;
     }
 
+    // Store tileset info before destroying the old map
+    const oldMapTilesets = oldMap.tilesets.map(ts => ({
+      name: ts.name,
+      tileWidth: ts.tileWidth,
+      tileHeight: ts.tileHeight,
+      tileMargin: ts.tileMargin,
+      tileSpacing: ts.tileSpacing,
+      firstgid: ts.firstgid
+    }));
+
     // Tear down old map
     this.doorZones.forEach((z) => z.destroy());
     this.doorZones = [];
+    this.teardownColorTiles();
     this.currentLayers.ground.destroy();
     this.currentLayers.onGround?.destroy();
     this.currentLayers.collision.destroy();
     this.currentLayers.onCollision?.destroy();
     this.currentLayers.above.destroy();
+    this.currentLayers.onAbove?.destroy();
+    this.currentLayers.spectra?.destroy();
     this.currentLayers = null;
     this.currentMap.destroy();
     this.currentMap = null;
@@ -323,9 +631,35 @@ export class RoomManager {
       width: newWidth,
       height: newHeight
     });
-    const tileset = newMap.addTilesetImage('tileset', 'tileset');
+    
+    // Preserve all tilesets from the old map
+    console.log(`[RoomManager] Resizing. Old map tilesets: ${oldMapTilesets.map(t => t.name + " (" + t.firstgid + ")").join(', ')}`);
+    for (const ts of oldMapTilesets) {
+      // Explicitly pass firstgid to ensure tile indices (GIDs) remain consistent.
+      const added = newMap.addTilesetImage(
+        ts.name, 
+        ts.name, 
+        ts.tileWidth, 
+        ts.tileHeight, 
+        ts.tileMargin, 
+        ts.tileSpacing, 
+        ts.firstgid
+      );
+      if (added) {
+        console.log(`[RoomManager] Added tileset "${ts.name}" during resize. New firstgid: ${added.firstgid} (Expected ${ts.firstgid})`);
+      } else {
+        console.error(`[RoomManager] Failed to add tileset "${ts.name}" during resize! Texture cache:`, this.scene.textures.getTextureKeys());
+      }
+    }
+    
+    if (newMap.tilesets.length === 0) {
+      console.warn('[RoomManager] No tilesets in newMap after resize, adding fallback "tileset"');
+      newMap.addTilesetImage('tileset', 'tileset', 64, 64, 0, 0, 1);
+    }
+
+    const tileset = newMap.tilesets[0]; // primary tileset for layer creation
     if (!tileset) {
-      throw new Error('Failed to add tileset image during resize');
+      throw new Error(`Failed to add tileset image during resize for room "${this.currentRoomId}". Old map had ${oldMap.tilesets.length} tilesets.`);
     }
 
     const ground = newMap.createBlankLayer(LAYER_NAMES.GROUND, tileset, 0, 0, newWidth, newHeight);
@@ -337,6 +671,12 @@ export class RoomManager {
       ? (newMap.createBlankLayer(LAYER_NAMES.ON_COLLISION, tileset, 0, 0, newWidth, newHeight) ?? null)
       : null;
     const above = newMap.createBlankLayer(LAYER_NAMES.ABOVE, tileset, 0, 0, newWidth, newHeight);
+    const onAbove = onAboveData !== null
+      ? (newMap.createBlankLayer(LAYER_NAMES.ON_ABOVE, tileset, 0, 0, newWidth, newHeight) ?? null)
+      : null;
+    const spectra = spectraData !== null
+      ? (newMap.createBlankLayer(LAYER_NAMES.SPECTRA, tileset, 0, 0, newWidth, newHeight) ?? null)
+      : null;
     if (!ground || !collision || !above) {
       throw new Error('Failed to create blank tilemap layers during resize');
     }
@@ -347,6 +687,8 @@ export class RoomManager {
     collision.setScale(visualScale);
     if (onCollision) onCollision.setScale(visualScale);
     above.setScale(visualScale);
+    if (onAbove) onAbove.setScale(visualScale);
+    if (spectra) spectra.setScale(visualScale);
     ground.setDepth(DEPTH.GROUND);
     if (onGround) {
       onGround.setDepth(DEPTH.ON_GROUND);
@@ -354,22 +696,34 @@ export class RoomManager {
     }
     collision.setDepth(DEPTH.GROUND + 1);
     if (onCollision) {
-      onCollision.setDepth(DEPTH.ON_COLLISION);
-      onCollision.setCollisionByExclusion([-1]);
+      onCollision.setDepth(DEPTH.ON_COLLISION); // decorative — no collision
+      onCollision.setAlpha(room.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA);
     }
     above.setDepth(DEPTH.ABOVE);
+    if (onAbove) {
+      onAbove.setDepth(DEPTH.ABOVE + 0.5);
+      onAbove.setAlpha(room.onAboveAlpha ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA);
+    }
+    if (spectra) {
+      spectra.setDepth(DEPTH.HIDDEN);
+    }
 
     const restoreLayer = (layer: Phaser.Tilemaps.TilemapLayer, data: number[][]): void => {
+      let restoredCount = 0;
+      let firstFew: number[] = [];
       for (let y = 0; y < data.length; y++) {
         const ny = y + offsetY;
         if (ny < 0 || ny >= newHeight) continue;
         const row = data[y];
         for (let x = 0; x < row.length; x++) {
           const idx = row[x];
-          if (idx === -1) continue;
+          if (idx === 0) continue; // 0 means empty in Tiled
           const nx = x + offsetX;
           if (nx < 0 || nx >= newWidth) continue;
+          
           layer.putTileAt(idx, nx, ny);
+          restoredCount++;
+          if (firstFew.length < 5) firstFew.push(idx);
         }
       }
     };
@@ -378,10 +732,15 @@ export class RoomManager {
     restoreLayer(collision, collisionData);
     if (onCollision && onCollisionData) restoreLayer(onCollision, onCollisionData);
     restoreLayer(above, aboveData);
+    if (onAbove && onAboveData) restoreLayer(onAbove, onAboveData);
+    if (spectra && spectraData) restoreLayer(spectra, spectraData);
 
     collision.setCollisionByExclusion([-1]);
     this.currentMap = newMap;
-    this.currentLayers = { ground, onGround, collision, onCollision, above };
+    this.currentLayers = { ground, onGround, collision, onCollision, above, onAbove, spectra };
+
+    this.stripTilesUnderColors();
+    this.renderColorTiles();
 
     this.scene.physics.world.setBounds(0, 0, newPixelW, newPixelH);
 

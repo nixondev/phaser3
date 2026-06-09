@@ -139,6 +139,15 @@ export class Flashlight {
     return diff <= HALF_ANGLE;
   }
 
+  /**
+   * Returns a GeometryMask based on the current flashlight cone.
+   * Useful for masking tilemap layers (like Spectra).
+   */
+  getMask(): Phaser.Display.Masks.GeometryMask | null {
+    if (!this.on) return null;
+    return this.maskGraphics.createGeometryMask();
+  }
+
   destroy(): void {
     this.graphics.destroy();
     this.maskGraphics.destroy();

@@ -62,7 +62,7 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/scenes/UIScene.ts` | HUD: room name, interact prompt, dialog box, inventory grid |
 | `src/scenes/PreloadScene.ts` | Asset loading (sprites, tilemaps, MIDI, instruments) |
 | `src/systems/RoomStateManager.ts` | Singleton — all persistent game state |
-| `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zones, `resizeMap()` |
+| `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zones, `Spectra` layer, `resizeMap()` |
 | `src/systems/InputManager.ts` | Keyboard input: `getState()` continuous, `getTapState()` one-shot |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
 | `src/systems/MusicManager.ts` | MIDI music — singleton, proximity layers, reverb cycle |
@@ -72,7 +72,7 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/DarknessOverlay.ts` | Full-screen RenderTexture darkness; erases ambient + flashlight cone |
 | `src/systems/Flashlight.ts` | Cone detection, battery drain, glow, RT mask |
 | `src/systems/DebugManager.ts` | F1 info HUD, F3 visual overlays, global debug shortcuts |
-| `src/systems/RoomEditorManager.ts` | F2 live tile/object editor: paint, layer isolation, drag, resize, save |
+| src/systems/RoomEditorManager.ts | #/? editor logic: select mode, color tiles, smart save, drag, resize |
 | `src/lib/SpessaSynthPlayer.ts` | SpessaSynth MIDI/SF2 wrapper |
 | `src/systems/AudioEffectsManager.ts` | Web Audio reverb via `ConvolverNode` |
 | `src/entities/Player.ts` | Player sprite, movement, animations |
@@ -248,12 +248,12 @@ All tilesets: 8-column PNG grid of 64×64 tiles at `public/assets/tilemaps/<name
 ## Debug & Editor Systems
 
 | Key | System | Purpose |
-|-----|--------|---------|
-| **F1** | `DebugManager` | Info HUD: FPS, room, music/reverb, coords, GIDs |
-| **F2** | `RoomEditorManager` | Live tile/object editor |
-| **F3** | `DebugManager` | Visual overlays: collision (red), doors (cyan), interactables (yellow), afflicted radii (magenta) |
+| **F1** | DebugManager | HUD: FPS, room, music, reverb, coords, GIDs |
+| **F3** | DebugManager | Visual overlays: collision (red), doors (cyan), afflicted radii |
+| **#** | TileEditorScene | Standalone tile atlas / painter |
+| **?** | EditorScene | Main room editor: objects, layers (1-7), color tiles, smart save |
 
-**Global shortcuts (F1 or F2 active):**
+**Global shortcuts (active debug HUD or Editor):**
 
 | Key | Action |
 |-----|--------|
@@ -266,25 +266,26 @@ All tilesets: 8-column PNG grid of 64×64 tiles at `public/assets/tilemaps/<name
 | Shift+Click | Teleport player to cursor |
 
 **F2 editor:**
+**? Editor (Select mode by default):**
 
 | Key | Action |
 |-----|--------|
-| 1/2/3 | Switch layer (Ground/Collision/Above); others dim to 20% |
-| Q / E | Cycle tile index |
-| L-Click | Paint tile |
-| R-Click | Erase tile |
-| M-Click / Alt+L-Click | Eyedropper |
-| Shift+←/→/↑/↓ | Expand map one tile |
-| Ctrl+Shift+←/→/↑/↓ | Shrink map one tile |
-| L-Click+drag on afflicted | Reposition (saves to `rooms.json` in dev) |
-| X | Save tilemap |
+| M | **Select mode** (safe; no paint/erase; drag objects) |
+| G | **Actual view** (hold to peek in-game full alpha) |
+| K | **Color mode** (paint solid persistent color tiles) |
+| 1-7 | Switch layer (Gnd/OnGnd/Coll/OnColl/Abv/OnAbv/Spec) |
+| Q / E | Cycle tile index (snaps back to tile mode) |
+| L-Click | Paint (tile/color) or select object |
+| R-Click | Erase (tile/color) |
+| M-Click | Eyedropper (samples whatever is under cursor) |
+| Shift+Arrow | Expand map one tile |
+| Ctrl+Sh+Arrow | Shrink map one tile |
+| X | **Smart Save** (awaits objects before tilemap reload) |
 
-Resize shifts all coord-bearing fields (doors, interactables, afflicted, player spawn) by the pixel offset automatically.
-
-**Dev-only save endpoints** (registered by `editorSavePlugin` in `vite.config.ts`, serve-only):
+Resize and drag (Select mode) shift all fields (doors, interactables, afflicted) automatically.
 - `POST /__editor/save-tilemap?roomId=<id>` → writes `public/assets/tilemaps/<id>.json`
-- `POST /__editor/save-object` → patches `{roomId, kind, id, x, y}` in `src/data/rooms.json`
-
+- POST /__editor/save-tilemap?roomId=<id> -> writes public/assets/tilemaps/<id>.json
+- POST /__editor/save-object -> patches {roomId, kind, id, x, y, spawnX, spawnY} in src/data/rooms.json (supports door, interactable, fflicted)
 ---
 
 ## Adding Content

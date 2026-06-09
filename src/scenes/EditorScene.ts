@@ -76,6 +76,8 @@ export class EditorScene extends Phaser.Scene {
     if (this.editorManager.isEditorActive()) {
       this.editorUI.setStatus(this.editorManager.getStatusText());
     }
+    this.editorUI.setPreview(this.editorManager.getPreviewState());
+    this.editorUI.setActiveTool(this.editorManager.getActiveTool());
   }
 
   // ── Stubs ────────────────────────────────────────────────────────────────
@@ -288,6 +290,11 @@ export class EditorScene extends Phaser.Scene {
   public getRoomManager(): RoomManager { return this.roomManager; }
   public getEditorManager(): RoomEditorManager { return this.editorManager; }
   public getDebugManager(): DebugManager { return this.debugManager; }
+
+  /** Interactable placeholder sprites — RoomEditorManager.handleSelection hit-tests these. */
+  public getInteractablePlaceholders(): Phaser.GameObjects.Sprite[] {
+    return Array.from(this.placeholderSprites.values());
+  }
 
   // ── Cleanup ──
 

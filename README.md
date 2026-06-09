@@ -79,13 +79,13 @@ For details on the audio directory structure and how to override assets, see the
 | Key | Action |
 |-----|--------|
 | **F1** | Toggle info HUD (FPS, room/player/cursor coords, tile GIDs, audio state) |
-| **F2** | Toggle live room editor (paint, layer isolation, drag, resize) |
-| **F3** | Toggle visual debug overlays (collision, doors, interactables, afflicted radii) |
-| **L / U / C** | Reload room / unlock all doors / cure all afflicted (when F1 or F2 is on) |
+| **#** | Open standalone tile atlas / painter editor |
+| **?** | Open main room/object editor scene |
+| **F1 / F3** | Toggle info HUD / visual debug overlays (in Game mode) |
 | **R**, **&#91; / &#93;**, **- / +** | Cycle reverb / wet mix / master volume (when F1 or F2 is on) |
 | **Shift + Click** | Teleport player to cursor (when F1 or F2 is on) |
 
-In editor mode (F2): `1/2/3` switch active layer, `Q/E` cycle tile, left-click paints, right-click erases, middle-click eyedrops, **Shift+Arrow** expands the map by one tile on that edge (Ctrl+Shift+Arrow shrinks), drag-and-drop on an afflicted repositions them, and `X` saves the tilemap. See `CLAUDE.md` § Debug & Editor Systems for the full list.
+The editor (?) features Select mode (M) for safe inspection and dragging, Color mode (K) for persistent solid colors, and Actual view (hold G) for in-game preview. 1-6 switch layers, Q/E cycle tile, and X saves objects + tilemap. See EDITORGUIDE.md for full details.
 
 ## Project Structure
 
@@ -113,7 +113,7 @@ The project is currently in active development.
 - **Death:** Any character death triggers a full game reset — all state wiped, protagonist restarts from scratch.
 - **Authored characters:** Kai (Former Lab Technician, house-b) and Maren (Local Shopkeeper, house-c) — each with a 3-page backstory and two recoverable items.
 - **Audio:** Modern SoundFont-based synthesis (SpessaSynth) with atmospheric convolution reverb (data-driven per room from `rooms.json`) and proximity-based layering.
-- **Tooling:** In-engine debug HUD (F1), visual overlays (F3), and a live room editor (F2) with tile palette, flood fill, undo/redo, door pairer, warp picker, and disk-backed save endpoints in dev.
+- **Tooling:** Standalone Tile Editor (#) and Room Editor (?) with Select mode, Color tiles, Actual view, Smart Save, floor/wall painting, and object dragging.
 - **Current Focus:** Phase 1 (unified interaction resolver) and building the first full puzzle chain as data.
 
 ---

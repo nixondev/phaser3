@@ -31,9 +31,9 @@ export class GameScene extends Phaser.Scene {
   private transitionManager!: TransitionManager;
   private rsm!: RoomStateManager;
   private collider?: Phaser.Physics.Arcade.Collider;
-  private onCollisionCollider?: Phaser.Physics.Arcade.Collider;
+  private colorCollider?: Phaser.Physics.Arcade.Collider;
+  private afflictedColorCollider?: Phaser.Physics.Arcade.Collider;
   private afflictedCollider?: Phaser.Physics.Arcade.Collider;
-  private afflictedOnCollisionCollider?: Phaser.Physics.Arcade.Collider;
   private playerAfflictedCollider?: Phaser.Physics.Arcade.Collider;
   private doorOverlaps: Phaser.Physics.Arcade.Collider[] = [];
   private nearDoor: DoorDefinition | null = null;
@@ -320,7 +320,6 @@ export class GameScene extends Phaser.Scene {
     });
     this.afflictedGroup.clear(true, true);
     if (this.afflictedCollider) this.afflictedCollider.destroy();
-    if (this.afflictedOnCollisionCollider) { this.afflictedOnCollisionCollider.destroy(); this.afflictedOnCollisionCollider = undefined; }
     if (this.playerAfflictedCollider) this.playerAfflictedCollider.destroy();
 
     const roomDef = this.roomManager.getCurrentRoomDef();
@@ -362,9 +361,10 @@ export class GameScene extends Phaser.Scene {
     // Collide afflicted with world
     const collisionLayer = this.roomManager.getCollisionLayer();
     this.afflictedCollider = this.physics.add.collider(this.afflictedGroup, collisionLayer);
-    const onCollisionLayer = this.roomManager.getOnCollisionLayer();
-    if (onCollisionLayer) {
-      this.afflictedOnCollisionCollider = this.physics.add.collider(this.afflictedGroup, onCollisionLayer);
+    if (this.afflictedColorCollider) { this.afflictedColorCollider.destroy(); this.afflictedColorCollider = undefined; }
+    const colorBodies = this.roomManager.getColorCollisionBodies();
+    if (colorBodies.length) {
+      this.afflictedColorCollider = this.physics.add.collider(this.afflictedGroup, colorBodies);
     }
 
     // Check for player reaching afflicted -> restart at home
@@ -1142,16 +1142,17 @@ export class GameScene extends Phaser.Scene {
 
   private setupCollisions(): void {
     if (this.collider) this.collider.destroy();
-    if (this.onCollisionCollider) { this.onCollisionCollider.destroy(); this.onCollisionCollider = undefined; }
+    if (this.colorCollider) { this.colorCollider.destroy(); this.colorCollider = undefined; }
     this.doorOverlaps.forEach((o) => o.destroy());
     this.doorOverlaps = [];
 
     const collisionLayer = this.roomManager.getCollisionLayer();
     this.collider = this.physics.add.collider(this.player, collisionLayer);
 
-    const onCollisionLayer = this.roomManager.getOnCollisionLayer();
-    if (onCollisionLayer) {
-      this.onCollisionCollider = this.physics.add.collider(this.player, onCollisionLayer);
+    // Color tiles on collision layers block the player like real walls.
+    const colorBodies = this.roomManager.getColorCollisionBodies();
+    if (colorBodies.length) {
+      this.colorCollider = this.physics.add.collider(this.player, colorBodies);
     }
 
     // Doors are now E-to-enter; nearDoor is updated each frame in checkInteractables.
@@ -1262,6 +1263,29 @@ export class GameScene extends Phaser.Scene {
     const adaptedMode = this.flashlight.isOn && this.rsm.hasItemWithKeyId('spectra-adapter');
     for (const [, sprite] of this.hiddenSprites) {
       sprite.setAlpha(adaptedMode && this.flashlight.isInCone(sprite.x, sprite.y) ? 1 : 0);
+    }
+
+    // Mask the Spectra tilemap layer to the flashlight cone
+    const spectraLayer = this.roomManager.getSpectraLayer();
+    if (spectraLayer) {
+      if (adaptedMode) {
+        spectraLayer.setAlpha(1);
+        // We could use a Geometry Mask here for a perfect cutout, but for now 
+        // we'll match the 'revealed sprites' behavior by just checking cone hits.
+        // Since it's a single layer, we'll just show the whole layer if any part 
+        // is in the cone, or hide it. 
+        // IMPROVEMENT: Use the flashlight's mask if available.
+        const mask = this.flashlight.getMask();
+        if (mask) {
+          spectraLayer.setMask(mask);
+        } else {
+          // Fallback: hide if flashlight is off or no adapter
+          spectraLayer.setAlpha(0);
+        }
+      } else {
+        spectraLayer.setAlpha(0);
+        spectraLayer.clearMask();
+      }
     }
   }
 

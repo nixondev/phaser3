@@ -87,10 +87,10 @@ requires adding a new noun — it requires arranging existing ones.
 
 ### Tiles
 
-- Three layers per room: Ground, Collision, Above.
-- Painted via the editor (press `?` on title).
-- Collision tiles block movement. Above tiles render over the player.
-- Tiles can change at room-load based on world flags — see `flagConditions`
+- Seven layers per room: Ground, OnGround, Collision, OnCollision, Above, OnAbove, Spectra.
+- Painted via the editor (press `?` on title). Persistent solid color tiles also supported.
+- Collision tiles block movement. OnCollision, OnGround, OnAbove, and Spectra are decorative.
+- Above and OnAbove render over the player. Spectra renders above those, visible only via Flashlight + Adapter.
   on `RoomDefinition` in `AUTHORING.md`.
 
 ### Interactables (E-targets)
@@ -435,7 +435,7 @@ click the room in the editor's left panel to visit it instantly.
 
 ### Editor (press `?` on title)
 
-- **Tile painting** (1/2/3 layers, Q/E to cycle, P palette, L-click
+- **Tile painting** (1-7 layers, Q/E to cycle, P palette, L-click
   paint, R-click erase, Alt/M-click eyedropper, Ctrl+Z undo).
 - **Resize map** (Shift+Arrow expand, Ctrl+Shift+Arrow shrink).
 - **Place interactable** (`I` + click — snippet to clipboard; add

@@ -181,10 +181,11 @@ function editorSavePlugin(): Plugin {
         try {
           const body = await readJsonBody(req) as {
             roomId?: string; kind?: string; id?: string; x?: number; y?: number;
+            spawnX?: number; spawnY?: number;
           };
-          const { roomId, kind, id, x, y } = body;
+          const { roomId, kind, id, x, y, spawnX, spawnY } = body;
           if (!roomId || !ROOM_ID_RE.test(roomId)) { send(res, 400, { error: 'invalid roomId' }); return; }
-          if (kind !== 'afflicted' && kind !== 'interactable') { send(res, 400, { error: 'invalid kind' }); return; }
+          if (kind !== 'afflicted' && kind !== 'interactable' && kind !== 'door') { send(res, 400, { error: 'invalid kind' }); return; }
           if (!id || typeof id !== 'string') { send(res, 400, { error: 'invalid id' }); return; }
           if (typeof x !== 'number' || typeof y !== 'number') { send(res, 400, { error: 'invalid x/y' }); return; }
 
@@ -192,12 +193,16 @@ function editorSavePlugin(): Plugin {
           const data = JSON.parse(raw);
           const room = data?.rooms?.[roomId];
           if (!room) { send(res, 404, { error: `room ${roomId} not found` }); return; }
-          const list = kind === 'afflicted' ? room.afflicted : room.interactables;
+          const list = kind === 'afflicted' ? room.afflicted : (kind === 'door' ? room.doors : room.interactables);
           if (!Array.isArray(list)) { send(res, 404, { error: `no ${kind} list on room` }); return; }
           const entry = list.find((e: any) => e?.id === id);
           if (!entry) { send(res, 404, { error: `${kind} ${id} not found` }); return; }
           entry.x = Math.round(x);
           entry.y = Math.round(y);
+          if (kind === 'door') {
+            if (typeof spawnX === 'number') entry.spawnX = Math.round(spawnX);
+            if (typeof spawnY === 'number') entry.spawnY = Math.round(spawnY);
+          }
           const tmp = `${roomsJsonPath}.tmp`;
           await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
           await fsp.rename(tmp, roomsJsonPath);
@@ -288,6 +293,39 @@ function editorSavePlugin(): Plugin {
           await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
           await fsp.rename(tmp, roomsJsonPath);
           send(res, 200, { ok: true, roomId, dark: room.dark, darkLevel: room.darkLevel });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
+      server.middlewares.use('/__editor/save-room-alpha', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const body = await readJsonBody(req) as {
+            roomId?: string; onGroundAlpha?: number; onCollisionAlpha?: number; onAboveAlpha?: number;
+          };
+          const { roomId, onGroundAlpha, onCollisionAlpha, onAboveAlpha } = body;
+          if (!roomId || !ROOM_ID_RE.test(roomId)) { send(res, 400, { error: 'invalid roomId' }); return; }
+
+          const raw = await fsp.readFile(roomsJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          const room = data?.rooms?.[roomId];
+          if (!room) { send(res, 404, { error: `room ${roomId} not found` }); return; }
+
+          const updateAlpha = (key: string, val: number | undefined, def: number) => {
+            if (val === undefined) return;
+            if (Math.abs(val - def) < 0.001) delete room[key];
+            else room[key] = parseFloat(val.toFixed(2));
+          };
+
+          updateAlpha('onGroundAlpha', onGroundAlpha, 0.2);
+          updateAlpha('onCollisionAlpha', onCollisionAlpha, 1.0);
+          updateAlpha('onAboveAlpha', onAboveAlpha, 1.0);
+
+          const tmp = `${roomsJsonPath}.tmp`;
+          await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          await fsp.rename(tmp, roomsJsonPath);
+          send(res, 200, { ok: true, roomId, onGroundAlpha: room.onGroundAlpha, onCollisionAlpha: room.onCollisionAlpha, onAboveAlpha: room.onAboveAlpha });
         } catch (e: any) {
           send(res, 500, { error: String(e?.message ?? e) });
         }

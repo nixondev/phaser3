@@ -17,7 +17,7 @@ Companion docs:
 
 **The editor is a separate scene, not an overlay.** Press `?` on the
 title screen to enter it. Gameplay is gameplay; authoring is authoring.
-There is no protagonist in the editor — your mouse cursor is the cursor.
+title screen to enter it. Gameplay is gameplay; authoring is authoring. Select mode (M) is the default safe mode for inspection and dragging.
 
 **You own every write.** The editor never modifies files silently.
 Every save copies JSON to your clipboard with a destination path; you
@@ -76,6 +76,9 @@ by room id.
 | `reverbMix` | 0..1 wet mix (default 0.3) |
 | `dark` | `true` → full darkness overlay; flashlight required |
 | `weather` | `rain-mild`, `rain-hard`, `dripping` |
+| `onGroundAlpha` | 0..1 alpha for decorative OnGround layer (default 0.2) |
+| `onCollisionAlpha` | 0..1 alpha for decorative OnCollision layer (default 1.0) |
+| `onAboveAlpha` | 0..1 alpha for decorative OnAbove layer (default 1.0) |
 | `flagConditions` | Applied at room load — see **World flags** section |
 
 Live-test reverb with **R** in the editor; adjust wet mix with **[** / **]**.
@@ -131,7 +134,7 @@ Every interactable is something the player can press E on.
 |-------|----------|-------------|
 | `id` | yes | Unique string within the room |
 | `x`, `y` | yes | World pixel position (tile×16) |
-| `type` | yes | `sign`, `item`, `recharge`, or any string for generic |
+| x, y | yes | World pixel position (tilex16). Draggable in Select mode. |
 | `tileFrame` | no | Tileset frame rendered in the world. Required for anything visible. |
 | `text` | yes | Dialog shown when E is pressed and all `requires` are met |
 | `requires` | no | Conditions; omit or `[]` for always-works |
@@ -524,7 +527,10 @@ all existing content is unaffected.
 
 | Key | Action |
 |-----|--------|
-| **1 / 2 / 3** | Switch layer (Ground / Collision / Above) |
+| **1-7** | Switch layer (Ground / OnGround / Collision / OnCollision / Above / OnAbove / Spectra) |
+| **M** | **Select mode** (safe; no paint; drag doors/objects) |
+| **G** | **Actual view** (hold to peek in-game look) |
+| **K** | **Color mode** (paint solid persistent color tiles) |
 | **Q / E** | Cycle tile index |
 | **P** | Toggle tile palette |
 | **F** | Flood fill tool |
@@ -560,7 +566,7 @@ For a brand-new room:
 
 1. `npm run new-room <id>` in the terminal.
 2. Refresh. Press `?`. Click `<id>` in the left panel.
-3. Paint Ground (1), Collision walls (2), Above details (3).
+3. Paint Ground (1), Collision walls (3), Above details (5).
 4. **X** — save tilemap.
 5. **O** — wire a door from an existing room. Paste both snippets into `rooms.json`.
 6. **I** — place each interactable. Paste snippets. Edit `tileFrame`,

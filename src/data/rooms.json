@@ -446,11 +446,10 @@
       "mapKey": "protag-house",
       "tilemapPath": "assets/tilemaps/protag-house.json",
       "width": 24,
-      "height": 21,
+      "height": 24,
       "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
-      "onGroundAlpha": 0.5,
       "playerSpawn": {
         "x": 768,
         "y": 736
@@ -519,8 +518,8 @@
         },
         {
           "id": "starter-flashlight",
-          "x": 864,
-          "y": 736,
+          "x": 437,
+          "y": 276,
           "type": "item",
           "tileFrame": 70,
           "text": "Your hand-held flashlight, resting on the dock.\nStill the only thing between you and the dark.",
@@ -533,8 +532,8 @@
         },
         {
           "id": "cure-vial-1",
-          "x": 608,
-          "y": 224,
+          "x": 344,
+          "y": 864,
           "type": "item",
           "tileFrame": 90,
           "text": "A small vial. Clinical label, hand-annotated.\n'Stabiliser — administer at close range.'",
@@ -546,8 +545,8 @@
         },
         {
           "id": "spectra-adapter-pickup",
-          "x": 352,
-          "y": 224,
+          "x": 1438,
+          "y": 95,
           "type": "item",
           "text": "A clip-on optical filter. Facility issue.\nSomething is written on the side: 'DO NOT LOSE'.",
           "item": {
@@ -567,7 +566,10 @@
         }
       ],
       "dark": true,
-      "darkLevel": 0.35
+      "darkLevel": 0.35,
+      "onAboveAlpha": 0.6,
+      "onCollisionAlpha": 0.6,
+      "onGroundAlpha": 0.25
     },
     "house-b": {
       "id": "house-b",
@@ -755,7 +757,9 @@
             "consumedOnUse": false
           }
         }
-      ]
+      ],
+      "onCollisionAlpha": 0.85,
+      "onGroundAlpha": 0
     },
     "records-office": {
       "id": "records-office",
@@ -1194,6 +1198,7 @@
       "name": "Community Garden",
       "mapKey": "room-garden",
       "tilemapPath": "assets/tilemaps/room-garden.json",
+      "onGroundAlpha": 0.25,
       "width": 25,
       "height": 12,
       "reverb": "city",

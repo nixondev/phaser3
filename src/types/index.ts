@@ -208,6 +208,8 @@ export interface RoomDefinition {
   dark?: boolean;
   darkLevel?: number;
   onGroundAlpha?: number;
+  onCollisionAlpha?: number;
+  onAboveAlpha?: number;
   weather?: WeatherType | WeatherType[];
   drips?: Array<{ x: number; y: number }>;
   /** Applied at room load: if the flag is set, mutate the live tilemap/state. */
