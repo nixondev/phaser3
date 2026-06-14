@@ -439,6 +439,8 @@ export default defineConfig({
   },
   server: {
     port: 8080,
+    host: true,
+    allowedHosts: ['.ngrok-free.app', '.ngrok-free.dev', '.ngrok.io'],
     open: true,
     watch: {
       // Prevent rooms.json writes from the editor save endpoints triggering HMR reloads.
