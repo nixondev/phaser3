@@ -1,6 +1,6 @@
 import { CAST_NAMESPACE, CastControllerMessage, CastInputButton } from '@cast/types';
 
-const DEFAULT_RECEIVER_APP_ID = '9FF6D9D8';
+const DEFAULT_RECEIVER_APP_ID = '4EBEABD4';
 
 export class CastSenderController {
   private root: HTMLElement;
