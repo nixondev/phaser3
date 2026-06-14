@@ -10,6 +10,8 @@ import { PauseScene } from '@scenes/PauseScene';
 import { EditorScene } from '@scenes/EditorScene';
 import { DocumentReaderScene } from '@scenes/DocumentReaderScene';
 import { TileEditorScene } from '@scenes/TileEditorScene';
+import { CastSenderController } from '@cast/CastSenderController';
+import { isCastReceiverMode, isCastSenderMode } from '@cast/runtime';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -34,12 +36,48 @@ const config: Phaser.Types.Core.GameConfig = {
   },
 };
 
-const game = new Phaser.Game(config);
+function startGame(): Phaser.Game {
+  return new Phaser.Game(config);
+}
+
+let activeGame: Phaser.Game | null = null;
+
+function bootSenderMode(): void {
+  const root = document.getElementById('game-container');
+  if (!root) return;
+  const controller = new CastSenderController(root);
+  controller.init();
+}
+
+function loadCastReceiverSdk(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '//www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load Cast receiver SDK.'));
+    document.head.appendChild(script);
+  });
+}
+
+if (isCastSenderMode()) {
+  bootSenderMode();
+} else if (isCastReceiverMode()) {
+  loadCastReceiverSdk()
+    .then(() => {
+      activeGame = startGame();
+    })
+    .catch((error) => {
+      console.error(error);
+      activeGame = startGame();
+    });
+} else {
+  activeGame = startGame();
+}
 
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    game.loop.sleep();
-  } else {
-    game.loop.wake();
-  }
+  const game = activeGame ?? undefined;
+  if (!game) return;
+  if (document.hidden) game.loop.sleep();
+  else game.loop.wake();
 });

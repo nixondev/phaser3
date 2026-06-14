@@ -17,7 +17,8 @@
       "@scenes/*": ["src/scenes/*"],
       "@entities/*": ["src/entities/*"],
       "@systems/*": ["src/systems/*"],
-      "@utils/*": ["src/utils/*"]
+      "@utils/*": ["src/utils/*"],
+      "@cast/*": ["src/cast/*"]
     }
   },
   "include": ["src"]

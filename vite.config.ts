@@ -434,6 +434,7 @@ export default defineConfig({
       '@entities': path.resolve(__dirname, 'src/entities'),
       '@systems': path.resolve(__dirname, 'src/systems'),
       '@utils': path.resolve(__dirname, 'src/utils'),
+      '@cast': path.resolve(__dirname, 'src/cast'),
     },
   },
   server: {

@@ -18,6 +18,7 @@ export class InputManager {
   private f3Key: Phaser.Input.Keyboard.Key;
   private charKeys: Phaser.Input.Keyboard.Key[];
   private virtualState: Partial<InputState> = {};
+  private pendingTaps = new Set<keyof InputState>();
 
   constructor(scene: Phaser.Scene) {
     const kb = scene.input.keyboard!;
@@ -47,47 +48,55 @@ export class InputManager {
     this.virtualState[key] = isDown;
   }
 
+  public setVirtualTap(key: keyof InputState) {
+    this.pendingTaps.add(key);
+  }
+
   /** Movement keys use isDown (continuous), action keys use JustDown (tap). */
   getState(): InputState {
+    const taps = this.pendingTaps;
+    this.pendingTaps = new Set();
     return {
       up: this.cursors.up.isDown || this.wasd.W.isDown || !!this.virtualState.up,
       down: this.cursors.down.isDown || this.wasd.S.isDown || !!this.virtualState.down,
       left: this.cursors.left.isDown || this.wasd.A.isDown || !!this.virtualState.left,
       right: this.cursors.right.isDown || this.wasd.D.isDown || !!this.virtualState.right,
-      action: Phaser.Input.Keyboard.JustDown(this.actionKey) || !!this.virtualState.action,
-      menu: Phaser.Input.Keyboard.JustDown(this.escKey) || !!this.virtualState.menu,
-      inventory: Phaser.Input.Keyboard.JustDown(this.tabKey) || !!this.virtualState.inventory,
-      drop: Phaser.Input.Keyboard.JustDown(this.dropKey) || !!this.virtualState.drop,
-      flashlight: Phaser.Input.Keyboard.JustDown(this.flashlightKey) || !!this.virtualState.flashlight,
-      debug: Phaser.Input.Keyboard.JustDown(this.f1Key) || !!this.virtualState.debug,
+      action: Phaser.Input.Keyboard.JustDown(this.actionKey) || taps.has('action') || !!this.virtualState.action,
+      menu: Phaser.Input.Keyboard.JustDown(this.escKey) || taps.has('menu') || !!this.virtualState.menu,
+      inventory: Phaser.Input.Keyboard.JustDown(this.tabKey) || taps.has('inventory') || !!this.virtualState.inventory,
+      drop: Phaser.Input.Keyboard.JustDown(this.dropKey) || taps.has('drop') || !!this.virtualState.drop,
+      flashlight: Phaser.Input.Keyboard.JustDown(this.flashlightKey) || taps.has('flashlight') || !!this.virtualState.flashlight,
+      debug: Phaser.Input.Keyboard.JustDown(this.f1Key) || taps.has('debug') || !!this.virtualState.debug,
       editor: false,
-      visuals: Phaser.Input.Keyboard.JustDown(this.f3Key) || !!this.virtualState.visuals,
-      char1: Phaser.Input.Keyboard.JustDown(this.charKeys[0]) || !!this.virtualState.char1,
-      char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]) || !!this.virtualState.char2,
-      char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]) || !!this.virtualState.char3,
-      char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]) || !!this.virtualState.char4,
+      visuals: Phaser.Input.Keyboard.JustDown(this.f3Key) || taps.has('visuals') || !!this.virtualState.visuals,
+      char1: Phaser.Input.Keyboard.JustDown(this.charKeys[0]) || taps.has('char1') || !!this.virtualState.char1,
+      char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]) || taps.has('char2') || !!this.virtualState.char2,
+      char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]) || taps.has('char3') || !!this.virtualState.char3,
+      char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]) || taps.has('char4') || !!this.virtualState.char4,
     };
   }
 
   /** All keys use JustDown — for menus/inventory cursor navigation. */
   getTapState(): InputState {
+    const taps = this.pendingTaps;
+    this.pendingTaps = new Set();
     return {
       up: Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.wasd.W) || !!this.virtualState.up,
       down: Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.wasd.S) || !!this.virtualState.down,
       left: Phaser.Input.Keyboard.JustDown(this.cursors.left) || Phaser.Input.Keyboard.JustDown(this.wasd.A) || !!this.virtualState.left,
       right: Phaser.Input.Keyboard.JustDown(this.cursors.right) || Phaser.Input.Keyboard.JustDown(this.wasd.D) || !!this.virtualState.right,
-      action: Phaser.Input.Keyboard.JustDown(this.actionKey) || !!this.virtualState.action,
-      menu: Phaser.Input.Keyboard.JustDown(this.escKey) || !!this.virtualState.menu,
-      inventory: Phaser.Input.Keyboard.JustDown(this.tabKey) || !!this.virtualState.inventory,
-      drop: Phaser.Input.Keyboard.JustDown(this.dropKey) || !!this.virtualState.drop,
-      flashlight: Phaser.Input.Keyboard.JustDown(this.flashlightKey) || !!this.virtualState.flashlight,
-      debug: Phaser.Input.Keyboard.JustDown(this.f1Key) || !!this.virtualState.debug,
+      action: Phaser.Input.Keyboard.JustDown(this.actionKey) || taps.has('action') || !!this.virtualState.action,
+      menu: Phaser.Input.Keyboard.JustDown(this.escKey) || taps.has('menu') || !!this.virtualState.menu,
+      inventory: Phaser.Input.Keyboard.JustDown(this.tabKey) || taps.has('inventory') || !!this.virtualState.inventory,
+      drop: Phaser.Input.Keyboard.JustDown(this.dropKey) || taps.has('drop') || !!this.virtualState.drop,
+      flashlight: Phaser.Input.Keyboard.JustDown(this.flashlightKey) || taps.has('flashlight') || !!this.virtualState.flashlight,
+      debug: Phaser.Input.Keyboard.JustDown(this.f1Key) || taps.has('debug') || !!this.virtualState.debug,
       editor: false,
-      visuals: Phaser.Input.Keyboard.JustDown(this.f3Key) || !!this.virtualState.visuals,
-      char1: Phaser.Input.Keyboard.JustDown(this.charKeys[0]) || !!this.virtualState.char1,
-      char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]) || !!this.virtualState.char2,
-      char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]) || !!this.virtualState.char3,
-      char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]) || !!this.virtualState.char4,
+      visuals: Phaser.Input.Keyboard.JustDown(this.f3Key) || taps.has('visuals') || !!this.virtualState.visuals,
+      char1: Phaser.Input.Keyboard.JustDown(this.charKeys[0]) || taps.has('char1') || !!this.virtualState.char1,
+      char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]) || taps.has('char2') || !!this.virtualState.char2,
+      char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]) || taps.has('char3') || !!this.virtualState.char3,
+      char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]) || taps.has('char4') || !!this.virtualState.char4,
     };
   }
 }

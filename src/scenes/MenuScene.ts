@@ -142,6 +142,22 @@ export class MenuScene extends Phaser.Scene {
       ease: 'Sine.easeInOut',
     });
 
+    const castBtn = this.add
+      .text(w / 2, h * 0.78, '[ CAST TO TV ]', {
+        fontSize: '14px',
+        fontFamily: 'Silkscreen',
+        color: '#5588bb',
+        stroke: '#1a2a3a',
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setDepth(TEXT_DEPTH)
+      .setInteractive({ useHandCursor: true });
+
+    castBtn.on('pointerover', () => castBtn.setColor('#88bbee'));
+    castBtn.on('pointerout',  () => castBtn.setColor('#5588bb'));
+    castBtn.on('pointerdown', () => { window.location.href = '?cast=sender'; });
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.rain?.destroy();
       this.rain = null;

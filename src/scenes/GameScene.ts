@@ -18,6 +18,8 @@ import { WeatherManager } from '@systems/WeatherManager';
 // import { SaveManager } from '@utils/SaveManager';
 import { checkRequires, checkRequiresAny, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
+import { CastReceiverInputBridge } from '@cast/CastReceiverInputBridge';
+import { isCastReceiverMode } from '@cast/runtime';
 
 const CLINIC_DOOR_X     = 672;
 const CLINIC_DOOR_Y     = 1216;
@@ -70,6 +72,7 @@ export class GameScene extends Phaser.Scene {
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
 
   private weatherManager!: WeatherManager;
+  private castReceiverInputBridge?: CastReceiverInputBridge;
 
   // TODO: remove before ship — Ctrl+Shift+/ unlock-all debug keys
   private dbgCtrlKey?: Phaser.Input.Keyboard.Key;
@@ -93,6 +96,10 @@ export class GameScene extends Phaser.Scene {
     this.inventoryCursor = 0;
 
     this.inputManager = new InputManager(this);
+    if (isCastReceiverMode()) {
+      this.castReceiverInputBridge = new CastReceiverInputBridge(this.inputManager);
+      this.castReceiverInputBridge.start();
+    }
     // TODO: remove before ship — Ctrl+Shift+/ unlock-all debug shortcut
     const kb = this.input.keyboard!;
     this.dbgCtrlKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL);
@@ -131,6 +138,7 @@ export class GameScene extends Phaser.Scene {
       if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
       this.weatherManager.destroy();
       this.darknessOverlay.destroy();
+      this.castReceiverInputBridge?.destroy();
     });
 
     this.events.on('character-switch-request', (id: string) => {
