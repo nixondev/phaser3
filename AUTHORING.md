@@ -1,8 +1,8 @@
 # WARDEN — Authoring Guide
 
 Practical reference for building content. The editor handles spatial
-work; all rules and text live in `src/data/rooms.json`. Every save is
-manual: editor copies JSON to your clipboard, you paste into the file.
+work; all rules and text live in `src/data/rooms.json`. In DEV, editor
+`X` save writes object moves/creates and tilemaps directly to disk.
 
 Companion docs:
 - `EDITORGUIDE.md` — keyboard shortcuts and the hands-on editor workflow.
@@ -19,11 +19,10 @@ Companion docs:
 title screen to enter it. Gameplay is gameplay; authoring is authoring.
 title screen to enter it. Gameplay is gameplay; authoring is authoring. Select mode (M) is the default safe mode for inspection and dragging.
 
-**You own every write.** The editor never modifies files silently.
-Every save copies JSON to your clipboard with a destination path; you
-paste, save, reload. Slower than auto-save by five seconds, but every
-change is intentional. `git diff` before committing, `git checkout
-<file>` to revert anything.
+**You own every write.** Press **X** to flush queued edits to disk.
+In non-DEV/fallback paths, the editor may copy JSON/tilemap content to
+clipboard for manual paste. Always `git diff` before committing,
+`git checkout <file>` to revert anything.
 
 ---
 
@@ -88,7 +87,8 @@ Live-test reverb with **R** in the editor; adjust wet mix with **[** / **]**.
 ## Doors
 
 Doors come in pairs — one in each room, pointing at each other. Use the
-editor's **O** key flow to auto-generate both snippets (see EDITORGUIDE.md).
+editor's **O** key flow to create both doors in memory, then press **X**
+to save both rooms (see EDITORGUIDE.md).
 
 ```json
 {

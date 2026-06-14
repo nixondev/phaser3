@@ -182,12 +182,16 @@ function editorSavePlugin(): Plugin {
           const body = await readJsonBody(req) as {
             roomId?: string; kind?: string; id?: string; x?: number; y?: number;
             spawnX?: number; spawnY?: number;
+            width?: number; height?: number;
+            targetRoom?: string; targetDoor?: string; direction?: string;
+            mode?: 'create' | 'update';
           };
-          const { roomId, kind, id, x, y, spawnX, spawnY } = body;
+          const { roomId, kind, id, x, y, spawnX, spawnY, width, height, targetRoom, targetDoor, direction, mode } = body;
           if (!roomId || !ROOM_ID_RE.test(roomId)) { send(res, 400, { error: 'invalid roomId' }); return; }
           if (kind !== 'afflicted' && kind !== 'interactable' && kind !== 'door') { send(res, 400, { error: 'invalid kind' }); return; }
           if (!id || typeof id !== 'string') { send(res, 400, { error: 'invalid id' }); return; }
           if (typeof x !== 'number' || typeof y !== 'number') { send(res, 400, { error: 'invalid x/y' }); return; }
+          if (mode !== undefined && mode !== 'create' && mode !== 'update') { send(res, 400, { error: 'invalid mode' }); return; }
 
           const raw = await fsp.readFile(roomsJsonPath, 'utf8');
           const data = JSON.parse(raw);
@@ -195,6 +199,40 @@ function editorSavePlugin(): Plugin {
           if (!room) { send(res, 404, { error: `room ${roomId} not found` }); return; }
           const list = kind === 'afflicted' ? room.afflicted : (kind === 'door' ? room.doors : room.interactables);
           if (!Array.isArray(list)) { send(res, 404, { error: `no ${kind} list on room` }); return; }
+          const existing = list.find((e: any) => e?.id === id);
+          if (mode === 'create') {
+            if (kind !== 'interactable' && kind !== 'door') { send(res, 400, { error: 'create mode supports interactables and doors' }); return; }
+            if (existing) { send(res, 409, { error: `${kind} ${id} already exists` }); return; }
+            if (kind === 'interactable') {
+              list.push({
+                id,
+                x: Math.round(x),
+                y: Math.round(y),
+                type: 'sign',
+                tileFrame: 0,
+                text: 'TODO: edit me',
+                requires: []
+              });
+            } else {
+              if (typeof width !== 'number' || typeof height !== 'number') { send(res, 400, { error: 'invalid width/height for door create' }); return; }
+              if (!targetRoom || !ROOM_ID_RE.test(targetRoom)) { send(res, 400, { error: 'invalid targetRoom for door create' }); return; }
+              if (!targetDoor || typeof targetDoor !== 'string') { send(res, 400, { error: 'invalid targetDoor for door create' }); return; }
+              if (!direction || typeof direction !== 'string') { send(res, 400, { error: 'invalid direction for door create' }); return; }
+              list.push({
+                id,
+                x: Math.round(x),
+                y: Math.round(y),
+                width: Math.round(width),
+                height: Math.round(height),
+                targetRoom,
+                targetDoor,
+                direction,
+                spawnX: typeof spawnX === 'number' ? Math.round(spawnX) : Math.round(x),
+                spawnY: typeof spawnY === 'number' ? Math.round(spawnY) : Math.round(y)
+              });
+            }
+          }
+
           const entry = list.find((e: any) => e?.id === id);
           if (!entry) { send(res, 404, { error: `${kind} ${id} not found` }); return; }
           entry.x = Math.round(x);

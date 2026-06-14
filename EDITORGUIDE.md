@@ -146,14 +146,14 @@ or door wiring. Git is the undo.
 
 ### Save the tilemap
 
-- **Smart Save (X)** -- auto-saves object positions first, then tilemap if dirty.
+- **Smart Save (X)** -- saves queued object edits first (moves + creates), then tilemap if dirty.
 - **Reload (L)** -- hot-reloads the current room from disk.
 - **Dev mode** — attempts to auto-save to
   `public/assets/tilemaps/<roomId>.json`. A toast confirms.
 - **Fallback** — if auto-save is unavailable, a toast appears:
   *"Tilemap copied. Paste into: `public/assets/tilemaps/<roomId>.json`"*
 
-Manual paste workflow:
+Manual paste workflow (tilemap fallback only):
 1. Open the named file in your IDE.
 2. `Cmd+A`, `Cmd+V`, `Cmd+S`.
 3. Refresh the browser. If it looks wrong, `git checkout <file>`.
@@ -180,22 +180,24 @@ it before any door connects: click it in the left panel.
 1. **O** — arm door-pairing. A room picker appears.
 2. **Up/Down** to choose the target room, **Enter** to confirm.
    Status bar reads `pair: click source door`.
-3. Click the tile in the **source** room where the door sits. The
-   clipboard gets the source room's full updated JSON. The editor
-   auto-warps to the target room.
-4. Click the tile in the **target** room. Clipboard gets the target
-   room's full updated JSON.
-5. In `rooms.json`, replace each room's `"<id>": {...}` entry with the
-   matching clipboard content. Save. Reload. Walk through.
+3. Click the tile in the **source** room where the door sits. The editor
+   creates the source door in memory and auto-warps to the target room.
+4. Click the tile in the **target** room. The target door is created and
+   cross-wired to the source.
+5. Press **X** once to save both new door entries to `rooms.json`.
+6. Reload (or walk-test immediately) to verify transitions.
 
 Doors come pre-wired with `targetRoom`, `targetDoor`, inferred
-Left-click and drag the cyan crosshair handle on the door. Movement is exact (no grid snap).
+`direction`, and spawn points.
 
 ### Move an existing door
 
-**Left-click and drag** the cyan crosshair handle on the door. It snaps
-to the tile grid while dragging. Release to emit the updated room JSON.
-Replace the room entry in `rooms.json`.
+**Left-click and drag** the cyan crosshair handle on the door to move the
+door zone. Press **X** to save.
+
+To edit where the player appears after transition, drag the **magenta spawn
+dot** connected to the door by a magenta line. Press **X** to save custom
+`spawnX` / `spawnY`.
 
 ---
 
@@ -212,11 +214,15 @@ into `rooms.json`.
 ### Place an interactable
 
 1. Press **I** to arm. Status bar shows `armed: interactable`.
-2. Click a tile. Snippet copies to clipboard.
-3. Paste under `rooms.<roomId>.interactables` in `rooms.json`.
-4. Edit the snippet — at minimum: `tileFrame`, `type`, `text`.
+2. Click a tile. A new interactable is inserted in memory and selected.
+3. Press **X** to persist it to `rooms.json`.
+4. Use **Properties -> Copy JSON**, edit the entry in `rooms.json` (at
+   minimum: `tileFrame`, `type`, `text`).
 5. Add `requires` / `produces` for puzzle logic (see AUTHORING.md).
 6. Reload.
+
+> Note: deletion for doors/interactables is not implemented in editor save
+> flow yet; remove entries manually in `rooms.json`.
 
 ### Place an NPC / afflicted
 
@@ -230,9 +236,8 @@ Left-click and drag the NPC or interactable placeholder sprite. Movement is exac
 On release, the new position is queued for disk save on X.
 ### Move an existing NPC
 
-**Left-click and drag** the NPC placeholder sprite. On release, a
-snippet with the new `x/y` copies and (in dev mode) auto-saves to
-`rooms.json`. The status bar shows where to update manually if needed.
+**Left-click and drag** the NPC placeholder sprite. On release, the new
+position is queued. Press **X** to save to `rooms.json`.
 
 ---
 
@@ -266,10 +271,10 @@ Use these to skip ahead while testing. They never persist.
 3. Paint Ground (1), Collision walls (2), Above details (3). Use **F**
    or **R** for large areas.
 4. **X** to save the tilemap.
-5. **O** to wire a door from an existing room. Paste both snippets into
-   `rooms.json`. Reload. Walk through.
-6. **I** for each interactable, **N** for each NPC. Paste snippets.
-   Edit `text`, `requires`, `produces` for puzzle logic.
+5. **O** to wire a door from an existing room, then press **X** to save
+   both door entries. Reload. Walk through.
+6. **I** for each interactable, **N** for each NPC, then press **X**.
+   Edit interactable `text`, `requires`, `produces` in `rooms.json`.
 7. **Audit** in the top bar. Fix any `[TODO]` or `[BROKEN]` doors.
 8. `git diff`, `git commit -m "basement"`.
 

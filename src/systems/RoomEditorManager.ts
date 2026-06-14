@@ -2,7 +2,7 @@
 import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
 import { DEPTH, GAME_CONFIG, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils/Constants';
-import { InputState } from '@/types';
+import { DoorDefinition, InputState, InteractableDef } from '@/types';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 /** Current editor selection, rendered as a thumbnail/swatch in the DOM panel. */
@@ -19,6 +19,7 @@ export class RoomEditorManager {
   private isActive: boolean = false;
   private selectedObject: any = null;
   private selectedDoor: { zone: Phaser.GameObjects.Zone; doorId: string } | null = null;
+  private selectedDoorSpawn: { zone: Phaser.GameObjects.Zone; doorId: string } | null = null;
   private doorHandles!: Phaser.GameObjects.Graphics;
   private dragOffset: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
   private wasPrimaryDown: boolean = false;
@@ -92,7 +93,10 @@ export class RoomEditorManager {
 
   private dirtyObjects = new Map<string, {
     type: 'afflicted' | 'interactable' | 'door';
-    id: string; x: number; y: number; spawnX?: number; spawnY?: number;
+    id: string; x: number; y: number; spawnX?: number; spawnY?: number; create?: boolean;
+    width?: number; height?: number;
+    targetRoom?: string; targetDoor?: string; direction?: string;
+    roomId?: string;
   }>();
   private pendingRoomSize: { width: number; height: number } | null = null;
   // True once tiles/colors have changed since the last save. Object-only moves
@@ -310,6 +314,7 @@ export class RoomEditorManager {
         this.paletteHighlight.clear();
         this.doorHandles.clear();
         this.selectedDoor = null;
+        this.selectedDoorSpawn = null;
         this.colorMode = false;
         this.actualView = false;
         this.roomManager.setColorEditorDim(null); // restore full alpha for game view
@@ -540,28 +545,30 @@ export class RoomEditorManager {
     const mapW = map.width;
     const mapH = map.height;
 
-    // Place-source: build source door, emit the source room's full updated
-    // entry, then warp to the target room.
+    // Place-source: build source door in-memory, queue create-save, then warp
+    // to the target room.
     if (this.pairPhase === 'place-source') {
       if (!this.pairTargetRoomId) { this.cancelPair(); return; }
       const sourceRoomId = this.roomManager.getCurrentRoomId();
-      const sourceDoorId = `door-${Math.random().toString(36).slice(2, 7)}`;
-      const targetDoorId = `door-${Math.random().toString(36).slice(2, 7)}`;
+      const sourceDoorId = this.generateUniqueDoorId(sourceRoomId);
+      const targetDoorId = this.generateUniqueDoorId(this.pairTargetRoomId);
       const dir = this.inferEdgeDirection(tileX, tileY, mapW, mapH);
       const door = this.buildDoorRect(tileX, tileY, dir, T);
 
-      const sourceDoor = {
+      const sourceDoor: DoorDefinition = {
         id: sourceDoorId,
         x: door.x, y: door.y,
         width: door.width, height: door.height,
         targetRoom: this.pairTargetRoomId,
         targetDoor: targetDoorId,
         direction: dir,
-        spawnX: door.spawnX, spawnY: door.spawnY,
-        requires: []
+        spawnX: door.spawnX, spawnY: door.spawnY
       };
 
-      this.emitRoomWithNewDoor(sourceRoomId, sourceDoor, 'source');
+      if (!this.insertDoorInRoom(sourceRoomId, sourceDoor, 'source')) {
+        this.cancelPair();
+        return;
+      }
 
       this.pairSource = { sourceRoomId, sourceDoorId, targetDoorId };
       this.pairPhase = 'place-target';
@@ -573,8 +580,8 @@ export class RoomEditorManager {
       return;
     }
 
-    // Place-target: build target door using the pre-generated cross-ref ids,
-    // emit the target room's full updated entry.
+    // Place-target: build target door using the pre-generated cross-ref ids
+    // and insert directly into room data.
     if (this.pairPhase === 'place-target') {
       const src = this.pairSource;
       const targetRoomId = this.roomManager.getCurrentRoomId();
@@ -586,45 +593,77 @@ export class RoomEditorManager {
       const dir = this.inferEdgeDirection(tileX, tileY, mapW, mapH);
       const door = this.buildDoorRect(tileX, tileY, dir, T);
 
-      const targetDoor = {
+      const targetDoor: DoorDefinition = {
         id: src.targetDoorId,
         x: door.x, y: door.y,
         width: door.width, height: door.height,
         targetRoom: src.sourceRoomId,
         targetDoor: src.sourceDoorId,
         direction: dir,
-        spawnX: door.spawnX, spawnY: door.spawnY,
-        requires: []
+        spawnX: door.spawnX, spawnY: door.spawnY
       };
 
-      this.emitRoomWithNewDoor(targetRoomId, targetDoor, 'target');
+      if (!this.insertDoorInRoom(targetRoomId, targetDoor, 'target')) {
+        this.cancelPair();
+        return;
+      }
+
+      this.showToast(`Placed door pair ${src.sourceDoorId} <-> ${src.targetDoorId} — press X to save`);
       this.cancelPair();
     }
   }
 
-  /**
-   * Build the full updated `"<roomId>": { ... }` JSON fragment for a room
-   * with one new door appended to its `doors` array. Copies it to the
-   * clipboard, logs it to the console, and toasts. The user pastes the
-   * entire fragment over the matching entry in `src/data/rooms.json`.
-   */
-  private emitRoomWithNewDoor(roomId: string, newDoor: object, label: 'source' | 'target'): void {
-    const data = RoomManager.getRoomsData();
-    const room = data.rooms[roomId];
-    if (!room) {
-      console.warn(`[Editor] emitRoomWithNewDoor: room "${roomId}" not found`);
-      return;
+  private generateUniqueDoorId(roomId: string): string {
+    const room = this.roomManager.getRoomDef(roomId) as any;
+    const existingIds = new Set(((room?.doors || []) as any[]).map(d => d?.id));
+    let id = `door-${Math.random().toString(36).slice(2, 7)}`;
+    while (existingIds.has(id)) {
+      id = `door-${Math.random().toString(36).slice(2, 7)}`;
     }
-    // Deep clone so we never mutate the live in-memory data.
-    const updated: any = JSON.parse(JSON.stringify(room));
-    updated.doors = [...(updated.doors || []), newDoor];
-    const fragment = `"${roomId}": ${JSON.stringify(updated, null, 2)}`;
-    const human = label === 'source' ? 'Source' : 'Target';
-    console.log(`[Editor] (${label}) Updated room "${roomId}". Replace its entry in src/data/rooms.json:\n${fragment}`);
-    this.copyAndToast(
-      fragment,
-      `${human} room JSON copied.\nReplace "${roomId}" entry in rooms.json.`
-    );
+    return id;
+  }
+
+  private insertDoorInRoom(roomId: string, newDoor: DoorDefinition, label: 'source' | 'target'): boolean {
+    const data = RoomManager.getRoomsData();
+    const room = data.rooms[roomId] as any;
+    if (!room) {
+      this.showToast(`Pairing failed: room "${roomId}" not found.`);
+      return false;
+    }
+    if (!Array.isArray(room.doors)) room.doors = [];
+    if (room.doors.some((d: any) => d?.id === newDoor.id)) {
+      this.showToast(`Pairing failed: door id "${newDoor.id}" already exists in ${roomId}.`);
+      return false;
+    }
+
+    room.doors.push(newDoor);
+
+    const dirtyKey = `${roomId}:${newDoor.id}`;
+    this.dirtyObjects.set(dirtyKey, {
+      type: 'door',
+      id: newDoor.id,
+      x: newDoor.x,
+      y: newDoor.y,
+      spawnX: newDoor.spawnX,
+      spawnY: newDoor.spawnY,
+      create: true,
+      width: newDoor.width,
+      height: newDoor.height,
+      targetRoom: newDoor.targetRoom,
+      targetDoor: newDoor.targetDoor,
+      direction: newDoor.direction,
+      roomId
+    });
+
+    if (this.roomManager.getCurrentRoomId() === roomId) {
+      const refreshPlaceholders = (this.scene as any).refreshEditorPlaceholders;
+      if (typeof refreshPlaceholders === 'function') {
+        refreshPlaceholders.call(this.scene);
+      }
+      this.redrawDoorHandles();
+      this.showToast(`Placed ${label} door ${newDoor.id} — press X to save`);
+    }
+    return true;
   }
 
   private inferEdgeDirection(tileX: number, tileY: number, mapW: number, mapH: number): string {
@@ -678,16 +717,50 @@ export class RoomEditorManager {
     let label: string;
 
     if (this.placementMode === 'interactable') {
-      snippet = {
-        id: `inter-${rand}`,
+      const room = this.roomManager.getCurrentRoomDef();
+      if (!room) return;
+
+      if (!Array.isArray(room.interactables)) room.interactables = [];
+
+      const existingIds = new Set(room.interactables.map(i => i.id));
+      let id = `inter-${rand}`;
+      while (existingIds.has(id)) {
+        id = `inter-${Math.random().toString(36).slice(2, 7)}`;
+      }
+
+      const interactable: InteractableDef = {
+        id,
         x, y,
         type: 'sign',
         tileFrame: this.selectedTileIndex > 0 ? this.selectedTileIndex - 1 : 0,
         text: 'TODO: edit me',
         requires: []
       };
-      path = `rooms.${roomId}.interactables`;
-      label = 'Interactable';
+      room.interactables.push(interactable);
+
+      const refreshPlaceholders = (this.scene as any).refreshEditorPlaceholders;
+      if (typeof refreshPlaceholders === 'function') {
+        refreshPlaceholders.call(this.scene);
+      }
+
+      const getInteractables = (this.scene as any).getInteractablePlaceholders;
+      if (typeof getInteractables === 'function') {
+        const sprites = getInteractables.call(this.scene) as Phaser.GameObjects.Sprite[];
+        const placed = sprites.find(s => s.getData('def')?.id === id);
+        if (placed) this.select(placed, 'interactable');
+      }
+
+      this.dirtyObjects.set(id, { type: 'interactable', id, x, y, create: true });
+
+      this.showToast(`Placed ${id} — press X to save`);
+
+      if (!import.meta.env.DEV) {
+        const json = JSON.stringify(interactable, null, 2);
+        this.copyAndToast(json, `Interactable added in-memory. DEV save endpoint unavailable.`);
+      }
+
+      this.placementMode = null;
+      return;
     } else if (this.placementMode === 'afflicted') {
       snippet = {
         id: `aff-${rand}`,
@@ -747,6 +820,9 @@ export class RoomEditorManager {
     this.paletteContainer.add(bg);
 
     let currentRow = 0;
+
+    // We leave the palette internals unchanged to avoid regressions.
+    // Existing implementation continues below.
 
     for (const ts of tilesets) {
       const spritesheetKey = tilesetSpritesheetKey(ts.name);
@@ -1051,8 +1127,24 @@ export class RoomEditorManager {
   private handleSelection(justDown: boolean): void {
     const pointer = this.scene.input.activePointer;
 
-    if (justDown && !this.selectedObject && !this.selectedDoor) {
+    if (justDown && !this.selectedObject && !this.selectedDoor && !this.selectedDoorSpawn) {
       const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
+      const T = GAME_CONFIG.TILE_SIZE;
+      const spawnRadius = Math.max(4, Math.floor(T / 4));
+
+      // 0. Check door spawn handles first (small circle at spawnX/spawnY)
+      for (const zone of this.roomManager.getDoorZones()) {
+        const doorDef = zone.getData('doorDef') as { id?: string; spawnX?: number; spawnY?: number } | undefined;
+        const spawnX = doorDef?.spawnX;
+        const spawnY = doorDef?.spawnY;
+        if (typeof spawnX !== 'number' || typeof spawnY !== 'number') continue;
+        const dist = Phaser.Math.Distance.Between(worldPoint.x, worldPoint.y, spawnX, spawnY);
+        if (dist <= spawnRadius + 4) {
+          this.selectedDoorSpawn = { zone, doorId: doorDef?.id ?? '' };
+          this.dragOffset.set(worldPoint.x - spawnX, worldPoint.y - spawnY);
+          return;
+        }
+      }
 
       // 1. Check Afflicted
       const afflictedGroup = (this.scene as any).afflictedGroup as Phaser.GameObjects.Group;
@@ -1127,6 +1219,33 @@ export class RoomEditorManager {
       }
       if (this.keys.ESC.isDown) this.selectedDoor = null;
     }
+
+    // Door spawn drag — direct spawn handle placement.
+    if (this.selectedDoorSpawn) {
+      if (pointer.primaryDown) {
+        const spawnX = worldPoint.x - this.dragOffset.x;
+        const spawnY = worldPoint.y - this.dragOffset.y;
+        const { zone, doorId } = this.selectedDoorSpawn;
+        const roomId = this.roomManager.getCurrentRoomId();
+        const data = RoomManager.getRoomsData();
+        const room = data.rooms[roomId];
+        if (!room) {
+          this.selectedDoorSpawn = null;
+          return;
+        }
+        const door = (room.doors || []).find((d: any) => d.id === doorId) as any;
+        if (!door) {
+          this.selectedDoorSpawn = null;
+          return;
+        }
+        door.spawnX = Math.round(spawnX);
+        door.spawnY = Math.round(spawnY);
+        zone.setData('doorDef', { ...(zone.getData('doorDef') || {}), spawnX: door.spawnX, spawnY: door.spawnY });
+      } else {
+        if (justUp) this.releaseDoorSpawnDrag();
+      }
+      if (this.keys.ESC.isDown) this.selectedDoorSpawn = null;
+    }
   }
 
   // â”€â”€ Door dragging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1138,6 +1257,8 @@ export class RoomEditorManager {
     for (const zone of this.roomManager.getDoorZones()) {
       const body = zone.body as Phaser.Physics.Arcade.StaticBody;
       const isDragging = this.selectedDoor?.zone === zone;
+      const isDraggingSpawn = this.selectedDoorSpawn?.zone === zone;
+      const doorDef = zone.getData('doorDef') as { spawnX?: number; spawnY?: number } | undefined;
       // Outer square
       this.doorHandles.lineStyle(4, isDragging ? 0xffffff : 0x00ffff, isDragging ? 1 : 0.7);
       this.doorHandles.strokeRect(body.x, body.y, body.width, body.height);
@@ -1146,7 +1267,43 @@ export class RoomEditorManager {
       const cy = body.y + body.height / 2;
       this.doorHandles.lineBetween(cx - T / 4, cy, cx + T / 4, cy);
       this.doorHandles.lineBetween(cx, cy - T / 4, cx, cy + T / 4);
+
+      const spawnX = doorDef?.spawnX;
+      const spawnY = doorDef?.spawnY;
+      if (typeof spawnX === 'number' && typeof spawnY === 'number') {
+        // Link door zone center to spawn point so transition geometry is visible.
+        this.doorHandles.lineStyle(2, (isDragging || isDraggingSpawn) ? 0xff99ff : 0xff00ff, (isDragging || isDraggingSpawn) ? 1 : 0.8);
+        this.doorHandles.lineBetween(cx, cy, spawnX, spawnY);
+        // Spawn marker (filled + outline) for quick targeting while editing.
+        this.doorHandles.fillStyle(0xff00ff, (isDragging || isDraggingSpawn) ? 0.9 : 0.7);
+        this.doorHandles.fillCircle(spawnX, spawnY, Math.max(4, Math.floor(T / 4)));
+        this.doorHandles.lineStyle(2, isDraggingSpawn ? 0xffffff : 0xff66ff, 1);
+        this.doorHandles.strokeCircle(spawnX, spawnY, Math.max(4, Math.floor(T / 4)));
+      }
     }
+  }
+
+  private releaseDoorSpawnDrag(): void {
+    if (!this.selectedDoorSpawn) return;
+    const { zone, doorId } = this.selectedDoorSpawn;
+    const roomId = this.roomManager.getCurrentRoomId();
+    const data = RoomManager.getRoomsData();
+    const room = data.rooms[roomId];
+    if (!room) { this.selectedDoorSpawn = null; return; }
+    const door = (room.doors || []).find((d: any) => d.id === doorId) as any;
+    if (door) {
+      door.spawnX = Math.round(door.spawnX ?? zone.x);
+      door.spawnY = Math.round(door.spawnY ?? zone.y);
+      zone.setData('doorDef', { ...(zone.getData('doorDef') || {}), spawnX: door.spawnX, spawnY: door.spawnY });
+      this.dirtyObjects.set(doorId, {
+        type: 'door', id: doorId,
+        x: Math.round(door.x ?? (zone.body as Phaser.Physics.Arcade.StaticBody).x),
+        y: Math.round(door.y ?? (zone.body as Phaser.Physics.Arcade.StaticBody).y),
+        spawnX: door.spawnX, spawnY: door.spawnY,
+      });
+      this.showToast(`Moved door spawn ${doorId} — press X to save`);
+    }
+    this.selectedDoorSpawn = null;
   }
 
   private releaseDoorDrag(): void {
@@ -1446,7 +1603,14 @@ export class RoomEditorManager {
 
   public clearDirtyState(): void {
     this.pendingRoomSize = null;
-    this.dirtyObjects.clear();
+    // Preserve cross-room door creates while pairing (source room -> warp target).
+    // EditorScene reload clears dirty state on room change, so without this the
+    // first half of a newly created pair would be dropped before save.
+    this.dirtyObjects = new Map(
+      [...this.dirtyObjects.entries()].filter(([, entry]) =>
+        entry.type === 'door' && entry.create === true && typeof entry.roomId === 'string'
+      )
+    );
     this.tilemapDirty = false;
   }
 
@@ -1599,10 +1763,13 @@ export class RoomEditorManager {
   }
   private async saveObjectToDisk(entry: {
     type: 'afflicted' | 'interactable' | 'door';
-    id: string; x: number; y: number; spawnX?: number; spawnY?: number;
+    id: string; x: number; y: number; spawnX?: number; spawnY?: number; create?: boolean;
+    width?: number; height?: number;
+    targetRoom?: string; targetDoor?: string; direction?: string;
+    roomId?: string;
   }): Promise<void> {
     if (!import.meta.env.DEV) return;
-    const roomId = this.roomManager.getCurrentRoomId();
+    const roomId = entry.roomId ?? this.roomManager.getCurrentRoomId();
     try {
       const resp = await fetch('/__editor/save-object', {
         method: 'POST',
@@ -1610,11 +1777,16 @@ export class RoomEditorManager {
         body: JSON.stringify({
           roomId, kind: entry.type, id: entry.id, x: entry.x, y: entry.y,
           spawnX: entry.spawnX, spawnY: entry.spawnY,
+          mode: entry.create ? 'create' : 'update',
+          width: entry.width, height: entry.height,
+          targetRoom: entry.targetRoom, targetDoor: entry.targetDoor, direction: entry.direction,
         })
       });
       const result = await resp.json();
       if (!result.ok) throw new Error(result.error || 'Unknown error');
-      this.showToast(`Saved ${entry.type} "${entry.id}" position.`);
+      this.showToast(entry.create
+        ? `Saved new ${entry.type} "${entry.id}".`
+        : `Saved ${entry.type} "${entry.id}" position.`);
     } catch (err: any) {
       console.error('[Editor] Object save failed:', err);
       this.showToast(`Disk save failed: ${err.message}`);
@@ -2068,6 +2240,7 @@ export class RoomEditorManager {
     this.scene.input.off('wheel', this.onWheel, this);
     this.deselect();
     this.selectedDoor = null;
+    this.selectedDoorSpawn = null;
     this.toastTween?.stop();
     this.editorText?.destroy();
     this.tileCursor?.destroy();

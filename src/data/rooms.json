@@ -464,8 +464,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
           "direction": "up",
-          "spawnX": 640,
-          "spawnY": 192,
+          "spawnX": 644,
+          "spawnY": 116,
           "lockedMessage": "The door opens slightly and then stops suddenly. You can see chains on the outer side of door, holding it closed.",
           "unlockedMessage": "The chain snaps. So does the prybar",
           "requiredKeys": [
@@ -474,15 +474,15 @@
         },
         {
           "id": "door-uwnva",
-          "x": 1466,
-          "y": 1042,
+          "x": 1471,
+          "y": 1041,
           "width": 64,
           "height": 64,
           "targetRoom": "room-vault",
           "targetDoor": "door-sd3ig",
           "direction": "left",
-          "spawnX": 1442,
-          "spawnY": 1118,
+          "spawnX": 1440,
+          "spawnY": 1070,
           "requires": []
         }
       ],
@@ -835,8 +835,8 @@
           "targetRoom": "city-street",
           "targetDoor": "city-utility-door",
           "direction": "up",
-          "spawnX": 640,
-          "spawnY": 192
+          "spawnX": 641,
+          "spawnY": 110
         },
         {
           "id": "utility-trapdoor",
@@ -848,7 +848,7 @@
           "targetDoor": "tunnel-utility-entrance",
           "direction": "down",
           "spawnX": 160,
-          "spawnY": 640
+          "spawnY": 723
         }
       ],
       "interactables": [
@@ -859,14 +859,6 @@
           "type": "recharge",
           "text": "The substation's backup cells are humming. Flashlight recharged.",
           "tileFrame": 39
-        },
-        {
-          "id": "substation-trapdoor-desc",
-          "x": 128,
-          "y": 768,
-          "type": "sign",
-          "text": "A heavy wooden trapdoor. It seems to lead to the maintenance tunnels.",
-          "tileFrame": 34
         }
       ]
     },
@@ -1263,20 +1255,21 @@
       "doors": [
         {
           "id": "door-ndhrz",
-          "x": 352,
-          "y": 256,
+          "x": 549,
+          "y": -28,
           "width": 64,
           "height": 64,
           "targetRoom": "ration-office",
           "targetDoor": "door-zlei6",
           "direction": "up",
-          "spawnX": 384,
-          "spawnY": 384,
+          "spawnX": 581,
+          "spawnY": 100,
           "requires": []
         }
       ],
       "interactables": [],
-      "afflicted": []
+      "afflicted": [],
+      "onGroundAlpha": 0.3
     },
     "title-screen": {
       "id": "title-screen",
