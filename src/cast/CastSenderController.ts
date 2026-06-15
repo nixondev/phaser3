@@ -149,7 +149,7 @@ export class CastSenderController {
     const context = window.cast.framework.CastContext.getInstance();
     context.setOptions({
       receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
-      autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+      autoJoinPolicy: 'origin_scoped',
     });
     LOG('CastContextEventType:', window.cast.framework.CastContextEventType);
     LOG('SessionState:', window.cast.framework.SessionState);
