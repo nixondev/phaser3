@@ -9,7 +9,8 @@ const TAP_KEYS: Array<keyof InputState> = [
 export class CastReceiverInputBridge {
   private inputManager: InputManager;
   private active = false;
-  private messageBus?: any;
+  private context?: any;
+  private boundHandler = (event: any) => this.onMessage(event.data);
 
   constructor(inputManager: InputManager) {
     this.inputManager = inputManager;
@@ -18,13 +19,12 @@ export class CastReceiverInputBridge {
   start(): void {
     const cast = window.cast;
     if (!cast?.framework) return;
-    const context = cast.framework.CastReceiverContext.getInstance();
+    this.context = cast.framework.CastReceiverContext.getInstance();
+    // Listener must be registered before context.start()
+    this.context.addCustomMessageListener(CAST_NAMESPACE, this.boundHandler);
     const options = new cast.framework.CastReceiverOptions();
     options.disableIdleTimeout = true;
-    context.start(options);
-    const bus = context.getCastMessageBus(CAST_NAMESPACE);
-    bus.onMessage = (event: any) => this.onMessage(event.data);
-    this.messageBus = bus;
+    this.context.start(options);
     this.active = true;
   }
 
@@ -33,23 +33,17 @@ export class CastReceiverInputBridge {
   }
 
   destroy(): void {
-    if (this.messageBus) {
-      this.messageBus.onMessage = null;
-      this.messageBus = undefined;
+    if (this.context) {
+      this.context.removeCustomMessageListener(CAST_NAMESPACE, this.boundHandler);
+      this.context = undefined;
     }
     this.active = false;
   }
 
-  private onMessage(raw: unknown): void {
-    if (typeof raw !== 'string') return;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return;
-    }
-    if (!isCastControllerMessage(parsed)) return;
-    this.applyMessage(parsed);
+  private onMessage(data: unknown): void {
+    // CAF v3 automatically parses JSON namespaces — data is already an object
+    if (!isCastControllerMessage(data)) return;
+    this.applyMessage(data);
   }
 
   private applyMessage(message: CastControllerMessage): void {

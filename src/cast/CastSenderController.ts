@@ -67,16 +67,14 @@ export class CastSenderController {
     };
     const script = document.createElement('script');
     script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
-    script.async = true;
     document.head.appendChild(script);
   }
 
   private initializeCast(): void {
-    const cast = window.cast;
-    const options = new cast.framework.CastOptions();
-    options.receiverApplicationId = DEFAULT_RECEIVER_APP_ID;
-    options.autoJoinPolicy = window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED;
-    cast.framework.CastContext.getInstance().setOptions(options);
+    window.cast.framework.CastContext.getInstance().setOptions({
+      receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
+      autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
+    });
     this.setStatus('Cast ready. Tap connect.');
   }
 

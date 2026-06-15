@@ -17,7 +17,14 @@
       "Bash(dir \"C:\\\\Users\\\\flyki\\\\IdeaProjects\\\\claudeded\\\\*.md\" /b)",
       "Bash(cp assets_src/tiles/* assets_src/tiles_old/)",
       "Bash(rm assets_src/tiles/*)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "WebFetch(domain:developers.google.com)",
+      "WebSearch",
+      "WebFetch(domain:docs.theoplayer.com)",
+      "WebFetch(domain:optiview.dolby.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:developer.bitmovin.com)"
     ]
   }
 }
