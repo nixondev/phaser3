@@ -1,5 +1,8 @@
 import { CAST_NAMESPACE, CastControllerMessage, CastInputButton } from '@cast/types';
 
+const LOG = (...args: unknown[]) => console.log('[cast:sender]', ...args);
+const ERR = (...args: unknown[]) => console.error('[cast:sender]', ...args);
+
 const DEFAULT_RECEIVER_APP_ID = '4EBEABD4';
 
 export class CastSenderController {
@@ -57,20 +60,29 @@ export class CastSenderController {
   }
 
   private loadSdk(): void {
+    LOG('loadSdk() — page origin:', window.location.origin);
     if (window.cast?.framework) {
+      LOG('SDK already present, skipping script load');
       this.initializeCast();
       return;
     }
     window.__onGCastApiAvailable = (isAvailable: boolean) => {
+      LOG('__onGCastApiAvailable fired, isAvailable:', isAvailable);
       if (isAvailable) this.initializeCast();
-      else this.setStatus('Cast SDK unavailable.');
+      else {
+        ERR('Cast SDK unavailable — page must be served over HTTPS from Chrome on Android');
+        this.setStatus('Cast SDK unavailable.');
+      }
     };
+    LOG('injecting Cast sender SDK script');
     const script = document.createElement('script');
     script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+    script.onerror = () => ERR('failed to load Cast sender SDK script');
     document.head.appendChild(script);
   }
 
   private initializeCast(): void {
+    LOG('initializeCast() — app ID:', DEFAULT_RECEIVER_APP_ID);
     window.cast.framework.CastContext.getInstance().setOptions({
       receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
       autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
@@ -84,17 +96,26 @@ export class CastSenderController {
       this.setStatus('Cast SDK not initialized.');
       return;
     }
+    LOG('requestSession()');
     context.requestSession()
       .then(() => {
         this.session = context.getCurrentSession();
+        LOG('session established:', this.session);
         this.setStatus('Connected to Chromecast.');
       })
-      .catch((err: unknown) => this.setStatus(`Connection failed: ${String(err)}`));
+      .catch((err: unknown) => {
+        ERR('requestSession failed:', err);
+        this.setStatus(`Connection failed: ${String(err)}`);
+      });
   }
 
   private sendInput(button: CastInputButton, isDown: boolean): void {
-    if (!this.session) return;
+    if (!this.session) {
+      LOG('sendInput ignored — no active session');
+      return;
+    }
     const message: CastControllerMessage = { type: 'input', button, isDown, timestamp: Date.now() };
+    LOG(`sendInput: ${button} isDown=${isDown}`);
     this.session.sendMessage(CAST_NAMESPACE, JSON.stringify(message));
   }
 
