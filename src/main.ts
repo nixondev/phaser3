@@ -11,6 +11,7 @@ import { EditorScene } from '@scenes/EditorScene';
 import { DocumentReaderScene } from '@scenes/DocumentReaderScene';
 import { TileEditorScene } from '@scenes/TileEditorScene';
 import { CastSenderController } from '@cast/CastSenderController';
+import { CastReceiverInputBridge } from '@cast/CastReceiverInputBridge';
 import { isCastReceiverMode, isCastSenderMode } from '@cast/runtime';
 import { CAST_NAMESPACE } from '@cast/types';
 
@@ -70,8 +71,9 @@ if (isCastSenderMode()) {
       const cast = (window as any).cast;
       if (cast?.framework) {
         const ctx = cast.framework.CastReceiverContext.getInstance();
-        // Register namespace before start() as required by CAF v3
-        ctx.addCustomMessageListener(CAST_NAMESPACE, () => {});
+        const bridge = new CastReceiverInputBridge();
+        // Register listener before start() as required by CAF v3
+        bridge.start();
         const opts = new cast.framework.CastReceiverOptions();
         opts.disableIdleTimeout = true;
         console.log('[cast:receiver] context.start() called from main.ts');

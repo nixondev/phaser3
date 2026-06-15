@@ -10,14 +10,9 @@ const TAP_KEYS: Array<keyof InputState> = [
 ];
 
 export class CastReceiverInputBridge {
-  private inputManager: InputManager;
   private active = false;
   private context?: any;
   private boundHandler = (event: any) => this.onMessage(event.data);
-
-  constructor(inputManager: InputManager) {
-    this.inputManager = inputManager;
-  }
 
   start(): void {
     LOG('start() called — attaching real message listener');
@@ -28,7 +23,6 @@ export class CastReceiverInputBridge {
     }
     this.context = cast.framework.CastReceiverContext.getInstance();
     // context.start() was already called in main.ts immediately after SDK load
-    // Just register the real listener now (replaces the placeholder added in main.ts)
     this.context.addCustomMessageListener(CAST_NAMESPACE, this.boundHandler);
     this.active = true;
     LOG('receiver bridge active');
@@ -61,9 +55,9 @@ export class CastReceiverInputBridge {
     const key = message.button;
     LOG(`input: ${key} isDown=${message.isDown}`);
     if (TAP_KEYS.includes(key)) {
-      if (message.isDown) this.inputManager.setVirtualTap(key);
+      if (message.isDown) InputManager.injectTap(key);
       return;
     }
-    this.inputManager.setVirtualInput(key, message.isDown);
+    InputManager.injectInput(key, message.isDown);
   }
 }
