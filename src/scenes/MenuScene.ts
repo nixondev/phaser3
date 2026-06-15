@@ -6,6 +6,7 @@ import { RoomStateManager } from '@systems/RoomStateManager';
 import { RainEffect } from '@systems/RainEffect';
 import { CloudEffect } from '@systems/CloudEffect';
 import { Afflicted } from '@entities/Afflicted';
+import { InputManager } from '@systems/InputManager';
 
 const TEXT_DEPTH = DEPTH.UI;
 
@@ -16,6 +17,7 @@ export class MenuScene extends Phaser.Scene {
   private wanderers: Afflicted[] = [];
   private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
+  private inputManager!: InputManager;
 
   constructor() {
     super(SCENES.MENU);
@@ -169,9 +171,9 @@ export class MenuScene extends Phaser.Scene {
       this.edgeShadows = undefined;
     });
 
+    this.inputManager = new InputManager(this);
     this.input.keyboard!.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
-    this.input.keyboard!.on('keydown-E',     () => this.startGame());
     this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
       if (event.key === '?') this.openEditor();
       if (event.key === '#') this.openTileEditor();
@@ -182,8 +184,8 @@ export class MenuScene extends Phaser.Scene {
   update(_time: number, delta: number): void {
     this.rain?.update(delta);
     this.cloudEffect?.update(delta);
-    // Pass a far-off player position so afflicted stay in wandering state
     for (const a of this.wanderers) a.updateAI(-9999, -9999);
+    if (!this.started && this.inputManager.getState().action) this.startGame();
   }
 
   // ── Title room background ────────────────────────────────────────────────
