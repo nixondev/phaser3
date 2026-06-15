@@ -146,10 +146,29 @@ export class CastSenderController {
 
   private initializeCast(): void {
     LOG('initializeCast() — app ID:', DEFAULT_RECEIVER_APP_ID);
-    window.cast.framework.CastContext.getInstance().setOptions({
+    const context = window.cast.framework.CastContext.getInstance();
+    context.setOptions({
       receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
       autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
     });
+    context.addEventListener(
+      window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
+      (event: any) => {
+        const state = event.sessionState;
+        LOG('session state changed:', state);
+        const ss = window.cast.framework.SessionState;
+        if (state === ss.SESSION_STARTED || state === ss.SESSION_RESUMED) {
+          this.session = context.getCurrentSession();
+          LOG('session active:', this.session);
+          this.showController();
+        } else if (state === ss.SESSION_ENDED) {
+          LOG('session ended');
+          this.session = null;
+          this.showConnect();
+          this.setStatus('Disconnected.');
+        }
+      }
+    );
     this.setStatus('Cast ready. Tap connect.');
   }
 
@@ -162,14 +181,11 @@ export class CastSenderController {
     LOG('requestSession()');
     this.setStatus('Connecting...');
     context.requestSession()
-      .then(() => {
-        this.session = context.getCurrentSession();
-        LOG('session established:', this.session);
-        this.showController();
-      })
+      .then(() => LOG('requestSession() resolved'))
       .catch((err: unknown) => {
-        ERR('requestSession failed:', err);
-        this.setStatus(`Connection failed: ${String(err)}`);
+        // SDK sometimes rejects even on success; session state listener is authoritative
+        LOG('requestSession() rejected (may still connect via state listener):', err);
+        if (!this.session) this.setStatus(`Connection failed: ${String(err)}`);
       });
   }
 
