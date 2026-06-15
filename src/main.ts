@@ -12,6 +12,7 @@ import { DocumentReaderScene } from '@scenes/DocumentReaderScene';
 import { TileEditorScene } from '@scenes/TileEditorScene';
 import { CastSenderController } from '@cast/CastSenderController';
 import { isCastReceiverMode, isCastSenderMode } from '@cast/runtime';
+import { CAST_NAMESPACE } from '@cast/types';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -65,6 +66,19 @@ if (isCastSenderMode()) {
 } else if (isCastReceiverMode()) {
   loadCastReceiverSdk()
     .then(() => {
+      // Call start() immediately before Phaser loads — Cast times out if this is delayed
+      const cast = (window as any).cast;
+      if (cast?.framework) {
+        const ctx = cast.framework.CastReceiverContext.getInstance();
+        // Register namespace before start() as required by CAF v3
+        ctx.addCustomMessageListener(CAST_NAMESPACE, () => {});
+        const opts = new cast.framework.CastReceiverOptions();
+        opts.disableIdleTimeout = true;
+        console.log('[cast:receiver] context.start() called from main.ts');
+        ctx.start(opts);
+      } else {
+        console.error('[cast:receiver] cast.framework not available after SDK load');
+      }
       activeGame = startGame();
     })
     .catch((error) => {

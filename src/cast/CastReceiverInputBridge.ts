@@ -20,19 +20,16 @@ export class CastReceiverInputBridge {
   }
 
   start(): void {
-    LOG('start() called');
+    LOG('start() called — attaching real message listener');
     const cast = window.cast;
     if (!cast?.framework) {
-      ERR('window.cast.framework not found — receiver SDK not loaded');
+      ERR('window.cast.framework not found');
       return;
     }
     this.context = cast.framework.CastReceiverContext.getInstance();
-    LOG('registering custom message listener for namespace:', CAST_NAMESPACE);
+    // context.start() was already called in main.ts immediately after SDK load
+    // Just register the real listener now (replaces the placeholder added in main.ts)
     this.context.addCustomMessageListener(CAST_NAMESPACE, this.boundHandler);
-    const options = new cast.framework.CastReceiverOptions();
-    options.disableIdleTimeout = true;
-    LOG('calling context.start()');
-    this.context.start(options);
     this.active = true;
     LOG('receiver bridge active');
   }
