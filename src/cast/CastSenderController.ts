@@ -11,6 +11,8 @@ export class CastSenderController {
   private connectScreen!: HTMLElement;
   private controllerScreen!: HTMLElement;
   private session: any = null;
+  private castReady = false;
+  private currentDpadDir: CastInputButton | null = null;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -72,12 +74,13 @@ export class CastSenderController {
         <!-- Main area: D-pad left, E button right -->
         <div style="display:flex;align-items:center;justify-content:space-around;flex:1;min-height:0;">
 
-          <!-- D-pad -->
-          <div style="display:grid;grid-template-columns:72px 72px 72px;grid-template-rows:72px 72px 72px;gap:6px;">
-            <button data-btn="up"    class="cb" style="grid-column:2;grid-row:1;font-size:22px;">&#x25B2;</button>
-            <button data-btn="left"  class="cb" style="grid-column:1;grid-row:2;font-size:22px;">&#x25C4;</button>
-            <button data-btn="right" class="cb" style="grid-column:3;grid-row:2;font-size:22px;">&#x25BA;</button>
-            <button data-btn="down"  class="cb" style="grid-column:2;grid-row:3;font-size:22px;">&#x25BC;</button>
+          <!-- Angular zone d-pad -->
+          <div id="dpad" style="width:216px;height:216px;border-radius:50%;background:#1a1a1a;border:1px solid #333;position:relative;touch-action:none;user-select:none;-webkit-tap-highlight-color:transparent;flex-shrink:0;">
+            <span data-arrow="up"    style="position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:20px;color:#444;pointer-events:none;">&#x25B2;</span>
+            <span data-arrow="down"  style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:20px;color:#444;pointer-events:none;">&#x25BC;</span>
+            <span data-arrow="left"  style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:20px;color:#444;pointer-events:none;">&#x25C4;</span>
+            <span data-arrow="right" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:20px;color:#444;pointer-events:none;">&#x25BA;</span>
+            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:28px;height:28px;border-radius:50%;background:#222;pointer-events:none;"></div>
           </div>
 
           <!-- E / action -->
@@ -110,6 +113,67 @@ export class CastSenderController {
       btn.addEventListener('pointercancel', () => this.sendInput(key, false));
       btn.addEventListener('pointerleave',  () => this.sendInput(key, false));
     });
+
+    this.setupDpad(this.root.querySelector('#dpad') as HTMLElement);
+  }
+
+  private setupDpad(el: HTMLElement): void {
+    const arrows: Record<string, HTMLElement | null> = {
+      up:    el.querySelector('[data-arrow="up"]'),
+      down:  el.querySelector('[data-arrow="down"]'),
+      left:  el.querySelector('[data-arrow="left"]'),
+      right: el.querySelector('[data-arrow="right"]'),
+    };
+
+    const DEAD_ZONE = 24;
+
+    const dirFromEvent = (e: PointerEvent): CastInputButton | null => {
+      const rect = el.getBoundingClientRect();
+      const dx = e.clientX - (rect.left + rect.width / 2);
+      const dy = e.clientY - (rect.top + rect.height / 2);
+      if (Math.sqrt(dx * dx + dy * dy) < DEAD_ZONE) return null;
+      // atan2: right=0°, down=90°, left=±180°, up=-90°. Normalise to 0–360.
+      const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+      if (angle < 45 || angle >= 315) return 'right';
+      if (angle < 135) return 'down';
+      if (angle < 225) return 'left';
+      return 'up';
+    };
+
+    const setDir = (dir: CastInputButton | null) => {
+      if (dir === this.currentDpadDir) return;
+      if (this.currentDpadDir) {
+        this.sendInput(this.currentDpadDir, false);
+        const prev = arrows[this.currentDpadDir];
+        if (prev) prev.style.color = '#444';
+      }
+      this.currentDpadDir = dir;
+      if (dir) {
+        this.sendInput(dir, true);
+        const arrow = arrows[dir];
+        if (arrow) arrow.style.color = '#fff';
+      }
+    };
+
+    el.addEventListener('pointerdown', (e: PointerEvent) => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      setDir(dirFromEvent(e));
+    });
+
+    el.addEventListener('pointermove', (e: PointerEvent) => {
+      if (!el.hasPointerCapture(e.pointerId)) return;
+      e.preventDefault();
+      setDir(dirFromEvent(e));
+    });
+
+    const release = (e: PointerEvent) => {
+      el.releasePointerCapture(e.pointerId);
+      setDir(null);
+    };
+
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
   }
 
   private showController(): void {
@@ -158,6 +222,7 @@ export class CastSenderController {
     });
     LOG('CastContextEventType:', window.cast.framework.CastContextEventType);
     LOG('SessionState:', window.cast.framework.SessionState);
+    this.castReady = true;
     context.addEventListener('sessionstatechanged', (event: any) => {
       const state = event.sessionState;
       LOG('session state changed:', state);
@@ -176,6 +241,7 @@ export class CastSenderController {
   }
 
   private requestSession(): void {
+    if (!this.castReady) return;
     const context = window.cast?.framework?.CastContext?.getInstance();
     if (!context) {
       this.setStatus('Cast SDK not initialized.');
