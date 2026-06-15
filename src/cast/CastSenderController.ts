@@ -145,7 +145,12 @@ export class CastSenderController {
   }
 
   private initializeCast(): void {
-    LOG('initializeCast() — app ID:', DEFAULT_RECEIVER_APP_ID);
+    LOG('initializeCast() — app ID:', DEFAULT_RECEIVER_APP_ID, '— chrome.cast:', !!window.chrome?.cast);
+    if (!window.chrome?.cast) {
+      ERR('chrome.cast not available — Cast only works in Chrome on Android');
+      this.setStatus('Cast requires Chrome on Android. Open this page on your phone.');
+      return;
+    }
     const context = window.cast.framework.CastContext.getInstance();
     context.setOptions({
       receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
