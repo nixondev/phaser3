@@ -171,6 +171,7 @@ export class MenuScene extends Phaser.Scene {
 
     this.input.keyboard!.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard!.on('keydown-ENTER', () => this.startGame());
+    this.input.keyboard!.on('keydown-E',     () => this.startGame());
     this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
       if (event.key === '?') this.openEditor();
       if (event.key === '#') this.openTileEditor();
