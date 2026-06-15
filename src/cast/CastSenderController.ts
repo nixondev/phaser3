@@ -151,24 +151,22 @@ export class CastSenderController {
       receiverApplicationId: DEFAULT_RECEIVER_APP_ID,
       autoJoinPolicy: window.chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED,
     });
-    context.addEventListener(
-      window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-      (event: any) => {
-        const state = event.sessionState;
-        LOG('session state changed:', state);
-        const ss = window.cast.framework.SessionState;
-        if (state === ss.SESSION_STARTED || state === ss.SESSION_RESUMED) {
-          this.session = context.getCurrentSession();
-          LOG('session active:', this.session);
-          this.showController();
-        } else if (state === ss.SESSION_ENDED) {
-          LOG('session ended');
-          this.session = null;
-          this.showConnect();
-          this.setStatus('Disconnected.');
-        }
+    LOG('CastContextEventType:', window.cast.framework.CastContextEventType);
+    LOG('SessionState:', window.cast.framework.SessionState);
+    context.addEventListener('sessionstatechanged', (event: any) => {
+      const state = event.sessionState;
+      LOG('session state changed:', state);
+      if (state === 'SESSION_STARTED' || state === 'SESSION_RESUMED') {
+        this.session = context.getCurrentSession();
+        LOG('session active:', this.session);
+        this.showController();
+      } else if (state === 'SESSION_ENDED') {
+        LOG('session ended');
+        this.session = null;
+        this.showConnect();
+        this.setStatus('Disconnected.');
       }
-    );
+    });
     this.setStatus('Cast ready. Tap connect.');
   }
 
