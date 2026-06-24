@@ -191,6 +191,7 @@ Rooms in `src/data/rooms.json`. Every tilemap: three layers `Ground`, `Collision
 
 | Field | Type | Effect |
 |-------|------|--------|
+| `music` | string | Track name (folder under `public/music/`). Omit to use room ID as track name. |
 | `weather` | `'rain-mild' \| 'rain-hard' \| 'dripping'` | Weather effect on room entry |
 | `drips` | `Array<{x,y}>` | Explicit drip positions; auto-scattered if omitted |
 | `dark` | `boolean` | Full-screen darkness overlay |
@@ -206,15 +207,18 @@ Rooms in `src/data/rooms.json`. Every tilemap: three layers `Ground`, `Collision
 SpessaSynth (SoundFont-native AudioWorklet). Assets in `public/music/`:
 
 ```text
-public/music/global.sf2                   — master fallback SoundFont
-public/music/main_theme.mid               — master fallback MIDI
-public/music/[room-id]/track.mid          — room music
-public/music/[room-id]/instruments.sf2    — room SoundFont override
-public/music/reverb/[type].wav            — impulse response files
+public/music/global.sf2                    — master fallback SoundFont
+public/music/bgm-main/track.mid            — ultimate fallback MIDI (used when no track found)
+public/music/[track-name]/track.mid        — named track
+public/music/[track-name]/instruments.sf2  — optional per-track SoundFont override
+public/music/reverb/[type].wav             — impulse response files
 ```
 
-Empty room folder → falls back to `global.sf2` + `main_theme.mid`.
-`MusicManager.playRoomMusic(roomId)` reads reverb settings from `rooms.json` on every transition.
+**Track resolution:** `MusicManager.playRoomMusic(roomId)` reads `room.music` from `rooms.json` to get the track name; if absent, the room ID is used as the track name. It then looks for `music/<trackname>/track.mid` and falls back to `music/bgm-main/track.mid`.
+
+**No-restart sharing:** two rooms with the same effective track name continue playback without restarting on transition. Set `"music": "protag-house"` on any room to share that room's track.
+
+Reverb is always updated on room change even when the track continues.
 Live debug mixing: R (cycle reverb), `[`/`]` (mix ±5%), `-`/`+` (volume).
 
 ---
@@ -223,25 +227,26 @@ Live debug mixing: R (cycle reverb), `[`/`]` (mix ±5%), `-`/`+` (volume).
 
 All tilesets: 8-column PNG grid of 64×64 tiles at `public/assets/tilemaps/<name>.png`.
 
-**Core tileset** (`tileset.png`): 128 tiles, `firstgid: 1`, frames 0–127.
-- Sources: `assets_src/tiles/NN_name.png` (numeric prefix = slot index).
-- Rebuild: `npm run build-tiles`.
+**Base tilesets** (declared under `baseTilesets` in `rooms.json`): loaded into every room.
+- `tileset` — `firstgid: 1`, frames 0–127. Sources: `assets_src/tiles/tile_N.png`.
+- `tileset2` — `firstgid: 129`, frames 0–127. Sources: `assets_src/tiles/tileset2/tile_N.png`.
+- Rebuild all: `npm run build-tiles`. Run `npm run patch-tilemaps` after adding a new base tileset.
 
-**Adding a core tile:** add `NN_name.png` to `assets_src/tiles/`, run `npm run build-tiles`.
-
-**Room-specific tilesets:**
+**Room-specific tilesets** (declared under `room.tilesets` in `rooms.json`): loaded for that room only.
 ```json
 { "id": "clinic", "tilesets": ["clinic-tiles"] }
 ```
 - PNG at `public/assets/tilemaps/clinic-tiles.png`.
-- Tiled JSON must list it with `firstgid: 129`.
-- Reference: `{ "tileFrame": 3, "tilesetKey": "clinic-tiles" }` (omit `tilesetKey` for core).
+- Tiled JSON must list it with `firstgid: 257` (= 1 + 2 base tilesets × 128).
+- Sources: `assets_src/tiles/clinic-tiles/tile_N.png`. Rebuild: `npm run build-tiles`.
+- Reference: `{ "tileFrame": 3, "tilesetKey": "clinic-tiles" }` (omit `tilesetKey` for base tilesets).
 - `TilesetResolver.ts` maps `(tileFrame, tilesetKey)` → `{key, frame}` for rendering.
+- Every room already has a blank `<roomId>-tiles.png` registered; add tiles to it as needed.
 
 **Conventions:**
-- `tileFrame` = 0-indexed local frame (not Tiled GID).
-- Tiled GID = `firstgid + tileFrame`. Engine handles this.
-- Maintenance Tunnel black rectangle = Exterior Wall (GID 2). Edit `assets_src/tiles/01_exterior_wall.png`.
+- `tileFrame` = 0-indexed local frame within its tileset (not Tiled GID).
+- Tiled GID = `tileset.firstgid + tileFrame`. Engine handles this.
+- Maintenance Tunnel black rectangle = Exterior Wall (GID 2). Edit `assets_src/tiles/tile_01.png`.
 
 ---
 

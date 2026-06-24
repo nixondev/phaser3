@@ -79,6 +79,11 @@ export class EditorScene extends Phaser.Scene {
     }
     this.editorUI.setPreview(this.editorManager.getPreviewState());
     this.editorUI.setActiveTool(this.editorManager.getActiveTool());
+    this.editorUI.setColorMode(this.editorManager.getColorMode());
+    this.editorUI.setActiveLayer(this.editorManager.getCurrentLayerName());
+    this.editorUI.setPaletteActive(this.editorManager.getPaletteVisible());
+    this.editorUI.setPlacementMode(this.editorManager.getPlacementMode());
+    this.editorUI.setPairActive(this.editorManager.isPairActive());
   }
 
   // ── Stubs ────────────────────────────────────────────────────────────────

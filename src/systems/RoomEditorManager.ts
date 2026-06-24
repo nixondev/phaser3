@@ -272,9 +272,12 @@ export class RoomEditorManager {
   }
 
   /** Current tool ('paint' | 'rect' | 'fill' | 'select') — EditorUI reflects this on its buttons. */
-  getActiveTool(): 'paint' | 'rect' | 'fill' | 'select' {
-    return this.activeTool;
-  }
+  getActiveTool(): 'paint' | 'rect' | 'fill' | 'select' { return this.activeTool; }
+  getColorMode(): boolean { return this.colorMode; }
+  getCurrentLayerName(): string { return this.currentLayerName; }
+  getPaletteVisible(): boolean { return this.paletteVisible; }
+  getPlacementMode(): 'interactable' | 'afflicted' | null { return this.placementMode; }
+  isPairActive(): boolean { return this.pairPhase !== 'idle'; }
 
   /**
    * Choosing a tile/color (palette, Q/E, wheel, color picker, color mode) is a
@@ -1467,14 +1470,8 @@ export class RoomEditorManager {
     }
 
     if (this.selectedObject) return; // Don't paint while dragging
-    if (this.activeTool !== 'paint') return; // Don't paint while using other tools
 
-    let changed = false;
-
-    // Eyedropper: Middle Click or Alt + Left Click. Mode-agnostic — samples
-    // whatever is under the cursor and switches mode to match. When both a
-    // color and a tile occupy the cell, prefer the kind matching the current
-    // mode so repeated sampling is stable.
+    // Eyedropper: Middle Click or Alt + Left Click. Works in all tool modes.
     const isAlt = this.keys.ALT.isDown;
     if (pointer.middleButtonDown() || (pointer.leftButtonDown() && isAlt)) {
       const colorAt = this.roomManager.getColorTile(this.currentLayerName, tileX, tileY);
@@ -1491,9 +1488,15 @@ export class RoomEditorManager {
       }
       this.updatePreview();
       this.editorUI?.updatePaletteHighlight([[this.selectedTileIndex]]);
+      return;
     }
+
+    if (this.activeTool !== 'paint') return; // paint/erase only in paint mode
+
+    let changed = false;
+
     // Left Click: Paint (only if NOT alt, and only if press originated on canvas)
-    else if (pointer.leftButtonDown() && this.pointerDownOnCanvas) {
+    if (pointer.leftButtonDown() && this.pointerDownOnCanvas) {
       if (this.colorMode) {
         // Color paint: delegate to RoomManager (persistent, never touches tilemap data)
         this.roomManager.setColorTile(this.currentLayerName, tileX, tileY, this.selectedColor);
@@ -1914,10 +1917,41 @@ export class RoomEditorManager {
     const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
     const tileX = map.worldToTileX(worldPoint.x);
     const tileY = map.worldToTileY(worldPoint.y);
+    if (tileX === null || tileY === null) return;
 
-    if (tileX !== null && tileY !== null) {
-      this.executeFloodFill(tileX, tileY);
+    if (pointer.rightButtonDown()) {
+      // Right-click flood-erase: clear color tile or remove tile at region.
+      if (this.colorMode) {
+        const layerName = this.currentLayerName;
+        const targetColor = this.roomManager.getColorTile(layerName, tileX, tileY);
+        if (targetColor === undefined) return;
+        const stack: Array<[number, number]> = [[tileX, tileY]];
+        const visited = new Set<string>();
+        let count = 0;
+        while (stack.length > 0) {
+          const [x, y] = stack.pop()!;
+          if (x < 0 || x >= map.width || y < 0 || y >= map.height) continue;
+          const key = `${x},${y}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          if (this.roomManager.getColorTile(layerName, x, y) !== targetColor) continue;
+          this.roomManager.clearColorTile(layerName, x, y);
+          count++;
+          stack.push([x-1, y], [x+1, y], [x, y-1], [x, y+1]);
+        }
+        if (count > 0) this.tilemapDirty = true;
+        this.showToast(`Color flood erase: ${count} tiles`);
+      } else {
+        // Tile flood-erase: treat as flood fill with empty (selectedTileIndex = 0).
+        const savedIndex = this.selectedTileIndex;
+        this.selectedTileIndex = 0;
+        this.executeFloodFill(tileX, tileY);
+        this.selectedTileIndex = savedIndex;
+      }
+      return;
     }
+
+    this.executeFloodFill(tileX, tileY);
   }
 
   private handleRectangle(): void {
@@ -2036,9 +2070,16 @@ export class RoomEditorManager {
 
     if (this.colorMode) {
       const layerName = this.currentLayerName;
-      const targetColor = this.roomManager.getColorTile(layerName, startX, startY); // undefined = no color
+      const targetColor = this.roomManager.getColorTile(layerName, startX, startY);
       const fillColor = this.selectedColor;
       if (targetColor === fillColor) return;
+
+      // When starting on a colorless cell, use the tile index as the fill boundary
+      // so we don't spread across the entire layer (all colorless cells share undefined).
+      const startTileIndex = targetColor === undefined
+        ? (map.getTileAt(startX, startY, true, layerName)?.index ?? -1)
+        : null;
+
       const stack: Array<[number, number]> = [[startX, startY]];
       const visited = new Set<string>();
       let count = 0;
@@ -2049,6 +2090,10 @@ export class RoomEditorManager {
         if (visited.has(key)) continue;
         visited.add(key);
         if (this.roomManager.getColorTile(layerName, x, y) !== targetColor) continue;
+        if (startTileIndex !== null) {
+          const cellIndex = map.getTileAt(x, y, true, layerName)?.index ?? -1;
+          if (cellIndex !== startTileIndex) continue;
+        }
         this.roomManager.setColorTile(layerName, x, y, fillColor);
         count++;
         stack.push([x-1, y], [x+1, y], [x, y-1], [x, y+1]);

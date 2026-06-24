@@ -372,31 +372,37 @@ function editorSavePlugin(): Plugin {
       server.middlewares.use('/__editor/save-tile', async (req, res, next) => {
         if (req.method !== 'POST') { next(); return; }
         try {
-          const url   = new URL(req.url ?? '', 'http://localhost');
-          const frame = parseInt(url.searchParams.get('frame') ?? '', 10);
+          const url      = new URL(req.url ?? '', 'http://localhost');
+          const frame    = parseInt(url.searchParams.get('frame') ?? '', 10);
+          const tileset  = url.searchParams.get('tileset') ?? 'tileset';
           const chunks: Buffer[] = [];
           await new Promise<void>((resolve, reject) => {
             req.on('data', (c: Buffer) => chunks.push(c));
             req.on('end', resolve);
             req.on('error', reject);
           });
-          const target = path.join(tilemapsDir, 'tileset.png');
+          const target = path.join(tilemapsDir, `${tileset}.png`);
           const buf = Buffer.concat(chunks);
           const tmp = `${target}.tmp`;
           await fsp.writeFile(tmp, buf);
           await fsp.rename(tmp, target);
 
-          // Also export the individual tile to assets_src/tiles/tile_<N>.png
+          // Export the individual tile to its source dir.
+          // Base tileset (first in baseTilesets) → assets_src/tiles/
+          // All others → assets_src/tiles/<tileset>/
           let tileExported = false;
           if (!isNaN(frame) && frame >= 0) {
-            const tilesDir = path.join(projectRoot, 'assets_src', 'tiles');
-            if (fs.existsSync(tilesDir)) {
-              const tilePixels = extractTileFromPNG(buf, frame, 64, 8);
-              if (tilePixels) {
-                const tilePath = path.join(tilesDir, `tile_${frame}.png`);
-                await fsp.writeFile(tilePath, encodeTilePNG(tilePixels, 64));
-                tileExported = true;
-              }
+            const srcRoot   = path.join(projectRoot, 'assets_src', 'tiles');
+            let roomsJson: any = {};
+            try { roomsJson = JSON.parse(fs.readFileSync(roomsJsonPath, 'utf8')); } catch { /* ignore */ }
+            const base0    = (roomsJson.baseTilesets ?? ['tileset'])[0] ?? 'tileset';
+            const tilesDir = tileset === base0 ? srcRoot : path.join(srcRoot, tileset);
+            if (!fs.existsSync(tilesDir)) fs.mkdirSync(tilesDir, { recursive: true });
+            const tilePixels = extractTileFromPNG(buf, frame, 64, 8);
+            if (tilePixels) {
+              const tilePath = path.join(tilesDir, `tile_${frame}.png`);
+              await fsp.writeFile(tilePath, encodeTilePNG(tilePixels, 64));
+              tileExported = true;
             }
           }
 

@@ -13,6 +13,7 @@ export class MusicManager {
   private player: SpessaSynthPlayer;
   private proximityPlayers: Map<string, SpessaSynthPlayer> = new Map();
   private currentRoom: string | null = null;
+  private currentTrackName: string | null = null;
   private currentSf2Url: string | null = null;
   private currentReverbType: 'city' | 'indoor' | 'sewer' | 'hospital' | 'substation' | null = null;
   private sf2Cache: Map<string, ArrayBuffer> = new Map();
@@ -63,63 +64,62 @@ export class MusicManager {
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
     }
-    console.log(`[MusicManager] Playing music for room ${roomId}. AudioContext state: ${this.audioContext.state}`);
 
-    const globalSf2Url = `${BASE}music/global.sf2`;
-    const globalMidiUrl = `${BASE}music/main_theme.mid`;
+    const roomDef = RoomManager.getRoomsData().rooms[roomId];
+    // music field names the track folder; falls back to roomId so rooms without
+    // an explicit field automatically use their own music/<roomId>/track.mid.
+    const trackName: string = (roomDef?.music as string | undefined) ?? roomId;
+
+    console.log(`[MusicManager] Room ${roomId} → track "${trackName}" (prev: "${this.currentTrackName}")`);
 
     try {
       const checkExists = async (url: string) => {
         try {
-          const response = await fetch(url, { method: 'HEAD' });
-          if (!response.ok) return false;
-          // Check for HTML response (false positive for missing files in some SPA servers)
-          const contentType = response.headers.get('Content-Type');
-          if (contentType && contentType.includes('text/html')) return false;
+          const r = await fetch(url, { method: 'HEAD' });
+          if (!r.ok) return false;
+          const ct = r.headers.get('Content-Type');
+          if (ct && ct.includes('text/html')) return false;
           return true;
-        } catch {
-          return false;
-        }
+        } catch { return false; }
       };
 
-      const roomSf2Url = `${BASE}music/${roomId}/instruments.sf2`;
-      const roomMidiUrl = `${BASE}music/${roomId}/track.mid`;
+      if (this.currentTrackName !== trackName) {
+        const trackMidiUrl    = `${BASE}music/${trackName}/track.mid`;
+        const trackSf2Url     = `${BASE}music/${trackName}/instruments.sf2`;
+        const fallbackMidiUrl = `${BASE}music/bgm-main/track.mid`;
+        const globalSf2Url    = `${BASE}music/global.sf2`;
 
-      const hasRoomSf2 = await checkExists(roomSf2Url);
-      const hasRoomMidi = await checkExists(roomMidiUrl);
+        const hasMidi = trackName !== 'bgm-main' ? await checkExists(trackMidiUrl) : true;
+        const hasSf2  = await checkExists(trackSf2Url);
+        const finalMidi = hasMidi ? trackMidiUrl : fallbackMidiUrl;
+        const finalSf2  = hasSf2  ? trackSf2Url  : globalSf2Url;
 
-      const finalSf2 = hasRoomSf2 ? roomSf2Url : globalSf2Url;
-      const finalMidi = hasRoomMidi ? roomMidiUrl : globalMidiUrl;
+        console.log(`[MusicManager] Loading "${trackName}": midi=${finalMidi}, sf2=${finalSf2}`);
 
-      console.log(`Loading music for room ${roomId}: sf2=${finalSf2}, midi=${finalMidi}`);
+        const sf2Data  = await this.getBinaryData(finalSf2,  this.sf2Cache);
+        const midiData = await this.getBinaryData(finalMidi, this.midiCache);
 
-      const sf2Data = await this.getBinaryData(finalSf2, this.sf2Cache);
-      const midiData = await this.getBinaryData(finalMidi, this.midiCache);
-
-      if (this.currentSf2Url !== finalSf2) {
-        await this.player.loadSoundFont(sf2Data);
-        this.currentSf2Url = finalSf2;
-      }
-      await this.player.playMIDI(midiData);
-      
-      const volume = AudioManager.getInstance().getVolume();
-      this.player.setVolume(volume);
-
-      // Set reverb from room data
-      const roomDef = RoomManager.getRoomsData().rooms[roomId];
-      if (roomDef && roomDef.reverb) {
-        await this.setReverb(roomDef.reverb as any);
-        if (roomDef.reverbMix !== undefined) {
-          this.effects.setMix(roomDef.reverbMix);
-        } else {
-          this.effects.setMix(AUDIO_CONFIG.DEFAULT_REVERB_MIX);
+        if (this.currentSf2Url !== finalSf2) {
+          await this.player.loadSoundFont(sf2Data);
+          this.currentSf2Url = finalSf2;
         }
+        await this.player.playMIDI(midiData);
+        this.currentTrackName = trackName;
+
+        const volume = AudioManager.getInstance().getVolume();
+        this.player.setVolume(volume);
       } else {
-        await this.setReverb('city'); // Default fallback
+        console.log(`[MusicManager] Same track "${trackName}" — continuing playback`);
+      }
+
+      // Always update reverb on room change.
+      if (roomDef?.reverb) {
+        await this.setReverb(roomDef.reverb as any);
+        this.effects.setMix(roomDef.reverbMix ?? AUDIO_CONFIG.DEFAULT_REVERB_MIX);
+      } else {
+        await this.setReverb('city');
         this.effects.setMix(AUDIO_CONFIG.DEFAULT_REVERB_MIX);
       }
-
-      console.log(`[MusicManager] Music started for room ${roomId}`);
     } catch (e) {
       console.error(`Failed to load music for room ${roomId}:`, e);
     }
@@ -225,6 +225,8 @@ export class MusicManager {
     }
     this.proximityPlayers.clear();
     this.currentRoom = null;
+    this.currentTrackName = null;
+    this.currentSf2Url = null;
   }
 
   destroy(): void {

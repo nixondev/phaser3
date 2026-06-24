@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
+import { RoomManager } from '@systems/RoomManager';
 
 const TILE = 64;
 const DRAW_SCALE = 11;  // 64 × 11 = 704 px draw area
@@ -97,6 +98,9 @@ export class TileEditorScene extends Phaser.Scene {
   private historyIndex = -1;
   private static readonly MAX_HISTORY = 50;
 
+  private activeTileset = 'tileset';
+  private tilesetNames: string[] = [];
+
   constructor() {
     super(SCENES.TILE_EDITOR);
   }
@@ -123,6 +127,7 @@ export class TileEditorScene extends Phaser.Scene {
       fontSize: '16px', color: '#667788', fontFamily: 'monospace',
     });
 
+    this.buildTilesetDropdown();
     this.buildPickerUI();
     this.buildPaletteUI();
     this.buildColorPicker();
@@ -268,10 +273,59 @@ export class TileEditorScene extends Phaser.Scene {
     }
   }
 
+  // ─── Tileset dropdown ──────────────────────────────────────────────────────
+
+  private buildTilesetDropdown(): void {
+    const roomsData = RoomManager.getRoomsData();
+    this.tilesetNames = [...(roomsData.baseTilesets ?? ['tileset'])];
+    for (const room of Object.values(roomsData.rooms))
+      for (const ts of room.tilesets ?? [])
+        if (!this.tilesetNames.includes(ts)) this.tilesetNames.push(ts);
+
+    this.activeTileset = this.tilesetNames[0] ?? 'tileset';
+
+    const el = document.createElement('select');
+    el.style.cssText = [
+      'position:fixed', 'z-index:1000', 'cursor:pointer',
+      'font-family:monospace', 'font-size:11px',
+      'background:#1a1a2e', 'color:#aaccff',
+      'border:1px solid #334466', 'padding:1px 3px',
+      'box-sizing:border-box', 'width:100%',
+    ].join(';');
+
+    for (const name of this.tilesetNames) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.text  = name;
+      el.appendChild(opt);
+    }
+
+    el.addEventListener('change', () => {
+      this.activeTileset = el.value;
+      this.pickerScroll  = 0;
+      this.selectedFrame = 0;
+      this.history       = [];
+      this.historyIndex  = -1;
+      this.loadTileIntoPixels(0);
+      this.frameLabel?.setText('frame: 0');
+      this.refreshPickerSprites();
+      this.redrawAll();
+      this.statusText?.setText(`tileset: ${el.value}`);
+    });
+    el.addEventListener('keydown', (e) => e.stopPropagation());
+
+    document.body.appendChild(el);
+    this.positionHtmlEl(el, PICKER_X, PICKER_Y - 38, PICKER_COLS * PICKER_CELL, 18);
+    this.htmlEls.push(el);
+  }
+
   // ─── Picker UI ─────────────────────────────────────────────────────────────
 
+  private get activeSpritesKey(): string { return `${this.activeTileset}-sprites`; }
+
   private getTotalFrames(): number {
-    const tex = this.textures.exists('tileset-sprites') ? this.textures.get('tileset-sprites') : null;
+    const key = this.activeSpritesKey;
+    const tex = this.textures.exists(key) ? this.textures.get(key) : null;
     if (!tex) return 128;
     return Math.max(0, tex.frameTotal - 1); // minus __BASE
   }
@@ -325,7 +379,7 @@ export class TileEditorScene extends Phaser.Scene {
       const px = PICKER_X + col * PICKER_CELL + 2;
       const py = PICKER_Y + row * PICKER_CELL + 2;
 
-      const sprite = this.add.image(px, py, 'tileset-sprites', frame)
+      const sprite = this.add.image(px, py, this.activeSpritesKey, frame)
         .setOrigin(0, 0)
         .setScale(SCALE);
       sprite.setInteractive(new Phaser.Geom.Rectangle(0, 0, TILE, TILE), Phaser.Geom.Rectangle.Contains);
@@ -349,8 +403,9 @@ export class TileEditorScene extends Phaser.Scene {
   // ─── Load tile pixels ──────────────────────────────────────────────────────
 
   private loadTileIntoPixels(frame: number): void {
-    if (!this.textures.exists('tileset-sprites')) { this.pixels.fill(0); return; }
-    const tex = this.textures.get('tileset-sprites');
+    const key = this.activeSpritesKey;
+    if (!this.textures.exists(key)) { this.pixels.fill(0); return; }
+    const tex = this.textures.get(key);
     const frameObj = tex.get(frame);
     if (!frameObj || frameObj.name === '__BASE') { this.pixels.fill(0); return; }
 
@@ -1062,12 +1117,13 @@ export class TileEditorScene extends Phaser.Scene {
       return;
     }
 
-    if (!this.textures.exists('tileset-sprites')) {
+    const key = this.activeSpritesKey;
+    if (!this.textures.exists(key)) {
       this.statusText.setText('tileset not loaded');
       return;
     }
 
-    const tex = this.textures.get('tileset-sprites');
+    const tex = this.textures.get(key);
     const frameObj = tex.get(0); // frame 0 to get source image
     const source = frameObj?.source?.image as HTMLImageElement | HTMLCanvasElement | undefined;
     if (!source) { this.statusText.setText('source image unavailable'); return; }
@@ -1106,7 +1162,7 @@ export class TileEditorScene extends Phaser.Scene {
       if (!blob) { this.statusText.setText('blob conversion failed'); return; }
       try {
         const buf = await blob.arrayBuffer();
-        const resp = await fetch(`/__editor/save-tile?frame=${this.selectedFrame}`, {
+        const resp = await fetch(`/__editor/save-tile?tileset=${encodeURIComponent(this.activeTileset)}&frame=${this.selectedFrame}`, {
           method: 'POST',
           headers: { 'Content-Type': 'image/png' },
           body: buf,

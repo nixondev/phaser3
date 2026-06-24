@@ -4,24 +4,24 @@ Full reference for the tileset pipeline: source files → build → runtime. See
 
 ---
 
-## 1. The Two-Tileset System
+## 1. Tileset System
 
-### Core tileset
+### Base tilesets
 
-| Property | Value |
-|----------|-------|
-| PNG | `public/assets/tilemaps/tileset.png` |
-| Size | 512 × 1024 px |
-| Grid | 8 columns × 16 rows = **128 tiles** at 64 × 64 px each |
-| Phaser image key | `"tileset"` |
-| Phaser spritesheet key | `"tileset-sprites"` |
-| `firstgid` in all Tiled JSONs | `1` |
+Declared under `baseTilesets` in `rooms.json`. Every room loads all of them.
 
-Every map uses the core tileset. It is loaded unconditionally in `PreloadScene.ts`.
+| Name | PNG | `firstgid` | Sources |
+|------|-----|-----------|---------|
+| `tileset` | `public/assets/tilemaps/tileset.png` | `1` | `assets_src/tiles/tile_N.png` |
+| `tileset2` | `public/assets/tilemaps/tileset2.png` | `129` | `assets_src/tiles/tileset2/tile_N.png` |
+
+Each is 512 × 1024 px, 8 × 16 grid, 128 tiles at 64 × 64 px. Phaser keys: `<name>` (image) and `<name>-sprites` (spritesheet). Loaded in `PreloadScene.ts` via `baseTilesets`.
+
+To add a new base tileset: add its name to `baseTilesets` in `rooms.json`, add PNG to `public/assets/tilemaps/`, add sources to `assets_src/tiles/<name>/`, run `npm run build-tiles` then `npm run patch-tilemaps`.
 
 ### Room-specific tilesets
 
-A room can declare extra tilesets beyond the core:
+A room declares extra tilesets beyond the base set:
 
 ```json
 { "id": "clinic", "tilesets": ["clinic-tiles"] }
@@ -30,13 +30,14 @@ A room can declare extra tilesets beyond the core:
 | Property | Convention |
 |----------|-----------|
 | PNG | `public/assets/tilemaps/<name>.png` |
+| Sources | `assets_src/tiles/<name>/tile_N.png` |
 | Phaser image key | `<name>` (e.g. `"clinic-tiles"`) |
 | Phaser spritesheet key | `<name>-sprites` (e.g. `"clinic-tiles-sprites"`) |
-| `firstgid` in Tiled JSON | `129` (immediately after the 128 core tiles) |
+| `firstgid` in Tiled JSON | `257` (1 + 2 base tilesets × 128) |
 
-`PreloadScene.ts` scans `rooms.json` for `tilesets` arrays and loads each PNG automatically. Multiple room-specific tilesets on one room use ascending `firstgid` values (129, 257, …).
+`PreloadScene.ts` scans `rooms.json` for `tilesets` arrays and loads each PNG automatically. Multiple room-specific tilesets on one room stack at ascending `firstgid` values (257, 385, …).
 
-**Current status:** the room-specific system is fully implemented but unused — no room in `rooms.json` currently has a `tilesets` entry.
+Every room has a blank `<roomId>-tiles.png` pre-registered. Add tiles via the `#` editor or source files + `npm run build-tiles`.
 
 ---
 
@@ -135,22 +136,25 @@ const frame = tile.index - owningTs.firstgid;
 
 ### `npm run build-tiles` → `scripts/build-tiles.cjs`
 
-Composes the core tileset from individual source PNGs.
+Composes all tilesets (base + room-specific) from their source PNG dirs.
 
-- **Input:** `assets_src/tiles/tile_N.png` (also accepts legacy `NN_name.png`)
-- **Output:** `public/assets/tilemaps/tileset.png` (512 × 1024, 8 × 16 grid)
-- Index `N` maps to column `N % 8`, row `floor(N / 8)`
-- Empty slots are transparent
+- **Input:** `assets_src/tiles/tile_N.png` for `tileset`; `assets_src/tiles/<name>/tile_N.png` for all others
+- **Output:** `public/assets/tilemaps/<name>.png` for every registered tileset (512 × 1024, 8 × 16 grid)
+- Index `N` maps to column `N % 8`, row `floor(N / 8)`; empty slots are transparent
+- Skips tilesets with no source dir (leaves existing PNG untouched)
 - Pure Node.js — no Sharp, canvas, or external deps
-- Also copies output to `dist/assets/tilemaps/tileset.png` if `dist/` exists
+- Syncs output to `dist/assets/tilemaps/` if `dist/` exists
 
-**Adding a tile:** drop `tile_N.png` in `assets_src/tiles/`, run `npm run build-tiles`.
+**Adding a tile:** drop `tile_N.png` in the correct source dir, run `npm run build-tiles`.
 
 ### `npm run migrate-tiles` → `scripts/migrate-tiles.cjs`
 
-Reverse operation: slices `tileset.png` back into individual source files.
+Reverse operation: slices every tileset PNG back into individual source files.
 
-> ⚠️ **Known limitation:** hardcoded `ROWS = 8`, so only the first 64 tiles (indices 0–63) are extracted. Tiles 64–127 are silently skipped. The `tileNames[]` array also only covers 50 names. This script is out of date with the current 128-tile tileset — use with care.
+- Handles all base tilesets and all room-specific tilesets (driven by `rooms.json`)
+- Skips blank tiles; only writes files for non-empty slots
+- Preserves existing source filenames on overwrite; new tiles get `tile_NNN.png`
+- Creates the source dir only if at least one non-blank tile is found
 
 ### `npm run regenerate-tiles` → `scripts/regenerate-tiles.cjs`
 
@@ -224,8 +228,6 @@ This gives the 3D directional shadow visible on all walls. It is always on — n
 
 | # | Issue | Impact |
 |---|-------|--------|
-| 1 | `migrate-tiles` only extracts 64 of 128 tiles (`ROWS = 8`) | Running it loses tiles 64–127 |
-| 2 | `regenerate-tiles` writes legacy `NN_name.png` format | Creates filename mix; only covers tiles 0–50 |
-| 3 | Room-specific tilesets fully wired up but not yet used in any room | Low risk; infrastructure is ready |
-| 4 | `clearColorTile` calls `rebuildColorCollision` for `OnCollision` | No-op but wastes a rebuild cycle |
-| 5 | `OnCollision` naming implies physics; it has none | Reader confusion |
+| 1 | `regenerate-tiles` writes legacy `NN_name.png` format | Creates filename mix; only covers tiles 0–50 |
+| 2 | `clearColorTile` calls `rebuildColorCollision` for `OnCollision` | No-op but wastes a rebuild cycle |
+| 3 | `OnCollision` naming implies physics; it has none | Reader confusion |

@@ -86,9 +86,15 @@ for (const [, room] of Object.entries(roomsData.rooms)) {
   for (let j = 0; j < (room.tilesets ?? []).length; j++)
     dirty = ensureEntry(tilesets, tilesetEntry(room.tilesets[j], roomFirstgid + j * TILES_PER_SHEET), dirty);
 
+  // Also dirty if array is not sorted by firstgid.
+  if (!dirty) {
+    for (let i = 1; i < tilesets.length; i++)
+      if (tilesets[i].firstgid < tilesets[i-1].firstgid) { dirty = true; break; }
+  }
+
   if (!dirty) { skipped++; continue; }
 
-  mapData.tilesets = tilesets;
+  mapData.tilesets = tilesets.slice().sort((a, b) => a.firstgid - b.firstgid);
   try {
     atomicWrite(tilemapPath, JSON.stringify(mapData));
     console.log(`  patched: ${room.tilemapPath}`);

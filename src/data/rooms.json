@@ -1,6 +1,7 @@
 {
   "baseTilesets": [
-    "tileset"
+    "tileset",
+    "tileset2"
   ],
   "rooms": {
     "city-street": {
@@ -11,7 +12,6 @@
       "weather": "rain-hard",
       "width": 96,
       "height": 72,
-      "music": "bgm-main",
       "reverb": "Large Long Echo Hall",
       "reverbMix": 0.45,
       "playerSpawn": {
@@ -453,7 +453,6 @@
       "tilemapPath": "assets/tilemaps/protag-house.json",
       "width": 24,
       "height": 24,
-      "music": "bgm-main",
       "reverb": "Nice Drum Room",
       "reverbMix": 0.45,
       "playerSpawn": {
@@ -463,15 +462,15 @@
       "doors": [
         {
           "id": "house-exit",
-          "x": 609,
-          "y": 0,
+          "x": 610,
+          "y": -32,
           "width": 64,
           "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
           "direction": "up",
-          "spawnX": 641,
-          "spawnY": 128,
+          "spawnX": 642,
+          "spawnY": 96,
           "lockedMessage": "The door opens slightly and stops. You can see chains on the outer side of door, holding it closed.",
           "unlockedMessage": "The chain snaps. So does the prybar",
           "requiredKeys": [
@@ -550,8 +549,8 @@
         },
         {
           "id": "cure-vial-1",
-          "x": 344,
-          "y": 864,
+          "x": 335,
+          "y": 792,
           "type": "item",
           "tileFrame": 90,
           "text": "A small vial. Clinical label, hand-annotated.\n'Stabiliser — administer at close range.'",
@@ -589,7 +588,8 @@
       "onCollisionAlpha": 0.45,
       "tilesets": [
         "protag-house-tiles"
-      ]
+      ],
+      "onGroundAlpha": 0.3
     },
     "house-b": {
       "id": "house-b",
@@ -851,7 +851,6 @@
       "tilemapPath": "assets/tilemaps/utility-substation.json",
       "width": 20,
       "height": 15,
-      "music": "bgm-main",
       "reverb": "substation",
       "playerSpawn": {
         "x": 640,
@@ -1389,6 +1388,7 @@
       "tilemapPath": "assets/tilemaps/side-kitchen.json",
       "width": 14,
       "height": 15,
+      "music": "protag-house",
       "reverb": "indoor",
       "playerSpawn": {
         "x": 168,

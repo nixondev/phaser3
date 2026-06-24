@@ -32,6 +32,11 @@ export class EditorUI {
   private previewLabel!: HTMLElement;
   private lastPreviewKey = '';
   private lastTool = '';
+  private lastColorMode = false;
+  private lastLayerName = '';
+  private lastPaletteActive = false;
+  private lastPlacementMode: string | null = null;
+  private lastPairActive = false;
 
   // DOM tile palette
   private paletteCanvas!: HTMLCanvasElement;
@@ -41,7 +46,7 @@ export class EditorUI {
   private paletteDragStart: { gid: number; tilesetIdx: number; localCol: number; localRow: number; pixelX: number; pixelY: number } | null = null;
   private paletteSelectedGids: number[][] = [[1]];
   public onTileSelected: ((gids: number[][], first: { textureKey: string; frame: number; gid: number }) => void) | null = null;
-  private static readonly PTHUMB = 28;
+  private static readonly PTHUMB = 44;
   private static readonly PCOLS = 8;
   private static readonly PLABEL_H = 16;
 
@@ -134,11 +139,51 @@ export class EditorUI {
     if (this.statusEl) this.statusEl.textContent = text;
   }
 
-  /** Reflect the active tool on its button (currently just the Select toggle). */
   public setActiveTool(tool: 'paint' | 'rect' | 'fill' | 'select'): void {
     if (tool === this.lastTool) return;
     this.lastTool = tool;
     this.root.querySelector('#editor-select')?.classList.toggle('active', tool === 'select');
+    this.root.querySelector('#editor-fill')?.classList.toggle('active', tool === 'fill');
+  }
+
+  public setColorMode(active: boolean): void {
+    if (active === this.lastColorMode) return;
+    this.lastColorMode = active;
+    this.root.querySelector('#editor-color-mode')?.classList.toggle('active', active);
+  }
+
+  public setActiveLayer(name: string): void {
+    if (name === this.lastLayerName) return;
+    this.lastLayerName = name;
+    const layerKeyMap: Record<string, string> = {
+      Ground: '1', OnGround: '2', Collision: '3',
+      OnCollision: '4', Above: '5', OnAbove: '6', Spectra: '7',
+    };
+    const activeKey = layerKeyMap[name] ?? '';
+    this.root.querySelectorAll<HTMLButtonElement>('.layer-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.layerKey === activeKey);
+    });
+  }
+
+  public setPaletteActive(visible: boolean): void {
+    if (visible === this.lastPaletteActive) return;
+    this.lastPaletteActive = visible;
+    const wrap = this.root.querySelector<HTMLElement>('#editor-palette-wrap');
+    if (wrap) wrap.style.display = visible ? 'block' : 'none';
+    this.root.querySelector('#editor-palette')?.classList.toggle('active', visible);
+  }
+
+  public setPlacementMode(mode: 'interactable' | 'afflicted' | null): void {
+    if (mode === this.lastPlacementMode) return;
+    this.lastPlacementMode = mode;
+    this.root.querySelector('#editor-place-interactable')?.classList.toggle('active', mode === 'interactable');
+    this.root.querySelector('#editor-place-npc')?.classList.toggle('active', mode === 'afflicted');
+  }
+
+  public setPairActive(active: boolean): void {
+    if (active === this.lastPairActive) return;
+    this.lastPairActive = active;
+    this.root.querySelector('#editor-pair-door')?.classList.toggle('active', active);
   }
 
   /** Render the current tile/color selection into the docked preview box. */
@@ -289,8 +334,10 @@ export class EditorUI {
   }
 
   public setPaletteVisible(visible: boolean): void {
+    this.lastPaletteActive = visible;
     const wrap = this.root.querySelector<HTMLElement>('#editor-palette-wrap');
     if (wrap) wrap.style.display = visible ? 'block' : 'none';
+    this.root.querySelector('#editor-palette')?.classList.toggle('active', visible);
   }
 
   public updatePaletteHighlight(gids: number[][]): void {
@@ -347,8 +394,14 @@ export class EditorUI {
   }
 
   private hitAtPointer(e: MouseEvent): typeof this.paletteHitmap[0] | null {
-    const cx = e.offsetX;
-    const cy = e.offsetY;
+    // getBoundingClientRect accounts for the parent's scroll position and CSS
+    // scaling (canvas style.width:100% makes CSS width ≠ logical pixel width).
+    // offsetX/offsetY drift when inside a scrolled container in some browsers.
+    const rect   = this.paletteCanvas.getBoundingClientRect();
+    const scaleX = this.paletteCanvas.width  / rect.width;
+    const scaleY = this.paletteCanvas.height / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top)  * scaleY;
     for (const entry of this.paletteHitmap) {
       if (cx >= entry.pixelX && cx < entry.pixelX + EditorUI.PTHUMB &&
           cy >= entry.pixelY && cy < entry.pixelY + EditorUI.PTHUMB) {
@@ -798,7 +851,7 @@ export class EditorUI {
         position: fixed; inset: 0;
         display: grid;
         grid-template-rows: 36px 1fr 28px;
-        grid-template-columns: 200px 1fr 240px;
+        grid-template-columns: 320px 1fr 380px;
         grid-template-areas:
           "top top top"
           "left center right"
@@ -836,7 +889,22 @@ export class EditorUI {
       #editor-overlay .weather-btn.active { background: #2d3a2d; border-color: #4f6d4f; color: #d4f1d4; }
       #editor-overlay #editor-dark-toggle.active { background: #1a1a2e; border-color: #4a4a8f; color: #aaaaff; }
       #editor-overlay #editor-actual-view.active { background: #2d3a2d; border-color: #4f6d4f; color: #d4f1d4; }
-      #editor-overlay #editor-select.active { background: #20402c; border-color: #44ff88; color: #9affc4; }
+
+      /* Tool / mode active states — green = "you are in this mode" */
+      #editor-overlay #editor-select.active,
+      #editor-overlay #editor-fill.active,
+      #editor-overlay #editor-color-mode.active,
+      #editor-overlay #editor-palette.active { background: #20402c; border-color: #44ff88; color: #9affc4; }
+
+      /* Active layer — amber = "you are painting on this layer" */
+      #editor-overlay .layer-btn.active { background: #332200; border-color: #cc8800; color: #ffcc55; }
+
+      /* Armed placement modes — orange-red = "next click places something" */
+      #editor-overlay #editor-place-interactable.active,
+      #editor-overlay #editor-place-npc.active { background: #3a1800; border-color: #cc5500; color: #ff9050; }
+
+      /* Door pairing — cyan = matches door crosshair colour in canvas */
+      #editor-overlay #editor-pair-door.active { background: #0a2530; border-color: #30a0c0; color: #70d8f8; }
       #editor-overlay #editor-preview {
         display: flex; align-items: center; gap: 10px; padding: 4px 6px 8px;
       }
@@ -932,11 +1000,11 @@ export class EditorUI {
 
       #editor-palette-wrap {
         display: none;
-        overflow-y: auto; max-height: 45vh;
+        overflow-x: hidden; overflow-y: auto; max-height: 45vh;
         margin: 0 0 4px; border: 1px solid #2a2a2a;
       }
       #editor-palette-canvas {
-        display: block;
+        display: block; width: 100%;
         image-rendering: pixelated; image-rendering: crisp-edges;
         cursor: crosshair;
       }
