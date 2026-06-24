@@ -34,7 +34,7 @@ const TOOLS_Y   = DRAW_Y + DRAW_SIZE + 52;   // 806
 // ACTIONS_R_Y(638) + 38(gap) + 18(spec label+pad) + 150(spec) + 7 + 16(hue) + 7 + 16(alpha) + 10
 const RECENT_Y  = ACTIONS_R_Y + 38 + 18 + 150 + 7 + 16 + 7 + 16 + 10;  // 900
 
-type Tool = 'pencil' | 'eraser' | 'eyedropper' | 'fill';
+type Tool = 'pencil' | 'eraser' | 'eyedropper' | 'fill' | 'blur';
 
 interface BtnEntry {
   gfx: Phaser.GameObjects.Graphics;
@@ -548,6 +548,7 @@ export class TileEditorScene extends Phaser.Scene {
       { tool: 'eraser',     label: 'ERA' },
       { tool: 'eyedropper', label: 'EYE' },
       { tool: 'fill',       label: 'FILL' },
+      { tool: 'blur',       label: 'BLUR' },
     ];
 
     tools.forEach(({ tool, label }, i) => {
@@ -680,6 +681,8 @@ export class TileEditorScene extends Phaser.Scene {
       this.paintBrush(tx, ty, this.currentColor);
     } else if (this.tool === 'eraser') {
       this.paintBrush(tx, ty, 0);
+    } else if (this.tool === 'blur') {
+      this.applyBlur(tx, ty);
     } else if (this.tool === 'fill') {
       this.floodFill(tx, ty);
       this.isDrawing = false; // fill is one-shot, no drag-fill
@@ -737,6 +740,48 @@ export class TileEditorScene extends Phaser.Scene {
       if (x < TILE - 1) stack.push([x + 1, y]);
       if (y > 0)        stack.push([x, y - 1]);
       if (y < TILE - 1) stack.push([x, y + 1]);
+    }
+  }
+
+  private applyBlur(cx: number, cy: number): void {
+    const off = Math.floor(this.penSize / 2);
+    const positions: [number, number][] = [];
+    for (let dy = 0; dy < this.penSize; dy++) {
+      for (let dx = 0; dx < this.penSize; dx++) {
+        const px = ((cx - off + dx) % TILE + TILE) % TILE;
+        const py = ((cy - off + dy) % TILE + TILE) % TILE;
+        positions.push([px, py]);
+      }
+    }
+
+    // Collect averaged values before writing (avoid reading back blurred pixels mid-pass)
+    const blurred: number[] = positions.map(([px, py]) => {
+      let ra = 0, ga = 0, ba = 0, aa = 0, count = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          let sx = px + kx, sy = py + ky;
+          if (this.wrapMode) {
+            sx = ((sx % TILE) + TILE) % TILE;
+            sy = ((sy % TILE) + TILE) % TILE;
+          } else {
+            if (sx < 0 || sx >= TILE || sy < 0 || sy >= TILE) continue;
+          }
+          const argb = this.px(sx, sy);
+          aa += (argb >>> 24) & 0xff;
+          ra += (argb >>> 16) & 0xff;
+          ga += (argb >>>  8) & 0xff;
+          ba +=  argb         & 0xff;
+          count++;
+        }
+      }
+      if (count === 0) return this.px(px, py);
+      return (((Math.round(aa / count) << 24) | (Math.round(ra / count) << 16) |
+               (Math.round(ga / count) << 8)  |  Math.round(ba / count)) >>> 0);
+    });
+
+    for (let i = 0; i < positions.length; i++) {
+      const [px, py] = positions[i];
+      this.setPx(px, py, blurred[i]!);
     }
   }
 

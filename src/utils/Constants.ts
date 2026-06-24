@@ -17,6 +17,7 @@ export const PLAYER_CONFIG = {
 export const DEPTH = {
   GROUND: 0,
   ON_GROUND: 0.3,
+  COLLISION: 1,
   ON_COLLISION: 2,
   ENTITIES: 10,
   PLAYER: 20,

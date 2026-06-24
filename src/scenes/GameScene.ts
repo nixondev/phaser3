@@ -1033,9 +1033,14 @@ export class GameScene extends Phaser.Scene {
 
     // A shadow effect with x, y offset provides the "3D" directional look
     // x=8, y=8 makes it cast towards the bottom-right (more prominent left/top edges)
-    rt.postFX.addShadow(3, -3 , .006, 1, 0x000000, 15, 0.5);
-    // Optional light blur to soften it further
-    rt.postFX.addBlur(100, 20, 20, 0.2, 0x000000, 5);
+    // postFX requires WebGL with full shader support — Chromecast GPU may not compile these.
+    // Catch so the base black-silhouette RT still renders even if the shadow pass fails.
+    try {
+      rt.postFX.addShadow(3, -3, .006, 1, 0x000000, 15, 0.5);
+      rt.postFX.addBlur(100, 20, 20, 0.2, 0x000000, 5);
+    } catch (e) {
+      console.warn('[GameScene] postFX unavailable (limited GPU?), shadow will render without blur:', e);
+    }
 
     this.edgeShadows = rt;
   }
@@ -1265,26 +1270,19 @@ export class GameScene extends Phaser.Scene {
       sprite.setAlpha(adaptedMode && this.flashlight.isInCone(sprite.x, sprite.y) ? 1 : 0);
     }
 
-    // Mask the Spectra tilemap layer to the flashlight cone
     const spectraLayer = this.roomManager.getSpectraLayer();
     if (spectraLayer) {
       if (adaptedMode) {
         spectraLayer.setAlpha(1);
-        // We could use a Geometry Mask here for a perfect cutout, but for now 
-        // we'll match the 'revealed sprites' behavior by just checking cone hits.
-        // Since it's a single layer, we'll just show the whole layer if any part 
-        // is in the cone, or hide it. 
-        // IMPROVEMENT: Use the flashlight's mask if available.
         const mask = this.flashlight.getMask();
         if (mask) {
           spectraLayer.setMask(mask);
         } else {
-          // Fallback: hide if flashlight is off or no adapter
           spectraLayer.setAlpha(0);
         }
       } else {
         spectraLayer.setAlpha(0);
-        spectraLayer.clearMask();
+        spectraLayer.clearMask(false); // Flashlight owns the mask — don't destroy it
       }
     }
   }

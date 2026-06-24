@@ -259,7 +259,11 @@ export class MenuScene extends Phaser.Scene {
     rt.draw(gfx, 0, 0);
     gfx.destroy();
 
-    rt.postFX.addBlur(100, 25, 25, 0.2, 0x000000, 5);
+    try {
+      rt.postFX.addBlur(100, 25, 25, 0.2, 0x000000, 5);
+    } catch (e) {
+      console.warn('[MenuScene] postFX unavailable, edge blur skipped:', e);
+    }
 
     this.edgeShadows = rt;
   }

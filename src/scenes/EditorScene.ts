@@ -118,6 +118,7 @@ export class EditorScene extends Phaser.Scene {
       MusicManager.getInstance().playRoomMusic(roomId);
     }
     this.editorUI?.onRoomChanged(roomId);
+    this.editorManager?.onRoomChanged();
     this.editorManager?.clearHistory();
     this.editorManager?.clearDirtyState();
   }

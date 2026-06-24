@@ -8,6 +8,7 @@ export class Flashlight {
   private scene: Phaser.Scene;
   private graphics: Phaser.GameObjects.Graphics;
   private maskGraphics: Phaser.GameObjects.Graphics;
+  private cachedMask: Phaser.Display.Masks.GeometryMask | null = null;
   private on: boolean = false;
   private charge: number = BATTERY_MAX;
 
@@ -139,16 +140,18 @@ export class Flashlight {
     return diff <= HALF_ANGLE;
   }
 
-  /**
-   * Returns a GeometryMask based on the current flashlight cone.
-   * Useful for masking tilemap layers (like Spectra).
-   */
+  /** Returns a GeometryMask for the current cone. Created once and reused. */
   getMask(): Phaser.Display.Masks.GeometryMask | null {
     if (!this.on) return null;
-    return this.maskGraphics.createGeometryMask();
+    if (!this.cachedMask) {
+      this.cachedMask = this.maskGraphics.createGeometryMask();
+    }
+    return this.cachedMask;
   }
 
   destroy(): void {
+    this.cachedMask?.destroy();
+    this.cachedMask = null;
     this.graphics.destroy();
     this.maskGraphics.destroy();
   }

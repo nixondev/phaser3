@@ -1,7 +1,8 @@
 ﻿import Phaser from 'phaser';
 import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
-import { DEPTH, GAME_CONFIG, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils/Constants';
+import { WeatherManager } from './WeatherManager';
+import { DEPTH, DARKNESS_CONFIG, GAME_CONFIG, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils/Constants';
 import { DoorDefinition, InputState, InteractableDef } from '@/types';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
@@ -35,6 +36,9 @@ export class RoomEditorManager {
   private mapOutline: Phaser.GameObjects.Graphics;
   private toastText!: Phaser.GameObjects.Text;
   private toastTween?: Phaser.Tweens.Tween;
+  private darknessHint!: Phaser.GameObjects.Rectangle;
+  private edgeShadows?: Phaser.GameObjects.RenderTexture;
+  private weatherManager!: WeatherManager;
 
   // Tile palette (P key)
   private paletteContainer!: Phaser.GameObjects.Container;
@@ -220,6 +224,14 @@ export class RoomEditorManager {
       .setDepth(DEPTH.UI + 220)
       .setAlpha(0);
 
+    this.darknessHint = this.scene.add.rectangle(
+      GAME_CONFIG.WIDTH / 2, GAME_CONFIG.HEIGHT / 2,
+      GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT,
+      0x000000, 1
+    ).setScrollFactor(0).setDepth(DEPTH.LIGHTING).setAlpha(0).setVisible(false);
+
+    this.weatherManager = new WeatherManager(this.scene);
+
     this.paletteContainer = this.scene.add.container(this.palettePosX, this.palettePosY);
     this.paletteContainer.setScrollFactor(0).setDepth(DEPTH.UI + 210).setVisible(false);
     this.paletteHighlight = this.scene.add.graphics();
@@ -294,6 +306,7 @@ export class RoomEditorManager {
   }
   
   update(input: InputState): void {
+    this.weatherManager.update(this.scene.game.loop.delta);
     const pointer = this.scene.input.activePointer;
     const canvasDown = pointer.primaryDown && this.pointerDownOnCanvas;
     this.justDown = canvasDown && !this.wasPrimaryDown;
@@ -406,6 +419,15 @@ export class RoomEditorManager {
       }
     }
     this.updateLayerOpacities(); // full alpha when on, dim when off (tiles + colors)
+    const roomId = this.roomManager.getCurrentRoomId();
+    if (on && roomId) {
+      this.buildEdgeShadows();
+      this.weatherManager.updateForRoom(roomId);
+    } else {
+      this.edgeShadows?.destroy();
+      this.edgeShadows = undefined;
+      this.weatherManager.destroy();
+    }
     if (on) this.showToast('Actual view (hold)');
   }
 
@@ -1866,43 +1888,107 @@ export class RoomEditorManager {
       [LAYER_NAMES.SPECTRA]: spectra,
     };
 
-    // In actual-view (or when the editor is closed), every layer renders at full
-    // alpha exactly as in-game; otherwise the active layer is full and the rest dim.
+    // In actual-view (or when the editor is closed), layers get game-accurate
+    // alphas; otherwise the active layer is full alpha and the rest are dimmed.
     const showAll = !this.isActive || this.actualView;
+    const room = this.roomManager.getCurrentRoomDef();
 
-    [ground, onGround, collision, onCollision, above, onAbove, spectra].forEach(layer => {
-      if (!layer) return;
-      if (showAll) {
-        layer.setAlpha(1);
-        return;
+    if (showAll) {
+      // Game-accurate alphas: OnGround uses its configured value; Spectra is
+      // always hidden (revealed at runtime only with flashlight + spectra-adapter).
+      const gameAlpha: Record<string, number> = {
+        [LAYER_NAMES.GROUND]:       1,
+        [LAYER_NAMES.ON_GROUND]:    room?.onGroundAlpha    ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA,
+        [LAYER_NAMES.COLLISION]:    1,
+        [LAYER_NAMES.ON_COLLISION]: room?.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA,
+        [LAYER_NAMES.ABOVE]:        1,
+        [LAYER_NAMES.ON_ABOVE]:     room?.onAboveAlpha     ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA,
+        [LAYER_NAMES.SPECTRA]:      0,
+      };
+      for (const [name, layer] of Object.entries(layerMap)) {
+        layer?.setAlpha(gameAlpha[name] ?? 1);
       }
 
-      const activeLayer = layerMap[this.currentLayerName];
-      if (layer === activeLayer) {
-        layer.setAlpha(1);
-      } else {
-        // Find which layerName this layer object belongs to
-        let layerName: string | undefined;
-        for (const [name, obj] of Object.entries(layerMap)) {
-          if (obj === layer) {
-            layerName = name;
-            break;
+      // Darkness hint: a semi-transparent black overlay to approximate the
+      // DarknessOverlay when previewing a dark room in actual-view mode.
+      const isDark = this.actualView && room?.dark === true;
+      const darkAlpha = isDark ? (room?.darkLevel ?? DARKNESS_CONFIG.DEFAULT_LEVEL) : 0;
+      this.darknessHint.setVisible(isDark).setAlpha(darkAlpha);
+    } else {
+      this.darknessHint.setVisible(false);
+
+      [ground, onGround, collision, onCollision, above, onAbove, spectra].forEach(layer => {
+        if (!layer) return;
+        const activeLayer = layerMap[this.currentLayerName];
+        if (layer === activeLayer) {
+          layer.setAlpha(1);
+        } else {
+          let layerName: string | undefined;
+          for (const [name, obj] of Object.entries(layerMap)) {
+            if (obj === layer) { layerName = name; break; }
           }
+
+          let baseAlpha = 1.0;
+          if (layerName === LAYER_NAMES.ON_GROUND)    baseAlpha = room?.onGroundAlpha    ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA;
+          if (layerName === LAYER_NAMES.ON_COLLISION) baseAlpha = room?.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA;
+          if (layerName === LAYER_NAMES.ON_ABOVE)     baseAlpha = room?.onAboveAlpha     ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA;
+
+          layer.setAlpha(baseAlpha * LAYER_CONFIG.EDITOR_INACTIVE_ALPHA);
         }
-
-        // Apply decorative alpha if defined for this layer, otherwise use default inactive alpha.
-        const room = this.roomManager.getCurrentRoomDef();
-        let baseAlpha = 1.0;
-        if (layerName === LAYER_NAMES.ON_GROUND) baseAlpha = room.onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA;
-        if (layerName === LAYER_NAMES.ON_COLLISION) baseAlpha = room.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA;
-        if (layerName === LAYER_NAMES.ON_ABOVE) baseAlpha = room.onAboveAlpha ?? LAYER_CONFIG.ON_ABOVE_DEFAULT_ALPHA;
-
-        layer.setAlpha(baseAlpha * LAYER_CONFIG.EDITOR_INACTIVE_ALPHA);
-      }
-    });
+      });
+    }
 
     // Mirror the dimming onto the color overlays (null = full alpha).
     this.roomManager.setColorEditorDim(showAll ? null : this.currentLayerName);
+  }
+
+  private buildEdgeShadows(): void {
+    this.edgeShadows?.destroy();
+    this.edgeShadows = undefined;
+
+    const map = this.roomManager.getMap();
+    const collisionLayer = this.roomManager.getCollisionLayer();
+    if (!map || !collisionLayer) return;
+
+    const TILE = GAME_CONFIG.TILE_SIZE;
+    const rt = this.scene.add.renderTexture(0, 0, map.width * TILE, map.height * TILE);
+    rt.setOrigin(0, 0).setDepth(DEPTH.GROUND + 0.5).setAlpha(0.6);
+
+    const layerData = collisionLayer.layer.data;
+    for (let ty = 0; ty < map.height; ty++) {
+      for (let tx = 0; tx < map.width; tx++) {
+        const tile = layerData[ty]?.[tx];
+        if (!tile || tile.index <= 0) continue;
+        let owningTs = map.tilesets[0];
+        for (const ts of map.tilesets) {
+          if (ts.firstgid <= tile.index) owningTs = ts;
+        }
+        if (!owningTs) continue;
+        const img = this.scene.make.image({ x: 0, y: 0, key: tilesetSpritesheetKey(owningTs.name), frame: tile.index - owningTs.firstgid, add: false });
+        img.setTint(0x000000).setOrigin(0, 0);
+        rt.draw(img, tx * TILE, ty * TILE);
+        img.destroy();
+      }
+    }
+
+    try {
+      rt.postFX.addShadow(3, -3, 0.006, 1, 0x000000, 15, 0.5);
+      rt.postFX.addBlur(100, 20, 20, 0.2, 0x000000, 5);
+    } catch (e) {
+      console.warn('[Editor] postFX unavailable, edge shadows will render without blur:', e);
+    }
+
+    this.edgeShadows = rt;
+  }
+
+  /** Call when the active room changes so actual-view atmosphere stays accurate. */
+  public onRoomChanged(): void {
+    this.updateLayerOpacities();
+    if (this.actualView) {
+      this.buildEdgeShadows();
+      const roomId = this.roomManager.getCurrentRoomId();
+      if (roomId) this.weatherManager.updateForRoom(roomId);
+    }
   }
 
   /**
@@ -2247,6 +2333,9 @@ export class RoomEditorManager {
     this.mapOutline?.destroy();
     this.doorHandles?.destroy();
     this.toastText?.destroy();
+    this.darknessHint?.destroy();
+    this.edgeShadows?.destroy();
+    this.weatherManager?.destroy();
     this.paletteContainer?.destroy();
     this.paletteHighlight?.destroy();
     this.pairPickerContainer?.destroy();

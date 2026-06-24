@@ -15,10 +15,10 @@ const roomsData = JSON.parse(JSON.stringify(roomsDataRaw)) as RoomsData;
 const COLOR_OVERLAY_DEPTH: Record<string, number> = {
   [LAYER_NAMES.GROUND]: DEPTH.GROUND + 0.05,
   [LAYER_NAMES.ON_GROUND]: DEPTH.ON_GROUND + 0.05,
-  [LAYER_NAMES.COLLISION]: DEPTH.GROUND + 1.05,
+  [LAYER_NAMES.COLLISION]: DEPTH.COLLISION + 0.05,
   [LAYER_NAMES.ON_COLLISION]: DEPTH.ON_COLLISION + 0.05,
   [LAYER_NAMES.ABOVE]: DEPTH.ABOVE + 0.05,
-  [LAYER_NAMES.ON_ABOVE]: DEPTH.ABOVE + 0.5,
+  [LAYER_NAMES.ON_ABOVE]: DEPTH.ABOVE + 0.55,
   [LAYER_NAMES.SPECTRA]: DEPTH.HIDDEN + 0.05,
 };
 
@@ -114,7 +114,7 @@ export class RoomManager {
     this.currentLayers = { ground, onGround, collision, onCollision, above, onAbove, spectra };
 
     ground.setDepth(DEPTH.GROUND);
-    collision.setDepth(DEPTH.GROUND + 1);
+    collision.setDepth(DEPTH.COLLISION);
     above.setDepth(DEPTH.ABOVE);
     if (onAbove) {
       onAbove.setDepth(DEPTH.ABOVE + 0.5);
@@ -131,7 +131,7 @@ export class RoomManager {
     }
     if (spectra) {
       spectra.setDepth(DEPTH.HIDDEN);
-      // Visible only via spectra-adapter in GameScene, but fully visible in Editor.
+      spectra.setAlpha(0); // hidden until flashlight + spectra-adapter; editor overrides via updateLayerOpacities
     }
 
     collision.setCollisionByExclusion([-1]);
@@ -694,7 +694,7 @@ export class RoomManager {
       onGround.setDepth(DEPTH.ON_GROUND);
       onGround.setAlpha(this.getCurrentRoomDef().onGroundAlpha ?? LAYER_CONFIG.ON_GROUND_DEFAULT_ALPHA);
     }
-    collision.setDepth(DEPTH.GROUND + 1);
+    collision.setDepth(DEPTH.COLLISION);
     if (onCollision) {
       onCollision.setDepth(DEPTH.ON_COLLISION); // decorative — no collision
       onCollision.setAlpha(room.onCollisionAlpha ?? LAYER_CONFIG.ON_COLLISION_DEFAULT_ALPHA);
@@ -706,6 +706,7 @@ export class RoomManager {
     }
     if (spectra) {
       spectra.setDepth(DEPTH.HIDDEN);
+      spectra.setAlpha(0);
     }
 
     const restoreLayer = (layer: Phaser.Tilemaps.TilemapLayer, data: number[][]): void => {

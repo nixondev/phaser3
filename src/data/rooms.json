@@ -457,16 +457,16 @@
       "doors": [
         {
           "id": "house-exit",
-          "x": 608,
+          "x": 609,
           "y": 0,
           "width": 64,
           "height": 64,
           "targetRoom": "city-street",
           "targetDoor": "city-house-door",
           "direction": "up",
-          "spawnX": 644,
-          "spawnY": 116,
-          "lockedMessage": "The door opens slightly and then stops suddenly. You can see chains on the outer side of door, holding it closed.",
+          "spawnX": 641,
+          "spawnY": 128,
+          "lockedMessage": "The door opens slightly and stops. You can see chains on the outer side of door, holding it closed.",
           "unlockedMessage": "The chain snaps. So does the prybar",
           "requiredKeys": [
             "prybar"
@@ -484,6 +484,18 @@
           "spawnX": 1440,
           "spawnY": 1070,
           "requires": []
+        },
+        {
+          "id": "door-wftlg",
+          "x": 0,
+          "y": 448,
+          "width": 64,
+          "height": 64,
+          "targetRoom": "side-kitchen",
+          "targetDoor": "door-gcx7v",
+          "direction": "left",
+          "spawnX": 128,
+          "spawnY": 480
         }
       ],
       "interactables": [
@@ -511,15 +523,15 @@
         {
           "id": "protag-charger",
           "x": 800,
-          "y": 736,
+          "y": 544,
           "type": "recharge",
           "text": "Your bedside charging dock. Flashlight batteries topped up.",
           "tileFrame": 39
         },
         {
           "id": "starter-flashlight",
-          "x": 437,
-          "y": 276,
+          "x": 801,
+          "y": 611,
           "type": "item",
           "tileFrame": 70,
           "text": "Your hand-held flashlight, resting on the dock.\nStill the only thing between you and the dark.",
@@ -567,9 +579,8 @@
       ],
       "dark": true,
       "darkLevel": 0.35,
-      "onAboveAlpha": 0.6,
-      "onCollisionAlpha": 0.6,
-      "onGroundAlpha": 0.25
+      "onAboveAlpha": 0.75,
+      "onCollisionAlpha": 0.45
     },
     "house-b": {
       "id": "house-b",
@@ -1307,6 +1318,36 @@
           "variant": "husk"
         }
       ]
+    },
+    "side-kitchen": {
+      "id": "side-kitchen",
+      "name": "Side Kitchen",
+      "mapKey": "side-kitchen",
+      "tilemapPath": "assets/tilemaps/side-kitchen.json",
+      "width": 14,
+      "height": 15,
+      "reverb": "indoor",
+      "playerSpawn": {
+        "x": 168,
+        "y": 120
+      },
+      "doors": [
+        {
+          "id": "door-gcx7v",
+          "x": 862,
+          "y": 419,
+          "width": 64,
+          "height": 64,
+          "targetRoom": "protag-house",
+          "targetDoor": "door-wftlg",
+          "direction": "right",
+          "spawnX": 798,
+          "spawnY": 451
+        }
+      ],
+      "interactables": [],
+      "afflicted": [],
+      "onGroundAlpha": 0.15
     }
   },
   "startRoom": "protag-house"
