@@ -24,7 +24,8 @@
       "WebFetch(domain:optiview.dolby.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:developer.bitmovin.com)"
+      "WebFetch(domain:developer.bitmovin.com)",
+      "Bash(python *)"
     ]
   }
 }

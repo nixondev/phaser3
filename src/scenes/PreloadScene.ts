@@ -36,12 +36,15 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     const upscale = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
+    const roomsData = RoomManager.getRoomsData();
 
-    this.load.image('tileset', 'assets/tilemaps/tileset.png');
-    this.load.spritesheet('tileset-sprites', 'assets/tilemaps/tileset.png', {
-      frameWidth: upscale,
-      frameHeight: upscale,
-    });
+    // Load all base tilesets (tileset, tileset2, …) declared in rooms.json.
+    for (const name of roomsData.baseTilesets ?? ['tileset']) {
+      const tsPath = `assets/tilemaps/${name}.png`;
+      this.load.image(name, tsPath);
+      this.load.spritesheet(`${name}-sprites`, tsPath, { frameWidth: upscale, frameHeight: upscale });
+    }
+
     this.load.spritesheet('player', 'assets/sprites/player.png', {
       frameWidth: 64,
       frameHeight: 64,
@@ -76,7 +79,6 @@ export class PreloadScene extends Phaser.Scene {
       });
     }
 
-    const roomsData = RoomManager.getRoomsData();
     const extraTilesets = new Set<string>();
     for (const room of Object.values(roomsData.rooms)) {
       debug('Queuing tilemap:', room.mapKey, room.tilemapPath);

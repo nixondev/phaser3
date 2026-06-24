@@ -12,6 +12,8 @@
     "regenerate-tiles": "node scripts/regenerate-tiles.cjs",
     "migrate-tiles": "node scripts/migrate-tiles.cjs",
     "new-room": "node scripts/new-room.cjs",
+    "create-room-tiles": "node scripts/create-room-tiles.cjs",
+    "patch-tilemaps": "node scripts/patch-tilemaps.cjs",
     "build-tileset": "node scripts/build-tileset.cjs",
     "export-tiles": "node scripts/export-tiles.cjs",
     "extract-tile": "node scripts/extract-tile.cjs",

@@ -60,6 +60,7 @@ export class EditorScene extends Phaser.Scene {
     this.editorManager = new RoomEditorManager(this, this.roomManager, this.rsm);
     this.debugManager = new DebugManager(this, this.roomManager, this.rsm);
     this.editorUI = new EditorUI(this);
+    this.editorManager.setEditorUI(this.editorUI);
 
     const startId = this.roomManager.getStartRoom();
     this.loadRoomInternal(startId);

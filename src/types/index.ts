@@ -228,6 +228,7 @@ export interface RoomDefinition {
 export interface RoomsData {
   rooms: Record<string, RoomDefinition>;
   startRoom: string;
+  baseTilesets?: string[];
 }
 
 export interface InputState {

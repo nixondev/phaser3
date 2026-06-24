@@ -2,6 +2,7 @@
 import type { EditorScene } from './EditorScene';
 import type { EditorPreviewState } from '@systems/RoomEditorManager';
 import { DARKNESS_CONFIG } from '@utils/Constants';
+import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 /**
  * DOM panel controller for the editor scene.
@@ -31,6 +32,18 @@ export class EditorUI {
   private previewLabel!: HTMLElement;
   private lastPreviewKey = '';
   private lastTool = '';
+
+  // DOM tile palette
+  private paletteCanvas!: HTMLCanvasElement;
+  private paletteOffscreen: HTMLCanvasElement | null = null;
+  private paletteTilesets: Phaser.Tilemaps.Tileset[] = [];
+  private paletteHitmap: Array<{ gid: number; tilesetIdx: number; localCol: number; localRow: number; pixelX: number; pixelY: number }> = [];
+  private paletteDragStart: { gid: number; tilesetIdx: number; localCol: number; localRow: number; pixelX: number; pixelY: number } | null = null;
+  private paletteSelectedGids: number[][] = [[1]];
+  public onTileSelected: ((gids: number[][], first: { textureKey: string; frame: number; gid: number }) => void) | null = null;
+  private static readonly PTHUMB = 28;
+  private static readonly PCOLS = 8;
+  private static readonly PLABEL_H = 16;
 
   private currentRoomId = '';
   private currentWeather: string[] = [];
@@ -69,6 +82,8 @@ export class EditorUI {
     this.propsTextarea = this.root.querySelector('#editor-props-json') as HTMLTextAreaElement;
     this.previewCanvas = this.root.querySelector('#editor-preview-canvas') as HTMLCanvasElement;
     this.previewLabel = this.root.querySelector('#editor-preview-label') as HTMLElement;
+    this.paletteCanvas = this.root.querySelector('#editor-palette-canvas') as HTMLCanvasElement;
+    this.setupPaletteEvents();
 
     this.root.querySelector<HTMLButtonElement>('#editor-props-copy')?.addEventListener('click', () => {
       navigator.clipboard.writeText(this.propsTextarea.value).then(
@@ -204,6 +219,185 @@ export class EditorUI {
   }
 
   // â”€â”€ Internals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  // ── Palette API ────────────────────────────────────────────────────────────
+
+  public buildPalette(tilesets: Phaser.Tilemaps.Tileset[]): void {
+    this.paletteTilesets = tilesets;
+    this.paletteHitmap = [];
+    const T = EditorUI.PTHUMB;
+    const COLS = EditorUI.PCOLS;
+    const LH = EditorUI.PLABEL_H;
+
+    let totalH = 0;
+    for (const ts of tilesets) totalH += LH + Math.ceil(ts.total / COLS) * T;
+    if (totalH === 0) totalH = LH;
+    const W = COLS * T;
+
+    if (!this.paletteOffscreen) this.paletteOffscreen = document.createElement('canvas');
+    this.paletteOffscreen.width = W;
+    this.paletteOffscreen.height = totalH;
+    this.paletteCanvas.width = W;
+    this.paletteCanvas.height = totalH;
+
+    const off = this.paletteOffscreen.getContext('2d')!;
+    off.imageSmoothingEnabled = false;
+    off.fillStyle = '#111';
+    off.fillRect(0, 0, W, totalH);
+
+    if (tilesets.length === 0) {
+      off.fillStyle = '#666';
+      off.font = '11px monospace';
+      off.fillText('No tilesets', 4, 12);
+    }
+
+    let cy = 0;
+    for (let tsIdx = 0; tsIdx < tilesets.length; tsIdx++) {
+      const ts = tilesets[tsIdx];
+      const key = tilesetSpritesheetKey(ts.name);
+
+      off.fillStyle = '#1a1a1a';
+      off.fillRect(0, cy, W, LH);
+      off.fillStyle = '#aada88';
+      off.font = `${LH - 4}px monospace`;
+      off.fillText(ts.name, 3, cy + LH - 4);
+      cy += LH;
+
+      const texture = this.scene.textures.get(key);
+      for (let local = 0; local < ts.total; local++) {
+        const col = local % COLS;
+        const row = Math.floor(local / COLS);
+        const px = col * T;
+        const py = cy + row * T;
+        const gid = ts.firstgid + local;
+        try {
+          const frame = texture.get(local);
+          const src = texture.getSourceImage() as CanvasImageSource;
+          off.drawImage(src, frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight, px, py, T, T);
+        } catch {
+          off.fillStyle = '#2a2a2a';
+          off.fillRect(px, py, T, T);
+        }
+        off.strokeStyle = 'rgba(0,0,0,0.5)';
+        off.lineWidth = 0.5;
+        off.strokeRect(px + 0.25, py + 0.25, T - 0.5, T - 0.5);
+        this.paletteHitmap.push({ gid, tilesetIdx: tsIdx, localCol: col, localRow: row, pixelX: px, pixelY: py });
+      }
+      cy += Math.ceil(ts.total / COLS) * T;
+    }
+    this.drawHighlightOnly();
+  }
+
+  public setPaletteVisible(visible: boolean): void {
+    const wrap = this.root.querySelector<HTMLElement>('#editor-palette-wrap');
+    if (wrap) wrap.style.display = visible ? 'block' : 'none';
+  }
+
+  public updatePaletteHighlight(gids: number[][]): void {
+    this.paletteSelectedGids = gids;
+    this.drawHighlightOnly();
+  }
+
+  private drawHighlightOnly(): void {
+    if (!this.paletteOffscreen) return;
+    const ctx = this.paletteCanvas.getContext('2d')!;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, this.paletteCanvas.width, this.paletteCanvas.height);
+    ctx.drawImage(this.paletteOffscreen, 0, 0);
+    this.drawPaletteHighlight(ctx);
+  }
+
+  private drawPaletteHighlight(ctx: CanvasRenderingContext2D): void {
+    const T = EditorUI.PTHUMB;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const row of this.paletteSelectedGids) {
+      for (const gid of row) {
+        if (gid <= 0) continue;
+        const entry = this.paletteHitmap.find(h => h.gid === gid);
+        if (!entry) continue;
+        minX = Math.min(minX, entry.pixelX);
+        minY = Math.min(minY, entry.pixelY);
+        maxX = Math.max(maxX, entry.pixelX + T);
+        maxY = Math.max(maxY, entry.pixelY + T);
+      }
+    }
+    if (!isFinite(minX)) return;
+    ctx.strokeStyle = 'rgba(255,255,0,0.9)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(minX + 1, minY + 1, maxX - minX - 2, maxY - minY - 2);
+  }
+
+  private setupPaletteEvents(): void {
+    this.paletteCanvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      const hit = this.hitAtPointer(e);
+      if (!hit) return;
+      this.paletteDragStart = hit;
+      this.finalizePaletteSelection(hit, hit);
+      e.preventDefault();
+      e.stopPropagation();
+      this.scene.game.canvas.focus();
+    });
+    this.paletteCanvas.addEventListener('mousemove', (e) => {
+      if (e.buttons !== 1 || !this.paletteDragStart) return;
+      const hit = this.hitAtPointer(e);
+      if (hit) this.finalizePaletteSelection(this.paletteDragStart, hit);
+    });
+    window.addEventListener('mouseup', () => { this.paletteDragStart = null; });
+  }
+
+  private hitAtPointer(e: MouseEvent): typeof this.paletteHitmap[0] | null {
+    const cx = e.offsetX;
+    const cy = e.offsetY;
+    for (const entry of this.paletteHitmap) {
+      if (cx >= entry.pixelX && cx < entry.pixelX + EditorUI.PTHUMB &&
+          cy >= entry.pixelY && cy < entry.pixelY + EditorUI.PTHUMB) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  private finalizePaletteSelection(
+    start: typeof this.paletteHitmap[0],
+    end: typeof this.paletteHitmap[0],
+  ): void {
+    const COLS = EditorUI.PCOLS;
+    let gids: number[][];
+    let tsIdx: number;
+
+    if (start.tilesetIdx !== end.tilesetIdx) {
+      gids = [[end.gid]];
+      tsIdx = end.tilesetIdx;
+    } else {
+      tsIdx = start.tilesetIdx;
+      const ts = this.paletteTilesets[tsIdx];
+      const c1 = Math.min(start.localCol, end.localCol);
+      const c2 = Math.max(start.localCol, end.localCol);
+      const r1 = Math.min(start.localRow, end.localRow);
+      const r2 = Math.max(start.localRow, end.localRow);
+      gids = [];
+      for (let r = r1; r <= r2; r++) {
+        const row: number[] = [];
+        for (let c = c1; c <= c2; c++) {
+          const local = r * COLS + c;
+          if (local < ts.total) row.push(ts.firstgid + local);
+        }
+        if (row.length > 0) gids.push(row);
+      }
+      if (gids.length === 0) { gids = [[end.gid]]; tsIdx = end.tilesetIdx; }
+    }
+
+    this.paletteSelectedGids = gids;
+    this.drawHighlightOnly();
+
+    const ts = this.paletteTilesets[tsIdx];
+    if (!ts) return;
+    const firstGid = gids[0][0];
+    const local = firstGid - ts.firstgid;
+    const key = tilesetSpritesheetKey(ts.name);
+    this.onTileSelected?.(gids, { textureKey: key, frame: local, gid: firstGid });
+  }
 
   private populateRoomList(): void {
     const rooms = RoomManager.getRoomsData().rooms;
@@ -506,6 +700,10 @@ export class EditorUI {
           <canvas id="editor-preview-canvas" width="64" height="64"></canvas>
           <span id="editor-preview-label">—</span>
         </div>
+        <h3>Tiles</h3>
+        <div id="editor-palette-wrap">
+          <canvas id="editor-palette-canvas"></canvas>
+        </div>
         <h3>Layer</h3>
         <div class="row">
           <button class="btn layer-btn" data-layer-key="1">1 Ground</button>
@@ -730,6 +928,17 @@ export class EditorUI {
         background: #181818;
         border-top: 1px solid #2a2a2a;
         color: #aaa; font-size: 10px;
+      }
+
+      #editor-palette-wrap {
+        display: none;
+        overflow-y: auto; max-height: 45vh;
+        margin: 0 0 4px; border: 1px solid #2a2a2a;
+      }
+      #editor-palette-canvas {
+        display: block;
+        image-rendering: pixelated; image-rendering: crisp-edges;
+        cursor: crosshair;
       }
     `;
   }

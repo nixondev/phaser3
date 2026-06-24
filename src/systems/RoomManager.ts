@@ -73,12 +73,13 @@ export class RoomManager {
 
     this.currentMap = this.scene.make.tilemap({ key: room.mapKey });
 
-    // Always load the core tileset first, then any room-specific tilesets.
-    const coreTileset = this.currentMap.addTilesetImage('tileset', 'tileset');
-    if (!coreTileset) {
-      throw new Error('Failed to add core tileset image');
+    // Load base tilesets (general, shared) then room-specific ones.
+    const tilesets: Phaser.Tilemaps.Tileset[] = [];
+    for (const name of roomsData.baseTilesets ?? ['tileset']) {
+      const ts = this.currentMap.addTilesetImage(name, name);
+      if (ts) tilesets.push(ts);
+      else throw new Error(`Failed to add base tileset "${name}" — ensure it is listed in the tilemap JSON and the PNG exists`);
     }
-    const tilesets: Phaser.Tilemaps.Tileset[] = [coreTileset];
     for (const tsName of room.tilesets ?? []) {
       const ts = this.currentMap.addTilesetImage(tsName, tsName);
       if (ts) tilesets.push(ts);

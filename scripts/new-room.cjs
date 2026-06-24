@@ -11,20 +11,57 @@
 //   width  default 20 (tiles)
 //   height default 15 (tiles)
 
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const ROOM_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const DEFAULT_W = 20;
 const DEFAULT_H = 15;
 const FLOOR_GID = 3;     // floor tile (matches existing rooms)
 const WALL_GID = 2;      // exterior wall (matches existing rooms)
-const TILE_PX = 16;      // display tile size, used for spawn coords
+const SPAWN_TILE_PX = 16; // display tile size, used for spawn coords
 
-const ROOT = path.resolve(__dirname, '..');
-const ROOMS_JSON = path.join(ROOT, 'src/data/rooms.json');
+const ROOT         = path.resolve(__dirname, '..');
+const ROOMS_JSON   = path.join(ROOT, 'src/data/rooms.json');
 const TILEMAPS_DIR = path.join(ROOT, 'public/assets/tilemaps');
-const MUSIC_DIR = path.join(ROOT, 'public/music');
+const MUSIC_DIR    = path.join(ROOT, 'public/music');
+
+const TILE_PX         = 64;
+const SHEET_COLS      = 8;
+const TILES_PER_SHEET = 128;
+const SHEET_W = SHEET_COLS * TILE_PX;
+const SHEET_H = (TILES_PER_SHEET / SHEET_COLS) * TILE_PX;
+
+// Minimal blank-PNG generator (pure Node.js, no deps)
+function crc32(buf) {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c;
+  }
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) crc = t[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+function chunk(type, data) {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const c = Buffer.allocUnsafe(4); c.writeUInt32BE(crc32(td));
+  return Buffer.concat([len, td, c]);
+}
+function blankPNG(w, h) {
+  const rowBytes = 1 + w * 4;
+  const raw = Buffer.alloc(h * rowBytes, 0);
+  const compressed = zlib.deflateSync(raw);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137,80,78,71,13,10,26,10]),
+    chunk('IHDR', ihdr), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
 
 function fail(msg) {
   console.error(`new-room: ${msg}`);
@@ -71,9 +108,13 @@ if (roomsData.rooms[roomId]) {
 }
 
 // ── prepare tilemap path ──
-const tilemapPath = path.join(TILEMAPS_DIR, `${roomId}.json`);
+const tilemapPath  = path.join(TILEMAPS_DIR, `${roomId}.json`);
+const tilesetPng   = path.join(TILEMAPS_DIR, `${roomId}-tiles.png`);
 if (fs.existsSync(tilemapPath)) {
   fail(`tilemap already exists at ${path.relative(ROOT, tilemapPath)}`);
+}
+if (fs.existsSync(tilesetPng)) {
+  fail(`room tileset already exists at ${path.relative(ROOT, tilesetPng)}`);
 }
 if (!fs.existsSync(TILEMAPS_DIR)) {
   fail(`tilemaps directory missing: ${path.relative(ROOT, TILEMAPS_DIR)}`);
@@ -122,12 +163,30 @@ function makeCollisionLayer(id) {
   };
 }
 
+const baseTilesets = roomsData.baseTilesets ?? ['tileset'];
+const roomTilesetName = `${roomId}-tiles`;
+// Base tilesets come first (GID 1, 129, 257, …) then the room-specific one.
+const tilesets = [
+  ...baseTilesets.map((name, i) => ({
+    columns: SHEET_COLS, firstgid: 1 + i * TILES_PER_SHEET,
+    image: `${name}.png`, imageheight: SHEET_H, imagewidth: SHEET_W,
+    margin: 0, name, spacing: 0, tilecount: TILES_PER_SHEET,
+    tileheight: TILE_PX, tilewidth: TILE_PX,
+  })),
+  {
+    columns: SHEET_COLS, firstgid: 1 + baseTilesets.length * TILES_PER_SHEET,
+    image: `${roomTilesetName}.png`, imageheight: SHEET_H, imagewidth: SHEET_W,
+    margin: 0, name: roomTilesetName, spacing: 0, tilecount: TILES_PER_SHEET,
+    tileheight: TILE_PX, tilewidth: TILE_PX,
+  },
+];
+
 const tilemap = {
   width, height,
   infinite: false,
   orientation: 'orthogonal',
   renderorder: 'right-down',
-  tilewidth: 64, tileheight: 64,
+  tilewidth: TILE_PX, tileheight: TILE_PX,
   type: 'map',
   version: '1.10',
   tiledversion: '1.10.2',
@@ -139,16 +198,7 @@ const tilemap = {
     makeCollisionLayer(3),
     makeFilledLayer(4, 'Above', 0)
   ],
-  tilesets: [{
-    firstgid: 1,
-    name: 'tileset',
-    tilewidth: 64, tileheight: 64,
-    tilecount: 128,
-    columns: 8,
-    image: 'tileset.png',
-    imagewidth: 512, imageheight: 1024,
-    margin: 0, spacing: 0
-  }]
+  tilesets,
 };
 
 // ── build rooms.json entry ──
@@ -157,14 +207,15 @@ const friendlyName = roomId
   .map(s => s.charAt(0).toUpperCase() + s.slice(1))
   .join(' ');
 
-const spawnX = Math.floor(width / 2) * TILE_PX + Math.floor(TILE_PX / 2);
-const spawnY = Math.floor(height / 2) * TILE_PX + Math.floor(TILE_PX / 2);
+const spawnX = Math.floor(width / 2) * SPAWN_TILE_PX + Math.floor(SPAWN_TILE_PX / 2);
+const spawnY = Math.floor(height / 2) * SPAWN_TILE_PX + Math.floor(SPAWN_TILE_PX / 2);
 
 const newRoom = {
   id: roomId,
   name: friendlyName,
   mapKey: roomId,
   tilemapPath: `assets/tilemaps/${roomId}.json`,
+  tilesets: [roomTilesetName],
   width, height,
   reverb: 'indoor',
   playerSpawn: { x: spawnX, y: spawnY },
@@ -189,10 +240,18 @@ try {
 }
 
 try {
+  atomicWrite(tilesetPng, blankPNG(SHEET_W, SHEET_H));
+} catch (e) {
+  try { fs.unlinkSync(tilemapPath); } catch { /* ignore */ }
+  fail(`could not write room tileset PNG: ${e.message}`);
+}
+
+try {
   atomicWrite(ROOMS_JSON, JSON.stringify(roomsData, null, 2) + '\n');
 } catch (e) {
-  // try to clean up the orphan tilemap so the user isn't left in a half-state
+  // try to clean up orphans so the user isn't left in a half-state
   try { fs.unlinkSync(tilemapPath); } catch { /* ignore */ }
+  try { fs.unlinkSync(tilesetPng); } catch { /* ignore */ }
   fail(`could not write rooms.json: ${e.message}`);
 }
 
@@ -210,6 +269,7 @@ try {
 console.log(`Created room "${roomId}" (${width}x${height})`);
 console.log(`  - ${path.relative(ROOT, ROOMS_JSON)}  [appended]`);
 console.log(`  - ${path.relative(ROOT, tilemapPath)}  [new]`);
+console.log(`  - ${path.relative(ROOT, tilesetPng)}  [new, blank 512×1024]`);
 console.log(`  - ${path.relative(ROOT, musicRoomDir)}/  [new, with .gitkeep]`);
 console.log('');
 console.log('Next steps:');

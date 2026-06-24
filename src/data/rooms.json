@@ -1,4 +1,7 @@
 {
+  "baseTilesets": [
+    "tileset"
+  ],
   "rooms": {
     "city-street": {
       "id": "city-street",
@@ -438,7 +441,10 @@
         }
       ],
       "dark": true,
-      "darkLevel": 0.4
+      "darkLevel": 0.4,
+      "tilesets": [
+        "city-street-tiles"
+      ]
     },
     "protag-house": {
       "id": "protag-house",
@@ -580,7 +586,10 @@
       "dark": true,
       "darkLevel": 0.35,
       "onAboveAlpha": 0.75,
-      "onCollisionAlpha": 0.45
+      "onCollisionAlpha": 0.45,
+      "tilesets": [
+        "protag-house-tiles"
+      ]
     },
     "house-b": {
       "id": "house-b",
@@ -642,6 +651,9 @@
           "playerVariant": "ranger",
           "associatedRoom": "house-b"
         }
+      ],
+      "tilesets": [
+        "house-b-tiles"
       ]
     },
     "house-c": {
@@ -716,6 +728,9 @@
           "playerVariant": "rogue",
           "associatedRoom": "house-c"
         }
+      ],
+      "tilesets": [
+        "house-c-tiles"
       ]
     },
     "clinic": {
@@ -770,7 +785,10 @@
         }
       ],
       "onCollisionAlpha": 0.85,
-      "onGroundAlpha": 0
+      "onGroundAlpha": 0,
+      "tilesets": [
+        "clinic-tiles"
+      ]
     },
     "records-office": {
       "id": "records-office",
@@ -821,6 +839,9 @@
           "spawnX": 256,
           "spawnY": 576
         }
+      ],
+      "tilesets": [
+        "records-office-tiles"
       ]
     },
     "utility-substation": {
@@ -871,6 +892,9 @@
           "text": "The substation's backup cells are humming. Flashlight recharged.",
           "tileFrame": 39
         }
+      ],
+      "tilesets": [
+        "utility-substation-tiles"
       ]
     },
     "market": {
@@ -898,6 +922,9 @@
           "spawnX": 640,
           "spawnY": 192
         }
+      ],
+      "tilesets": [
+        "market-tiles"
       ]
     },
     "ration-office": {
@@ -938,6 +965,9 @@
           "spawnY": 320,
           "requires": []
         }
+      ],
+      "tilesets": [
+        "ration-office-tiles"
       ]
     },
     "east-block": {
@@ -977,6 +1007,9 @@
           "spawnX": 640,
           "spawnY": 576
         }
+      ],
+      "tilesets": [
+        "east-block-tiles"
       ]
     },
     "laundromat": {
@@ -1016,6 +1049,9 @@
           "spawnX": 1120,
           "spawnY": 640
         }
+      ],
+      "tilesets": [
+        "laundromat-tiles"
       ]
     },
     "substation-tunnel": {
@@ -1055,6 +1091,9 @@
           "spawnX": 2400,
           "spawnY": 192
         }
+      ],
+      "tilesets": [
+        "substation-tunnel-tiles"
       ]
     },
     "depot": {
@@ -1082,6 +1121,9 @@
           "spawnX": 640,
           "spawnY": 192
         }
+      ],
+      "tilesets": [
+        "depot-tiles"
       ]
     },
     "apt-4a": {
@@ -1119,6 +1161,9 @@
           "text": "The skeletal remains of someone who didn't make it out. They're clutching a faded photograph.",
           "tileFrame": 10
         }
+      ],
+      "tilesets": [
+        "apt-4a-tiles"
       ]
     },
     "room-vault": {
@@ -1167,7 +1212,10 @@
       ],
       "dark": true,
       "darkLevel": 0.99,
-      "weather": "dripping"
+      "weather": "dripping",
+      "tilesets": [
+        "room-vault-tiles"
+      ]
     },
     "room-library": {
       "id": "room-library",
@@ -1194,6 +1242,9 @@
           "spawnX": 256,
           "spawnY": 576
         }
+      ],
+      "tilesets": [
+        "room-library-tiles"
       ]
     },
     "room-garden": {
@@ -1222,6 +1273,9 @@
           "spawnX": 1152,
           "spawnY": 960
         }
+      ],
+      "tilesets": [
+        "room-garden-tiles"
       ]
     },
     "room-entrance": {
@@ -1249,6 +1303,9 @@
           "spawnX": 640,
           "spawnY": 576
         }
+      ],
+      "tilesets": [
+        "room-entrance-tiles"
       ]
     },
     "basement": {
@@ -1280,7 +1337,10 @@
       ],
       "interactables": [],
       "afflicted": [],
-      "onGroundAlpha": 0.3
+      "onGroundAlpha": 0.3,
+      "tilesets": [
+        "basement-tiles"
+      ]
     },
     "title-screen": {
       "id": "title-screen",
@@ -1317,6 +1377,9 @@
           "behaviorLoop": "wander",
           "variant": "husk"
         }
+      ],
+      "tilesets": [
+        "title-screen-tiles"
       ]
     },
     "side-kitchen": {
@@ -1347,7 +1410,10 @@
       ],
       "interactables": [],
       "afflicted": [],
-      "onGroundAlpha": 0.15
+      "onGroundAlpha": 0.15,
+      "tilesets": [
+        "side-kitchen-tiles"
+      ]
     }
   },
   "startRoom": "protag-house"

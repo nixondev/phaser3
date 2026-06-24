@@ -1,4 +1,5 @@
 ﻿import Phaser from 'phaser';
+import type { EditorUI } from '@scenes/EditorUI';
 import { RoomManager } from './RoomManager';
 import { RoomStateManager } from './RoomStateManager';
 import { WeatherManager } from './WeatherManager';
@@ -40,19 +41,9 @@ export class RoomEditorManager {
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
   private weatherManager!: WeatherManager;
 
-  // Tile palette (P key)
-  private paletteContainer!: Phaser.GameObjects.Container;
-  private paletteHighlight!: Phaser.GameObjects.Graphics;
+  // Tile palette (P key) — rendered as a DOM canvas in EditorUI
   private paletteVisible: boolean = false;
-  private paletteBuilt: boolean = false;
-  private readonly paletteThumb = 56;
-  private readonly paletteCols = 8;
-  private readonly palettePosX = GAME_CONFIG.WIDTH - 464;
-  private readonly palettePosY = 16;
-  private paletteWidth: number = 0;
-  private paletteHeight: number = 0;
-  private paletteSelectionStart: { x: number; y: number } | null = null;
-  private paletteSelectionEnd: { x: number; y: number } | null = null;
+  private editorUI: EditorUI | null = null;
 
   // History for undo/redo
   private history: Array<{
@@ -232,10 +223,6 @@ export class RoomEditorManager {
 
     this.weatherManager = new WeatherManager(this.scene);
 
-    this.paletteContainer = this.scene.add.container(this.palettePosX, this.palettePosY);
-    this.paletteContainer.setScrollFactor(0).setDepth(DEPTH.UI + 210).setVisible(false);
-    this.paletteHighlight = this.scene.add.graphics();
-
     // Install global debug helpers
     (window as any).dumpEditorState = () => {
       const data = this.buildExportData();
@@ -298,11 +285,10 @@ export class RoomEditorManager {
     if (this.activeTool === 'select') this.activeTool = 'paint';
   }
 
-  /** Clear undo/redo history and palette cache — call when loading a new room. */
+  /** Clear undo/redo history — call when loading a new room. */
   clearHistory(): void {
     this.history = [];
     this.historyIndex = -1;
-    this.paletteBuilt = false;
   }
   
   update(input: InputState): void {
@@ -323,8 +309,7 @@ export class RoomEditorManager {
       // Palette also hides when the editor closes; reopens on next P press.
       if (!this.isActive) {
         this.paletteVisible = false;
-        this.paletteContainer.setVisible(false);
-        this.paletteHighlight.clear();
+        this.editorUI?.setPaletteVisible(false);
         this.doorHandles.clear();
         this.selectedDoor = null;
         this.selectedDoorSpawn = null;
@@ -409,15 +394,6 @@ export class RoomEditorManager {
     this.tileCursor.setVisible(!on);
     this.mapOutline.setVisible(!on);
     this.doorHandles.setVisible(!on);
-    if (on) {
-      this.paletteContainer.setVisible(false);
-      this.paletteHighlight.setVisible(false);
-    } else {
-      if (this.paletteVisible) {
-        this.paletteContainer.setVisible(true);
-        this.paletteHighlight.setVisible(true);
-      }
-    }
     this.updateLayerOpacities(); // full alpha when on, dim when off (tiles + colors)
     const roomId = this.roomManager.getCurrentRoomId();
     if (on && roomId) {
@@ -809,180 +785,9 @@ export class RoomEditorManager {
   private handlePaletteToggle(): void {
     if (Phaser.Input.Keyboard.JustDown(this.keys.P)) {
       this.paletteVisible = !this.paletteVisible;
-      if (this.paletteVisible) this.exitSelectForPaint(); // opening the palette = paint intent
-      if (this.paletteVisible && !this.paletteBuilt) this.buildPalette();
-      this.paletteContainer.setVisible(this.paletteVisible);
-      this.paletteHighlight.setVisible(this.paletteVisible);
-      this.updatePaletteHighlight();
+      if (this.paletteVisible) this.exitSelectForPaint();
+      this.editorUI?.setPaletteVisible(this.paletteVisible);
     }
-  }
-
-  /** Build the thumbnail grid lazily on first reveal so the tilemap is loaded.
-   *  Shows all tilesets available in the current room, separated by a label bar.
-   *  Each tile's palette index equals its GID (what putTileAt expects). */
-  private buildPalette(): void {
-    const map = this.roomManager.getMap();
-    const tilesets = map?.tilesets ?? [];
-    const T = this.paletteThumb;
-    const cols = this.paletteCols;
-    const frameSize = GAME_CONFIG.TILE_SIZE * GAME_CONFIG.ASSET_SCALE;
-    const scale = T / frameSize;
-
-    // Total rows across all tilesets (each tileset gets a label row + tile rows)
-    let totalRows = 0;
-    for (const ts of tilesets) totalRows += 1 + Math.ceil(ts.total / cols); // 1 label row
-    this.paletteWidth = cols * T + 2;
-    this.paletteHeight = totalRows * T + 2;
-
-    const bg = this.scene.add.graphics();
-    bg.fillStyle(0x000000, 0.85);
-    bg.fillRect(0, 0, this.paletteWidth, this.paletteHeight);
-    bg.lineStyle(4, 0xffff00, 1);
-    bg.strokeRect(0, 0, this.paletteWidth, this.paletteHeight);
-    this.paletteContainer.add(bg);
-
-    let currentRow = 0;
-
-    // We leave the palette internals unchanged to avoid regressions.
-    // Existing implementation continues below.
-
-    for (const ts of tilesets) {
-      const spritesheetKey = tilesetSpritesheetKey(ts.name);
-
-      // Label bar for this tileset
-      const labelY = 1 + currentRow * T + Math.floor(T / 2);
-      const label = this.scene.add.text(1 + Math.floor(T / 2), labelY,
-        ts.name, {
-          fontSize: '24px', color: '#ffff88', fontFamily: 'monospace',
-          backgroundColor: '#00000088', padding: { x: 8, y: 4 },
-        }).setScrollFactor(0).setOrigin(0, 0.5);
-      this.paletteContainer.add(label);
-      currentRow++;
-
-      // Tile thumbnails for this tileset
-      for (let local = 0; local < ts.total; local++) {
-        const gid = ts.firstgid + local;   // GID used by putTileAt
-        const col = local % cols;
-        const row = Math.floor(local / cols);
-        const x = 1 + col * T + Math.floor(T / 2);
-        const y = 1 + (currentRow + row) * T + Math.floor(T / 2);
-
-        const thumb = this.scene.add.sprite(x, y, spritesheetKey, local);
-        thumb.setScale(scale).setScrollFactor(0);
-        thumb.setInteractive({ useHandCursor: true });
-
-        thumb.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-          if (pointer.button !== 0) return;
-          // Map GID back to palette grid coordinates for multi-tile selection.
-          // For simplicity, single-tile selection when using non-core tilesets.
-          const paletteCol = local % this.paletteCols;
-          const paletteRow = Math.floor(local / this.paletteCols);
-          this.paletteSelectionStart = { x: paletteCol, y: paletteRow };
-          this.paletteSelectionEnd = { x: paletteCol, y: paletteRow };
-          // Picking a tile always returns to tile mode (and out of Select).
-          this.colorMode = false;
-          this.exitSelectForPaint();
-          this.selectedTileIndex = gid;
-          this.selectedTiles = [[gid]];
-          this.updatePreview();
-          this.updatePaletteHighlight();
-        });
-
-        thumb.on('pointerover', (pointer: Phaser.Input.Pointer) => {
-          if (pointer.leftButtonDown() && this.paletteSelectionStart) {
-            const paletteCol = local % this.paletteCols;
-            const paletteRow = Math.floor(local / this.paletteCols);
-            this.paletteSelectionEnd = { x: paletteCol, y: paletteRow };
-            this.updateMultiTileSelection();
-          }
-        });
-
-        this.paletteContainer.add(thumb);
-      }
-      currentRow += Math.ceil(ts.total / cols);
-    }
-
-    // Fallback: if no tilesets on map, show empty palette
-    if (tilesets.length === 0) {
-      this.paletteWidth = cols * T + 2;
-      this.paletteHeight = T + 2;
-    }
-
-    this.scene.input.on('pointerup', () => { this.paletteSelectionStart = null; });
-    this.paletteHighlight.setScrollFactor(0).setDepth(DEPTH.UI + 211);
-    this.paletteBuilt = true;
-  }
-
-  private updateMultiTileSelection(): void {
-    if (!this.paletteSelectionStart || !this.paletteSelectionEnd) return;
-
-    const x1 = Math.min(this.paletteSelectionStart.x, this.paletteSelectionEnd.x);
-    const y1 = Math.min(this.paletteSelectionStart.y, this.paletteSelectionEnd.y);
-    const x2 = Math.max(this.paletteSelectionStart.x, this.paletteSelectionEnd.x);
-    const y2 = Math.max(this.paletteSelectionStart.y, this.paletteSelectionEnd.y);
-
-    const newTiles: number[][] = [];
-    for (let row = y1; row <= y2; row++) {
-      const rowData: number[] = [];
-      for (let col = x1; col <= x2; col++) {
-        const index = row * this.paletteCols + col;
-        rowData.push(index + 1); // 1-indexed GID
-      }
-      newTiles.push(rowData);
-    }
-
-    this.selectedTiles = newTiles;
-    this.colorMode = false;
-    this.exitSelectForPaint();
-    this.updatePreview();
-    this.updatePaletteHighlight();
-  }
-
-  private updatePaletteHighlight(): void {
-    if (!this.paletteVisible || !this.paletteBuilt) {
-      this.paletteHighlight.clear();
-      return;
-    }
-    this.paletteHighlight.clear();
-
-    const T = this.paletteThumb;
-    const map = this.roomManager.getMap();
-    const tilesets = map?.tilesets ?? [];
-
-    let minCol = 999, maxCol = -1, minVisRow = 999, maxVisRow = -1;
-
-    for (const rowData of this.selectedTiles) {
-      for (const gid of rowData) {
-        if (gid <= 0) continue;
-
-        // Walk the same tileset list buildPalette() uses so label rows are
-        // included in the visual row calculation.
-        let currentRow = 0;
-        for (const ts of tilesets) {
-          if (gid >= ts.firstgid && gid < ts.firstgid + ts.total) {
-            const local = gid - ts.firstgid;
-            const col = local % this.paletteCols;
-            const visRow = currentRow + 1 + Math.floor(local / this.paletteCols); // +1 for label row
-            minCol = Math.min(minCol, col);
-            maxCol = Math.max(maxCol, col);
-            minVisRow = Math.min(minVisRow, visRow);
-            maxVisRow = Math.max(maxVisRow, visRow);
-            break;
-          }
-          currentRow += 1 + Math.ceil(ts.total / this.paletteCols);
-        }
-      }
-    }
-
-    if (maxCol === -1) return;
-
-    const x = this.palettePosX + 1 + minCol * T;
-    const y = this.palettePosY + 1 + minVisRow * T;
-    const w = (maxCol - minCol + 1) * T;
-    const h = (maxVisRow - minVisRow + 1) * T;
-
-    this.paletteHighlight.lineStyle(8, 0xffff00, 1);
-    this.paletteHighlight.strokeRect(x, y, w, h);
   }
 
   /** Total valid GID across all tilesets in the current map. Phaser's
@@ -997,16 +802,7 @@ export class RoomEditorManager {
     return total;
   }
 
-  private isPointerOverPalette(): boolean {
-    if (!this.paletteVisible) return false;
-    const p = this.scene.input.activePointer;
-    return (
-      p.x >= this.palettePosX &&
-      p.x < this.palettePosX + this.paletteWidth &&
-      p.y >= this.palettePosY &&
-      p.y < this.palettePosY + this.paletteHeight
-    );
-  }
+
 
   private redrawMapOutline(): void {
     if (!this.isActive) return;
@@ -1429,14 +1225,14 @@ export class RoomEditorManager {
         this.exitSelectForPaint();
         this.selectedTileIndex = Math.max(1, this.selectedTileIndex - 1);
         this.updatePreview();
-        this.updatePaletteHighlight();
+        this.editorUI?.updatePaletteHighlight([[this.selectedTileIndex]]);
       }
       if (input.action) { // E
         this.colorMode = false;
         this.exitSelectForPaint();
         this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
         this.updatePreview();
-        this.updatePaletteHighlight();
+        this.editorUI?.updatePaletteHighlight([[this.selectedTileIndex]]);
       }
     }
 
@@ -1643,13 +1439,6 @@ export class RoomEditorManager {
       this.tileCursor.setVisible(false);
       return;
     }
-    // If the cursor is over the palette overlay, swallow the click so we don't
-    // paint a tile in the world while picking a thumbnail.
-    if (this.isPointerOverPalette()) {
-      this.tileCursor.setVisible(false);
-      return;
-    }
-
     const worldPoint = pointer.positionToCamera(this.scene.cameras.main) as Phaser.Math.Vector2;
     const tileX = map.worldToTileX(worldPoint.x);
     const tileY = map.worldToTileY(worldPoint.y);
@@ -1701,7 +1490,7 @@ export class RoomEditorManager {
         else if (colorAt !== undefined) pickColor();
       }
       this.updatePreview();
-      this.updatePaletteHighlight();
+      this.editorUI?.updatePaletteHighlight([[this.selectedTileIndex]]);
     }
     // Left Click: Paint (only if NOT alt, and only if press originated on canvas)
     else if (pointer.leftButtonDown() && this.pointerDownOnCanvas) {
@@ -1981,13 +1770,18 @@ export class RoomEditorManager {
     this.edgeShadows = rt;
   }
 
-  /** Call when the active room changes so actual-view atmosphere stays accurate. */
+  /** Call when the active room changes so actual-view atmosphere and palette stay accurate. */
   public onRoomChanged(): void {
     this.updateLayerOpacities();
     if (this.actualView) {
       this.buildEdgeShadows();
       const roomId = this.roomManager.getCurrentRoomId();
       if (roomId) this.weatherManager.updateForRoom(roomId);
+    }
+    const map = this.roomManager.getMap();
+    if (map?.tilesets) {
+      this.editorUI?.buildPalette(map.tilesets);
+      this.editorUI?.updatePaletteHighlight([[this.selectedTileIndex]]);
     }
   }
 
@@ -2311,7 +2105,7 @@ export class RoomEditorManager {
   }
   private onWheel(_pointer: Phaser.Input.Pointer, _over: unknown[], _dx: number, dy: number): void {
     if (!this.isActive || !this.paletteVisible) return;
-    this.colorMode = false; // scrolling the palette is a tile-selection action
+    this.colorMode = false;
     this.exitSelectForPaint();
     if (dy > 0) {
       this.selectedTileIndex = Math.min(this.selectedTileIndex + 1, this.maxTileIndex());
@@ -2319,7 +2113,7 @@ export class RoomEditorManager {
       this.selectedTileIndex = Math.max(1, this.selectedTileIndex - 1);
     }
     this.updatePreview();
-    this.updatePaletteHighlight();
+    this.editorUI?.updatePaletteHighlight([[this.selectedTileIndex]]);
   }
 
   destroy(): void {
@@ -2336,9 +2130,22 @@ export class RoomEditorManager {
     this.darknessHint?.destroy();
     this.edgeShadows?.destroy();
     this.weatherManager?.destroy();
-    this.paletteContainer?.destroy();
-    this.paletteHighlight?.destroy();
     this.pairPickerContainer?.destroy();
+  }
+
+  public setEditorUI(ui: EditorUI): void {
+    this.editorUI = ui;
+    ui.onTileSelected = (gids, _first) => {
+      this.selectedTiles = gids;
+      this.colorMode = false;
+      this.exitSelectForPaint();
+      this.updatePreview();
+    };
+    const map = this.roomManager.getMap();
+    if (map?.tilesets?.length) {
+      ui.buildPalette(map.tilesets);
+      ui.updatePaletteHighlight([[this.selectedTileIndex]]);
+    }
   }
 }
 
