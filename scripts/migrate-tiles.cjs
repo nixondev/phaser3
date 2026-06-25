@@ -131,11 +131,6 @@ let roomsData;
 try { roomsData = JSON.parse(fs.readFileSync(ROOMS_JSON, 'utf8')); }
 catch (e) { console.error('Cannot read rooms.json:', e.message); process.exit(1); }
 
-const base0 = (roomsData.baseTilesets ?? ['tileset'])[0];
-
-function srcDirFor(name) {
-  return name === base0 ? SRC_ROOT : path.join(SRC_ROOT, name);
-}
 
 // Ordered: base tilesets first, then all per-room tilesets (deduplicated).
 const tilesetNames = [];
@@ -163,7 +158,7 @@ function scanSlots(srcDir) {
 // ── extract ───────────────────────────────────────────────────────────────────
 function extractTileset(name) {
   const srcFile = path.join(TILEMAPS, `${name}.png`);
-  const outDir  = srcDirFor(name);
+  const outDir  = path.join(SRC_ROOT, name);
 
   if (!fs.existsSync(srcFile)) {
     console.log(`  skip  ${name}  (sheet not found)`);

@@ -1068,7 +1068,7 @@ export class GameScene extends Phaser.Scene {
         }
         continue;
       }
-      if (inter.type === 'item' && inter.item && !this.rsm.isItemCollected(inter.id)) {
+      if (inter.type === 'item' && inter.item && !this.rsm.isItemCollected(inter.id) && !inter.noSprite) {
         const r = resolveTileSprite(inter.item.tileFrame, inter.item.tilesetKey);
         this.createItemSprite(inter.id, r.key, r.frame, inter.x, inter.y);
       } else if (inter.tileFrame !== undefined && inter.type !== 'item') {

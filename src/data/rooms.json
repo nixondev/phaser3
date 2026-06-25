@@ -492,15 +492,18 @@
         },
         {
           "id": "door-wftlg",
-          "x": 0,
-          "y": 448,
+          "x": -8,
+          "y": 443,
           "width": 64,
           "height": 64,
           "targetRoom": "side-kitchen",
           "targetDoor": "door-gcx7v",
           "direction": "left",
-          "spawnX": 128,
-          "spawnY": 480
+          "spawnX": 120,
+          "spawnY": 475,
+          "requiredKeys": [
+            "kitchen-key"
+          ]
         }
       ],
       "interactables": [
@@ -571,6 +574,21 @@
             "tileFrame": 89,
             "category": "tool",
             "keyId": "spectra-adapter"
+          }
+        },
+        {
+          "id": "kitchen-key-hidden",
+          "x": 1375,
+          "y": 446,
+          "type": "item",
+          "noSprite": true,
+          "consumed": true,
+          "text": "A small key tucked behind the wall panel.",
+          "item": {
+            "name": "Kitchen Key",
+            "tileFrame": 8,
+            "category": "key",
+            "keyId": "kitchen-key"
           }
         }
       ],

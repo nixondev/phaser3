@@ -107,6 +107,8 @@ export interface InteractableDef {
   textSequence?: (string | TextSequenceEntry)[];
   /** If true, sprite renders at DEPTH.HIDDEN and is only visible inside the spectra-vision cone. */
   hidden?: boolean;
+  /** If true, no world sprite is created. The interactable is still proximity-scanned and gives its item on E. */
+  noSprite?: boolean;
 }
 
 export type AfflictedStatus = 'wandering' | 'agitated' | 'frightened' | 'cured' | 'recovered';

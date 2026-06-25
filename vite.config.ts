@@ -387,16 +387,11 @@ function editorSavePlugin(): Plugin {
           await fsp.writeFile(tmp, buf);
           await fsp.rename(tmp, target);
 
-          // Export the individual tile to its source dir.
-          // Base tileset (first in baseTilesets) → assets_src/tiles/
-          // All others → assets_src/tiles/<tileset>/
+          // Export the individual tile to assets_src/tiles/<tileset>/tile_N.png
           let tileExported = false;
           if (!isNaN(frame) && frame >= 0) {
             const srcRoot   = path.join(projectRoot, 'assets_src', 'tiles');
-            let roomsJson: any = {};
-            try { roomsJson = JSON.parse(fs.readFileSync(roomsJsonPath, 'utf8')); } catch { /* ignore */ }
-            const base0    = (roomsJson.baseTilesets ?? ['tileset'])[0] ?? 'tileset';
-            const tilesDir = tileset === base0 ? srcRoot : path.join(srcRoot, tileset);
+            const tilesDir  = path.join(srcRoot, tileset);
             if (!fs.existsSync(tilesDir)) fs.mkdirSync(tilesDir, { recursive: true });
             const tilePixels = extractTileFromPNG(buf, frame, 64, 8);
             if (tilePixels) {

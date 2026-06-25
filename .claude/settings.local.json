@@ -25,7 +25,9 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:developer.bitmovin.com)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(mv \"C:/Users/flyki/IdeaProjects/claudeded/assets_src/tiles/\"tile_*.png \"C:/Users/flyki/IdeaProjects/claudeded/assets_src/tiles/tileset/\")",
+      "Bash(rm -f \"C:/Users/flyki/IdeaProjects/claudeded/assets_src/tiles/\"*.png~)"
     ]
   }
 }

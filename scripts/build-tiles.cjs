@@ -133,13 +133,6 @@ let roomsData;
 try { roomsData = JSON.parse(fs.readFileSync(ROOMS_JSON, 'utf8')); }
 catch (e) { console.error('Cannot read rooms.json:', e.message); process.exit(1); }
 
-const base0 = (roomsData.baseTilesets ?? ['tileset'])[0];
-
-function srcDirFor(name) {
-  // The first base tileset keeps the flat root dir for backward compatibility.
-  return name === base0 ? SRC_ROOT : path.join(SRC_ROOT, name);
-}
-
 // Ordered: base tilesets first, then all per-room tilesets (deduplicated).
 const tilesetNames = [];
 for (const n of roomsData.baseTilesets ?? ['tileset'])
@@ -150,7 +143,7 @@ for (const room of Object.values(roomsData.rooms))
 
 // ── build ─────────────────────────────────────────────────────────────────────
 function buildTileset(name) {
-  const srcDir  = srcDirFor(name);
+  const srcDir  = path.join(SRC_ROOT, name);
   const outFile = path.join(OUT_DIR, `${name}.png`);
 
   if (!fs.existsSync(srcDir)) {
