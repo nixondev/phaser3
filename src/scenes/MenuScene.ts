@@ -160,6 +160,40 @@ export class MenuScene extends Phaser.Scene {
     castBtn.on('pointerout',  () => castBtn.setColor('#5588bb'));
     castBtn.on('pointerdown', () => { window.location.href = '?cast=sender'; });
 
+    if (import.meta.env.DEV) {
+      const tileEditorBtn = this.add
+        .text(w / 2 - 80, h * 0.84, '[ # TILE ]', {
+          fontSize: '13px',
+          fontFamily: 'Silkscreen',
+          color: '#557755',
+          stroke: '#1a2a3a',
+          strokeThickness: 2,
+        })
+        .setOrigin(0.5)
+        .setDepth(TEXT_DEPTH)
+        .setInteractive({ useHandCursor: true });
+
+      tileEditorBtn.on('pointerover', () => tileEditorBtn.setColor('#88aa88'));
+      tileEditorBtn.on('pointerout', () => tileEditorBtn.setColor('#557755'));
+      tileEditorBtn.on('pointerdown', () => this.openTileEditor());
+
+      const spriteEditorBtn = this.add
+        .text(w / 2 + 80, h * 0.84, '[ $ SPRITE ]', {
+          fontSize: '13px',
+          fontFamily: 'Silkscreen',
+          color: '#775577',
+          stroke: '#1a2a3a',
+          strokeThickness: 2,
+        })
+        .setOrigin(0.5)
+        .setDepth(TEXT_DEPTH)
+        .setInteractive({ useHandCursor: true });
+
+      spriteEditorBtn.on('pointerover', () => spriteEditorBtn.setColor('#aa88aa'));
+      spriteEditorBtn.on('pointerout', () => spriteEditorBtn.setColor('#775577'));
+      spriteEditorBtn.on('pointerdown', () => this.openSpriteEditor());
+    }
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.rain?.destroy();
       this.rain = null;
@@ -177,6 +211,7 @@ export class MenuScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown', (event: KeyboardEvent) => {
       if (event.key === '?') this.openEditor();
       if (event.key === '#') this.openTileEditor();
+      if (event.key === '$') this.openSpriteEditor();
     });
     this.input.on('pointerdown', () => this.resumeAudio());
   }
@@ -292,6 +327,12 @@ export class MenuScene extends Phaser.Scene {
     if (this.started) return;
     this.started = true;
     this.scene.start(SCENES.TILE_EDITOR);
+  }
+
+  private openSpriteEditor(): void {
+    if (this.started) return;
+    this.started = true;
+    this.scene.start(SCENES.SPRITE_EDITOR);
   }
 
   private resumeAudio(): void {

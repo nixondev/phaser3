@@ -73,6 +73,10 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/Flashlight.ts` | Cone detection, battery drain, glow, RT mask |
 | `src/systems/DebugManager.ts` | F1 info HUD, F3 visual overlays, global debug shortcuts |
 | src/systems/RoomEditorManager.ts | #/? editor logic: select mode, color tiles, smart save, drag, resize |
+| `src/scenes/SpriteEditorScene.ts` | $ editor: 256×256 character spritesheets, live animation preview (hover + WASD) |
+| `src/editor/PixelCanvas.ts` | Shared pixel-edit surface: tools, brushes, fill, blur, undo history |
+| `src/editor/ColorPanel.ts` | Shared color UI: palette, hex input, HSV picker, recent colors |
+| `src/editor/htmlOverlay.ts` | Shared HTML-over-canvas element positioning + lifecycle |
 | `src/lib/SpessaSynthPlayer.ts` | SpessaSynth MIDI/SF2 wrapper |
 | `src/systems/AudioEffectsManager.ts` | Web Audio reverb via `ConvolverNode` |
 | `src/entities/Player.ts` | Player sprite, movement, animations |
@@ -144,7 +148,7 @@ On overlap (agitated/wandering): screen shake, fade, respawn at `protag-house`.
 
 ```text
 Display:    320×240 @ 3× zoom, 16px tiles
-Player:     80 px/s, 8 fps animations
+Player:     320 px/s, 8 fps animations
 Interact:   28px range
 Inventory:  2 rows × 6 cols, 14px slots
 Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, HIDDEN=31,
@@ -256,6 +260,7 @@ All tilesets: 8-column PNG grid of 64×64 tiles at `public/assets/tilemaps/<name
 | **F1** | DebugManager | HUD: FPS, room, music, reverb, coords, GIDs |
 | **F3** | DebugManager | Visual overlays: collision (red), doors (cyan), afflicted radii |
 | **#** | TileEditorScene | Standalone tile atlas / painter |
+| **$** | SpriteEditorScene | Spritesheet editor: paint 64×64 frames, live walk-cycle preview (hover pane + WASD) |
 | **?** | EditorScene | Main room editor: objects, layers (1-7), color tiles, smart save |
 
 **Global shortcuts (active debug HUD or Editor):**
@@ -291,6 +296,8 @@ Resize and drag (Select mode) shift all fields (doors, interactables, afflicted)
 - `POST /__editor/save-tilemap?roomId=<id>` → writes `public/assets/tilemaps/<id>.json`
 - POST /__editor/save-tilemap?roomId=<id> -> writes public/assets/tilemaps/<id>.json
 - POST /__editor/save-object -> patches {roomId, kind, id, x, y, spawnX, spawnY} in src/data/rooms.json (supports door, interactable, fflicted)
+- GET /__editor/list-sprites -> lists public/assets/sprites/*.png with dimensions (sprite editor dropdown)
+- POST /__editor/save-sprite?sheet=<name> -> writes public/assets/sprites/<name>.png (sprite editor SAVE)
 ---
 
 ## Adding Content

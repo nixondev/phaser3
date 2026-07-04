@@ -6,6 +6,7 @@ import zlib from 'zlib';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 const ROOM_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+const SPRITE_NAME_RE = /^[a-z0-9][a-z0-9-]*$/i;
 
 // ── PNG helpers for individual tile extraction ────────────────────────────
 
@@ -146,6 +147,7 @@ function send(res: import('http').ServerResponse, code: number, body: unknown): 
 function editorSavePlugin(): Plugin {
   const projectRoot = __dirname;
   const tilemapsDir = path.join(projectRoot, 'public/assets/tilemaps');
+  const spritesDir = path.join(projectRoot, 'public/assets/sprites');
   const roomsJsonPath = path.join(projectRoot, 'src/data/rooms.json');
 
   return {
@@ -407,9 +409,64 @@ function editorSavePlugin(): Plugin {
         }
       });
 
+      // Sprite editor: list all sheet PNGs with their dimensions (IHDR only).
+      server.middlewares.use('/__editor/list-sprites', async (req, res, next) => {
+        if (req.method !== 'GET') { next(); return; }
+        try {
+          const files = await fsp.readdir(spritesDir);
+          const sprites: { name: string; width: number; height: number }[] = [];
+          for (const f of files) {
+            if (!f.endsWith('.png')) continue;
+            try {
+              const buf = await fsp.readFile(path.join(spritesDir, f));
+              if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504E47) continue;
+              sprites.push({
+                name: f.slice(0, -4),
+                width: buf.readUInt32BE(16),
+                height: buf.readUInt32BE(20),
+              });
+            } catch { /* skip unreadable file */ }
+          }
+          send(res, 200, { sprites });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
+      // Sprite editor: overwrite a full spritesheet PNG.
+      server.middlewares.use('/__editor/save-sprite', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const url = new URL(req.url ?? '', 'http://localhost');
+          const sheet = url.searchParams.get('sheet') ?? '';
+          if (!SPRITE_NAME_RE.test(sheet)) {
+            send(res, 400, { error: 'invalid sheet name' });
+            return;
+          }
+          const target = path.join(spritesDir, `${sheet}.png`);
+          if (!target.startsWith(spritesDir + path.sep)) {
+            send(res, 400, { error: 'path escapes sprites dir' });
+            return;
+          }
+          const chunks: Buffer[] = [];
+          await new Promise<void>((resolve, reject) => {
+            req.on('data', (c: Buffer) => chunks.push(c));
+            req.on('end', resolve);
+            req.on('error', reject);
+          });
+          const buf = Buffer.concat(chunks);
+          const tmp = `${target}.tmp`;
+          await fsp.writeFile(tmp, buf);
+          await fsp.rename(tmp, target);
+          send(res, 200, { ok: true, bytes: buf.length });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/list-sprites, /__editor/save-sprite');
       }
     }
   };

@@ -909,7 +909,7 @@ export class EditorUI {
         display: flex; align-items: center; gap: 10px; padding: 4px 6px 8px;
       }
       #editor-overlay #editor-preview-canvas {
-        width: 56px; height: 56px; flex: 0 0 auto;
+        width: 96px; height: 96px; flex: 0 0 auto;
         image-rendering: pixelated; image-rendering: crisp-edges;
         border: 1px solid #555; background:
           repeating-conic-gradient(#2a2a2a 0% 25%, #1c1c1c 0% 50%) 0 0 / 16px 16px;

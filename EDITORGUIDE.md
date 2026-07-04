@@ -306,6 +306,34 @@ Common rescues:
 
 ---
 
+## Sprite editor (`$`)
+
+On the title screen, press **`$`** (Shift+4). Full plan/spec: `SPRITEEDITOR.md`.
+
+Edits the 256×256 character spritesheets in `public/assets/sprites/`
+(4×4 grid of 64×64 frames; rows = down / left / right / up, columns =
+the 4 walk frames, idle = first frame of each row).
+
+1. Pick a sheet in the **top-left dropdown** (only 256×256 PNGs appear).
+2. Click a frame in the **4×4 picker** (or cycle with **Q / E**). The row
+   you pick pins the preview to that direction.
+3. Paint in the center canvas — same tools as the tile editor (PEN / ERA /
+   EYE / FILL / BLUR, sizes 1–4, right-click erase, middle-click eyedrop,
+   Ctrl+Z / Ctrl+Shift+Z). Edits appear **live** in the thumbnails and the
+   animating preview.
+4. **Hover the preview pane** and use **WASD / arrows** to walk the
+   character around inside it — exactly the movement/facing logic the game
+   uses. Release keys to see idle; move the mouse out and it re-centers and
+   resumes auto-cycling through all four directions. The **fps −/+** stepper
+   changes preview speed only (never saved).
+5. Frame utilities: **COPY / PASTE** a frame buffer, **FLIP** (mirror
+   horizontally — e.g. build the left row from the right row), **ONION**
+   (ghost the rest of the current row: blue = earlier frames, red = later).
+6. **SAVE** writes the sheet back to `public/assets/sprites/<name>.png`
+   (dev server only). Reload the page to see it in-game. Git is the undo.
+
+---
+
 ## What this guide does NOT cover
 
 - **Puzzle design** — what requires/produces to put on a given

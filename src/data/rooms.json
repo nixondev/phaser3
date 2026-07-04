@@ -971,21 +971,23 @@
         },
         {
           "id": "door-zlei6",
-          "x": 192,
-          "y": 288,
+          "x": 270,
+          "y": 370,
           "width": 64,
           "height": 64,
           "targetRoom": "basement",
           "targetDoor": "door-ndhrz",
           "direction": "left",
-          "spawnX": 320,
-          "spawnY": 320,
+          "spawnX": 398,
+          "spawnY": 402,
           "requires": []
         }
       ],
       "tilesets": [
         "ration-office-tiles"
-      ]
+      ],
+      "onGroundAlpha": 0.6,
+      "onCollisionAlpha": 0.35
     },
     "east-block": {
       "id": "east-block",

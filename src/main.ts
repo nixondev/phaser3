@@ -10,6 +10,7 @@ import { PauseScene } from '@scenes/PauseScene';
 import { EditorScene } from '@scenes/EditorScene';
 import { DocumentReaderScene } from '@scenes/DocumentReaderScene';
 import { TileEditorScene } from '@scenes/TileEditorScene';
+import { SpriteEditorScene } from '@scenes/SpriteEditorScene';
 import { CastSenderController } from '@cast/CastSenderController';
 import { CastReceiverInputBridge } from '@cast/CastReceiverInputBridge';
 import { isCastReceiverMode, isCastSenderMode } from '@cast/runtime';
@@ -31,7 +32,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: GAME_CONFIG.DEBUG,
     },
   },
-  scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, PauseScene, EditorScene, DocumentReaderScene, TileEditorScene],
+  scene: [BootScene, PreloadScene, MenuScene, GameScene, UIScene, PauseScene, EditorScene, DocumentReaderScene, TileEditorScene, SpriteEditorScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

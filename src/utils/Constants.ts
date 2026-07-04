@@ -65,6 +65,7 @@ export const SCENES = {
   PAUSE: 'Pause',
   EDITOR: 'Editor',
   TILE_EDITOR: 'TileEditor',
+  SPRITE_EDITOR: 'SpriteEditor',
   DOCUMENT_READER: 'DocumentReader',
 } as const;
 
