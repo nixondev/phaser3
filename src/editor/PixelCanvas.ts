@@ -76,7 +76,8 @@ export class PixelCanvas {
     this.baseDrawSize = this.drawSize;
     this.pixels = new Uint32Array(cfg.size * cfg.size);
     this.gfx = cfg.scene.add.graphics();
-    this.clipMaskGfx = cfg.scene.make.graphics({ x: 0, y: 0, add: false });
+    this.clipMaskGfx = cfg.scene.add.graphics({ x: 0, y: 0 });
+    this.clipMaskGfx.setVisible(false);
     this.clipMaskGfx.fillStyle(0xffffff, 1);
     this.clipMaskGfx.fillRect(this.baseX, this.baseY, this.baseDrawSize, this.baseDrawSize);
     this.clipMask = this.clipMaskGfx.createGeometryMask();
@@ -212,11 +213,13 @@ export class PixelCanvas {
   }
 
   private isTouchPointer(p: Phaser.Input.Pointer): boolean {
-    return p.pointerType === 'touch' || (p as Phaser.Input.Pointer & { wasTouch?: boolean }).wasTouch === true;
+    const evt = (p.event ?? null) as PointerEvent | null;
+    return evt?.pointerType === 'touch' || (p as Phaser.Input.Pointer & { wasTouch?: boolean }).wasTouch === true;
   }
 
   private isFingerTouchPointer(p: Phaser.Input.Pointer): boolean {
-    return this.isTouchPointer(p) && p.pointerType !== 'pen';
+    const evt = (p.event ?? null) as PointerEvent | null;
+    return this.isTouchPointer(p) && evt?.pointerType !== 'pen';
   }
 
   private isLikelyStylusTouchPointer(p: Phaser.Input.Pointer): boolean {
