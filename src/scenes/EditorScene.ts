@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SCENES, GAME_CONFIG, DEPTH, USE_MIDI_MUSIC } from '@utils/Constants';
+import { SCENES, GAME_CONFIG, DEPTH } from '@utils/Constants';
 import { RoomManager } from '@systems/RoomManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { RoomEditorManager } from '@systems/RoomEditorManager';
@@ -51,6 +51,7 @@ export class EditorScene extends Phaser.Scene {
   create(): void {
     AudioManager.getInstance().setScene(this);
     AudioManager.getInstance().stopMusic();
+    MusicManager.getInstance().stop();
 
     this.roomManager = new RoomManager(this);
     this.rsm = RoomStateManager.getInstance();
@@ -120,9 +121,6 @@ export class EditorScene extends Phaser.Scene {
     this.rsm.visitRoom(roomId);
     this.refreshPlaceholders();
     this.setupCameraForEditor();
-    if (USE_MIDI_MUSIC) {
-      MusicManager.getInstance().playRoomMusic(roomId);
-    }
     this.editorUI?.onRoomChanged(roomId);
     this.editorManager?.onRoomChanged();
     this.editorManager?.clearHistory();

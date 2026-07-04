@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, PLAYER_CONFIG } from '@utils/Constants';
+import { AudioManager } from '@systems/AudioManager';
+import { MusicManager } from '@systems/MusicManager';
 import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
 import { PixelCanvas, PixelTool, PenStyle } from '@/editor/PixelCanvas';
@@ -86,14 +88,6 @@ export class SpriteEditorScene extends Phaser.Scene {
   private styleBtns: StyleBtnEntry[] = [];
   private onionBtnGfx!: Phaser.GameObjects.Graphics;
   private mirrorBtnGfx!: Phaser.GameObjects.Graphics;
-  private penModeBtn?: {
-    gfx: Phaser.GameObjects.Graphics;
-    label: Phaser.GameObjects.Text;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  };
 
   // preview state
   private previewSprite!: Phaser.GameObjects.Sprite;
@@ -114,6 +108,10 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   create(): void {
+    AudioManager.getInstance().setScene(this);
+    AudioManager.getInstance().stopMusic();
+    MusicManager.getInstance().stop();
+
     this.overlay = new HtmlOverlay(this);
 
     this.add.rectangle(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT, 0x12121f).setOrigin(0, 0);
@@ -140,7 +138,6 @@ export class SpriteEditorScene extends Phaser.Scene {
       onStatus: (msg) => this.statusText?.setText(msg),
       backdrop: () => this.onionBackdrop(),
     });
-    this.canvas.penOnlyDrawing = true;
     this.canvas.wrapSample = false;
 
     this.add.text(DRAW_X, DRAW_Y - 20, 'DRAW', {
@@ -676,20 +673,6 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.statusText.setText('frame cleared');
     });
 
-    const penX = leftBlockX + (BW + GAP) * 2;
-    const penGfx = this.add.graphics();
-    const penLabel = this.add.text(penX + BW / 2, leftMirrorY + BH / 2, '', {
-      fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
-    }).setOrigin(0.5).setDepth(2);
-    this.penModeBtn = { gfx: penGfx, label: penLabel, x: penX, y: leftMirrorY, w: BW, h: BH };
-    this.refreshPenModeButton();
-    penGfx.setInteractive(new Phaser.Geom.Rectangle(penX, leftMirrorY, BW, BH), Phaser.Geom.Rectangle.Contains);
-    penGfx.on('pointerdown', () => {
-      this.canvas.penOnlyDrawing = !this.canvas.penOnlyDrawing;
-      this.refreshPenModeButton();
-      this.statusText.setText(`pen only ${this.canvas.penOnlyDrawing ? 'on' : 'off'}`);
-    });
-
     this.makeBtn('COPY', bx(0), UTILS_Y, BW, BH, 0x1c3c6e, () => {
       this.clipboard = this.canvas.pixels.slice();
       this.statusText.setText(`copied frame ${this.selectedFrame}`);
@@ -782,13 +765,6 @@ export class SpriteEditorScene extends Phaser.Scene {
 
   private refreshToolButtons(): void {
     this.toolBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.tool === this.canvas.tool));
-  }
-
-  private refreshPenModeButton(): void {
-    const btn = this.penModeBtn;
-    if (!btn) return;
-    this.drawBtn(btn.gfx, btn.x, btn.y, btn.w, btn.h, this.canvas.penOnlyDrawing);
-    btn.label.setText(this.canvas.penOnlyDrawing ? 'PEN ON' : 'PEN OFF');
   }
 
   private drawBtn(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, active: boolean): void {

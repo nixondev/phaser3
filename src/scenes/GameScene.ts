@@ -1036,8 +1036,8 @@ export class GameScene extends Phaser.Scene {
     // postFX requires WebGL with full shader support — Chromecast GPU may not compile these.
     // Catch so the base black-silhouette RT still renders even if the shadow pass fails.
     try {
-      rt.postFX.addShadow(3, -3, .006, 1, 0x000000, 15, 0.5);
-      rt.postFX.addBlur(100, 20, 20, 0.2, 0x000000, 5);
+//       rt.postFX.addShadow(-120, 30, .08, 1, 0x000000, 3, 1);
+      rt.postFX.addBlur(1, 2, 2, 1, 0x000000, 5);
     } catch (e) {
       console.warn('[GameScene] postFX unavailable (limited GPU?), shadow will render without blur:', e);
     }

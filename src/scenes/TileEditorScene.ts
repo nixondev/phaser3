@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG } from '@utils/Constants';
 import { RoomManager } from '@systems/RoomManager';
+import { AudioManager } from '@systems/AudioManager';
+import { MusicManager } from '@systems/MusicManager';
 import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
 import { PixelCanvas, PixelTool, PenStyle } from '@/editor/PixelCanvas';
@@ -63,6 +65,7 @@ export class TileEditorScene extends Phaser.Scene {
 
   private selectedFrame = 0;
   private pickerScroll = 0;
+  private clipboard: Uint32Array | null = null;
 
   private previewGfx!: Phaser.GameObjects.Graphics;
   private pickerGfx!: Phaser.GameObjects.Graphics;
@@ -74,14 +77,6 @@ export class TileEditorScene extends Phaser.Scene {
   private statusText!: Phaser.GameObjects.Text;
   private frameLabel!: Phaser.GameObjects.Text;
   private wrapBtn!: { gfx: Phaser.GameObjects.Graphics; x: number; y: number; w: number; h: number };
-  private penModeBtn?: {
-    gfx: Phaser.GameObjects.Graphics;
-    label: Phaser.GameObjects.Text;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-  };
 
   private activeTileset = 'tileset';
   private tilesetNames: string[] = [];
@@ -91,6 +86,10 @@ export class TileEditorScene extends Phaser.Scene {
   }
 
   create(): void {
+    AudioManager.getInstance().setScene(this);
+    AudioManager.getInstance().stopMusic();
+    MusicManager.getInstance().stop();
+
     this.overlay = new HtmlOverlay(this);
 
     this.add.rectangle(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT, 0x12121f).setOrigin(0, 0);
@@ -114,7 +113,6 @@ export class TileEditorScene extends Phaser.Scene {
       onToolChange: () => this.refreshToolButtons(),
       onStatus: (msg) => this.statusText?.setText(msg),
     });
-    this.canvas.penOnlyDrawing = true;
     this.previewGfx = this.add.graphics();
     this.pickerGfx  = this.add.graphics();
 
@@ -376,34 +374,25 @@ export class TileEditorScene extends Phaser.Scene {
   // ─── Action buttons (clear / save) ─────────────────────────────────────────
 
   private buildActionButtons(): void {
-    const BW = 76, BH = 30, GAP = 8;
-    const bx = (i: number): number => PALETTE_X + i * (BW + GAP);
+    const BH = 30;
+    const GAP = 6;
+    const BTN_COUNT = 5;
+    const BW = Math.floor((PREV_SIZE - GAP * (BTN_COUNT - 1)) / BTN_COUNT);
+    const actionsStartX = PREV_X + Math.floor((PREV_SIZE - (BTN_COUNT * BW + (BTN_COUNT - 1) * GAP)) / 2);
+    const bx = (i: number): number => actionsStartX + i * (BW + GAP);
     this.makeBtn('UNDO', bx(0), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => this.canvas.undo());
     this.makeBtn('REDO', bx(1), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => this.canvas.redo());
-    const penX = bx(2);
-    const penGfx = this.add.graphics();
-    const penLabel = this.add.text(penX + BW / 2, ACTIONS_R_Y + BH / 2, '', {
-      fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
-    }).setOrigin(0.5).setDepth(2);
-    this.penModeBtn = { gfx: penGfx, label: penLabel, x: penX, y: ACTIONS_R_Y, w: BW, h: BH };
-    this.refreshPenModeButton();
-    penGfx.setInteractive(new Phaser.Geom.Rectangle(penX, ACTIONS_R_Y, BW, BH), Phaser.Geom.Rectangle.Contains);
-    penGfx.on('pointerdown', () => {
-      this.canvas.penOnlyDrawing = !this.canvas.penOnlyDrawing;
-      this.refreshPenModeButton();
-      this.statusText.setText(`pen only ${this.canvas.penOnlyDrawing ? 'on' : 'off'}`);
-    });
-    this.makeBtn('MIRROR', bx(3), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => {
+    this.makeBtn('MIRROR', bx(2), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => {
       this.canvas.mirrorX = !this.canvas.mirrorX;
       this.statusText.setText(`mirror ${this.canvas.mirrorX ? 'on' : 'off'}`);
     });
-    this.makeBtn('CLEAR', bx(4), ACTIONS_R_Y, BW, BH, 0x6e1c1c, () => {
+    this.makeBtn('CLEAR', bx(3), ACTIONS_R_Y, BW, BH, 0x6e1c1c, () => {
       this.canvas.pushHistory();
       this.canvas.pixels.fill(0);
       this.redrawAll();
       this.statusText.setText('canvas cleared');
     });
-    this.makeBtn('SAVE', bx(5), ACTIONS_R_Y, BW, BH, 0x1c3c6e, () => this.saveTile());
+    this.makeBtn('SAVE', bx(4), ACTIONS_R_Y, BW, BH, 0x1c3c6e, () => this.saveTile());
 
     const NBW = 34, NBG = 6;
     const nudgeY = DRAW_Y + DRAW_SIZE + 4;
@@ -526,6 +515,84 @@ export class TileEditorScene extends Phaser.Scene {
       });
       this.styleBtns.push({ gfx: g, x: bx, y: styleY, w: STW, h: BH, style });
     });
+
+    // EDIT row — copy / paste / flip the current tile
+    const EBW = 92, EBH = 30, EGAP = 8;
+    const editY = styleY + BH + 26;
+    const ex = (i: number): number => DRAW_X + i * (EBW + EGAP);
+    this.add.text(DRAW_X, editY - 20, 'EDIT', {
+      fontSize: '16px', color: '#667788', fontFamily: 'monospace',
+    });
+    this.makeBtn('COPY',   ex(0), editY, EBW, EBH, 0x1c3c6e, () => this.copyTile());
+    this.makeBtn('PASTE',  ex(1), editY, EBW, EBH, 0x1c3c6e, () => this.pasteTile(false));
+    this.makeBtn('MERGE',  ex(2), editY, EBW, EBH, 0x1c3c6e, () => this.pasteTile(true));
+    this.makeBtn('FLIP ↔', ex(3), editY, EBW, EBH, 0x2f4f5f, () => this.flipTile('h'));
+    this.makeBtn('FLIP ↕', ex(4), editY, EBW, EBH, 0x2f4f5f, () => this.flipTile('v'));
+    this.makeBtn('ROT ↻',  ex(5), editY, EBW, EBH, 0x2f4f5f, () => this.rotateTileCW());
+  }
+
+  private copyTile(): void {
+    this.clipboard = this.canvas.pixels.slice();
+    this.statusText.setText(`copied tile ${this.selectedFrame}`);
+  }
+
+  /** PASTE replaces the tile; MERGE composites the clipboard over what's there. */
+  private pasteTile(merge: boolean): void {
+    if (!this.clipboard) { this.statusText.setText('clipboard empty'); return; }
+    this.canvas.pushHistory();
+    if (merge) {
+      const dst = this.canvas.pixels;
+      for (let i = 0; i < dst.length; i++) dst[i] = this.compositeOver(this.clipboard[i], dst[i]);
+    } else {
+      this.canvas.pixels.set(this.clipboard);
+    }
+    this.redrawAll();
+    this.statusText.setText(`${merge ? 'merged' : 'pasted'} onto tile ${this.selectedFrame}`);
+  }
+
+  /** Alpha source-over: `src` painted on top of `dst`, both packed ARGB. */
+  private compositeOver(src: number, dst: number): number {
+    const sa = (src >>> 24) & 0xff;
+    if (sa === 0) return dst;     // clipboard pixel is transparent — keep existing
+    if (sa === 255) return src;   // fully opaque — plain overwrite
+    const da = (dst >>> 24) & 0xff;
+    const saf = sa / 255;
+    const outAf = saf + (da / 255) * (1 - saf);
+    if (outAf <= 0) return 0;
+    const blend = (s: number, d: number): number =>
+      Math.round((s * saf + d * (da / 255) * (1 - saf)) / outAf);
+    const r = blend((src >>> 16) & 0xff, (dst >>> 16) & 0xff);
+    const g = blend((src >>> 8) & 0xff, (dst >>> 8) & 0xff);
+    const b = blend(src & 0xff, dst & 0xff);
+    return (((Math.round(outAf * 255)) << 24) | (r << 16) | (g << 8) | b) >>> 0;
+  }
+
+  private flipTile(axis: 'h' | 'v'): void {
+    this.canvas.pushHistory();
+    const src = this.canvas.pixels.slice();
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const sx = axis === 'h' ? TILE - 1 - x : x;
+        const sy = axis === 'v' ? TILE - 1 - y : y;
+        this.canvas.pixels[y * TILE + x] = src[sy * TILE + sx];
+      }
+    }
+    this.redrawAll();
+    this.statusText.setText(axis === 'h' ? 'flipped left/right' : 'flipped up/down');
+  }
+
+  /** Rotate the tile a quarter-turn clockwise (one step per press). */
+  private rotateTileCW(): void {
+    this.canvas.pushHistory();
+    const src = this.canvas.pixels.slice();
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        // pixel at (x,y) comes from (y, TILE-1-x) in the source
+        this.canvas.pixels[y * TILE + x] = src[(TILE - 1 - x) * TILE + y];
+      }
+    }
+    this.redrawAll();
+    this.statusText.setText('rotated 90° cw');
   }
 
   private refreshToolButtons(): void {
@@ -534,13 +601,6 @@ export class TileEditorScene extends Phaser.Scene {
 
   private refreshStyleButtons(): void {
     this.styleBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.style === this.canvas.penStyle));
-  }
-
-  private refreshPenModeButton(): void {
-    const btn = this.penModeBtn;
-    if (!btn) return;
-    this.drawBtn(btn.gfx, btn.x, btn.y, btn.w, btn.h, this.canvas.penOnlyDrawing);
-    btn.label.setText(this.canvas.penOnlyDrawing ? 'PEN ON' : 'PEN OFF');
   }
 
   private drawBtn(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, active: boolean): void {

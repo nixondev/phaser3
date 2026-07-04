@@ -38,7 +38,6 @@ export class PixelCanvas {
   penSize = 1;
   penStyle: PenStyle = 'classic';
   mirrorX = false;
-  penOnlyDrawing = false;
   /** Blur kernel sampling wraps at edges (the tile editor's WRAP toggle). */
   wrapSample = true;
 
@@ -168,7 +167,6 @@ export class PixelCanvas {
           return;
         }
       }
-      if (this.penOnlyDrawing && this.isFingerTouchPointer(p) && !this.isLikelyStylusTouchPointer(p)) return;
       if (p.middleButtonDown()) { this.quickEyedrop(p.x, p.y); return; }
       if (p.rightButtonDown())  {
         this.pushHistory();
@@ -195,7 +193,6 @@ export class PixelCanvas {
         this.pinchStartScale = 0;
       }
       if (!this.isDrawing || !p.isDown || this.drawingPointerId !== p.id) return;
-      if (this.penOnlyDrawing && this.isFingerTouchPointer(p) && !this.isLikelyStylusTouchPointer(p)) return;
       if (p.rightButtonDown()) { this.quickErase(p.x, p.y); return; }
       this.applyTool(p.x, p.y);
     });
@@ -215,27 +212,6 @@ export class PixelCanvas {
   private isTouchPointer(p: Phaser.Input.Pointer): boolean {
     const evt = (p.event ?? null) as PointerEvent | null;
     return evt?.pointerType === 'touch' || (p as Phaser.Input.Pointer & { wasTouch?: boolean }).wasTouch === true;
-  }
-
-  private isFingerTouchPointer(p: Phaser.Input.Pointer): boolean {
-    const evt = (p.event ?? null) as PointerEvent | null;
-    return this.isTouchPointer(p) && evt?.pointerType !== 'pen';
-  }
-
-  private isLikelyStylusTouchPointer(p: Phaser.Input.Pointer): boolean {
-    const evt = (p.event ?? null) as (PointerEvent & { changedTouches?: TouchList; touches?: TouchList }) | null;
-    if (!evt) return false;
-    if ((evt as PointerEvent).pointerType === 'pen') return true;
-
-    const touch = evt.changedTouches?.[0] ?? evt.touches?.[0];
-    if (touch && (touch as Touch & { touchType?: string }).touchType === 'stylus') return true;
-
-    const tiltX = Math.abs(((evt as PointerEvent).tiltX ?? 0) as number);
-    const tiltY = Math.abs(((evt as PointerEvent).tiltY ?? 0) as number);
-    const twist = Math.abs(((evt as PointerEvent).twist ?? 0) as number);
-    if (tiltX > 0 || tiltY > 0 || twist > 0) return true;
-
-    return false;
   }
 
   private getActiveTouchPair(): [Phaser.Input.Pointer, Phaser.Input.Pointer] | null {

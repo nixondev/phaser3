@@ -565,8 +565,8 @@
         },
         {
           "id": "spectra-adapter-pickup",
-          "x": 1438,
-          "y": 95,
+          "x": 803,
+          "y": 349,
           "type": "item",
           "text": "A clip-on optical filter. Facility issue.\nSomething is written on the side: 'DO NOT LOSE'.",
           "item": {
