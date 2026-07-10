@@ -1,0 +1,36 @@
+{
+  "thoughts": [
+    {
+      "id": "protag-house-first",
+      "character": "player",
+      "room": "protag-house",
+      "priority": 10,
+      "repeat": "never",
+      "lines": [
+        "Three days since the sirens stopped.",
+        "Nobody came for us. Nobody is coming.",
+        "Whoever is left out there — that part falls to me now."
+      ]
+    },
+    {
+      "id": "protag-house-flashlight",
+      "character": "player",
+      "room": "protag-house",
+      "requires": [{ "type": "item", "value": "flashlight" }],
+      "priority": 5,
+      "repeat": "never",
+      "lines": [
+        "Dad never let this flashlight's batteries die.",
+        "Neither will I."
+      ]
+    },
+    {
+      "id": "protag-house-ambient",
+      "character": "player",
+      "room": "protag-house",
+      "priority": 20,
+      "repeat": "silent",
+      "lines": ["Home. Or what is left of the word."]
+    }
+  ]
+}

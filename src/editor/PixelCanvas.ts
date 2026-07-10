@@ -27,6 +27,15 @@ export interface PixelCanvasConfig {
   backdrop?: () => Uint32Array | null;
 }
 
+export interface PixelCanvasView {
+  x: number;
+  y: number;
+  scale: number;
+  containerX: number;
+  containerY: number;
+  containerSize: number;
+}
+
 /**
  * Shared pixel-editing surface: checkerboard draw area, pencil / eraser /
  * eyedropper / fill / blur tools, pen sizes, undo/redo history.
@@ -53,9 +62,9 @@ export class PixelCanvas {
   private pinchStartMidY = 0;
   private pinchStartX = 0;
   private pinchStartY = 0;
-  private readonly baseX: number;
-  private readonly baseY: number;
-  private readonly baseDrawSize: number;
+  private containerX: number;
+  private containerY: number;
+  private containerSize: number;
   private readonly clipMaskGfx: Phaser.GameObjects.Graphics;
   private readonly clipMask: Phaser.Display.Masks.GeometryMask;
 
@@ -70,15 +79,15 @@ export class PixelCanvas {
     this.cfg = cfg;
     this.size = cfg.size;
     this.drawSize = cfg.size * cfg.scale;
-    this.baseX = cfg.x;
-    this.baseY = cfg.y;
-    this.baseDrawSize = this.drawSize;
+    this.containerX = cfg.x;
+    this.containerY = cfg.y;
+    this.containerSize = this.drawSize;
     this.pixels = new Uint32Array(cfg.size * cfg.size);
     this.gfx = cfg.scene.add.graphics();
     this.clipMaskGfx = cfg.scene.add.graphics({ x: 0, y: 0 });
     this.clipMaskGfx.setVisible(false);
     this.clipMaskGfx.fillStyle(0xffffff, 1);
-    this.clipMaskGfx.fillRect(this.baseX, this.baseY, this.baseDrawSize, this.baseDrawSize);
+    this.clipMaskGfx.fillRect(this.containerX, this.containerY, this.containerSize, this.containerSize);
     this.clipMask = this.clipMaskGfx.createGeometryMask();
     this.gfx.setMask(this.clipMask);
     this.setupInput();
@@ -86,6 +95,34 @@ export class PixelCanvas {
 
   get drawing(): boolean {
     return this.isDrawing;
+  }
+
+  getGraphicsObject(): Phaser.GameObjects.Graphics {
+    return this.gfx;
+  }
+
+  getView(): PixelCanvasView {
+    return {
+      x: this.cfg.x,
+      y: this.cfg.y,
+      scale: this.cfg.scale,
+      containerX: this.containerX,
+      containerY: this.containerY,
+      containerSize: this.containerSize,
+    };
+  }
+
+  setView(view: PixelCanvasView): void {
+    this.cfg.x = view.x;
+    this.cfg.y = view.y;
+    this.cfg.scale = view.scale;
+    this.drawSize = this.size * view.scale;
+    this.containerX = view.containerX;
+    this.containerY = view.containerY;
+    this.containerSize = view.containerSize;
+    this.refreshClipMask();
+    this.clampCanvasToContainer();
+    this.redraw();
   }
 
   // ─── Pixel helpers ─────────────────────────────────────────────────────────
@@ -145,7 +182,7 @@ export class PixelCanvas {
       g.lineBetween(DRAW_X, DRAW_Y + i * DRAW_SCALE, DRAW_X + this.drawSize, DRAW_Y + i * DRAW_SCALE);
     }
     g.lineStyle(1, 0x4488cc, 1);
-    g.strokeRect(this.baseX, this.baseY, this.baseDrawSize, this.baseDrawSize);
+    g.strokeRect(this.containerX, this.containerY, this.containerSize, this.containerSize);
   }
 
   // ─── Input ─────────────────────────────────────────────────────────────────
@@ -254,10 +291,16 @@ export class PixelCanvas {
   }
 
   private clampCanvasToContainer(): void {
-    const [minX, maxX] = this.getAxisBounds(this.baseX, this.baseDrawSize, this.drawSize);
-    const [minY, maxY] = this.getAxisBounds(this.baseY, this.baseDrawSize, this.drawSize);
+    const [minX, maxX] = this.getAxisBounds(this.containerX, this.containerSize, this.drawSize);
+    const [minY, maxY] = this.getAxisBounds(this.containerY, this.containerSize, this.drawSize);
     this.cfg.x = Phaser.Math.Clamp(this.cfg.x, minX, maxX);
     this.cfg.y = Phaser.Math.Clamp(this.cfg.y, minY, maxY);
+  }
+
+  private refreshClipMask(): void {
+    this.clipMaskGfx.clear();
+    this.clipMaskGfx.fillStyle(0xffffff, 1);
+    this.clipMaskGfx.fillRect(this.containerX, this.containerY, this.containerSize, this.containerSize);
   }
 
   private getAxisBounds(base: number, containerSize: number, contentSize: number): [number, number] {

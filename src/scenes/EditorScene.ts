@@ -283,6 +283,7 @@ export class EditorScene extends Phaser.Scene {
       flashlight: false, debug, visuals,
       editor,
       char1: false, char2: false, char3: false, char4: false,
+      introspect: false,
     };
   }
 

@@ -33,6 +33,10 @@ export class HtmlOverlay {
     el.style.fontSize = `${13 * sx}px`;
   }
 
+  getElements(): HTMLElement[] {
+    return [...this.els];
+  }
+
   destroy(): void {
     this.els.forEach(el => el.remove());
     this.els = [];

@@ -63,6 +63,8 @@ The complete list of what the player can do at any moment:
 - **Toggle flashlight** (F)
 - **Switch active character** (`1`/`2`/`3`/`4` keys or avatar bar click —
   between recovered residents in the roster)
+- **Introspect** (click the player or `T` — inner-monologue thought;
+  narration only, never puzzle state; pattern #13)
 - **Read a document** (Phase 7 — modal of the item's `content`)
 
 That's it. No combat, no minigames, no QTEs, no "guess the right
@@ -375,6 +377,32 @@ Two recovered residents in the same room remember something together that neithe
 > *This is the social equivalent of the two-body succession pattern (#5). Where #5 is about actions in sequence, #12 is about presence in the same place at the same time. The puzzle is in knowing which two people need to meet, and getting them both there.*
 
 The mechanic uses no new verb. E on a resident checks for `conversationRequires` the same way a lock checks `requires`. If the condition is met, the richer dialog fires. If not, the standard solo dialog fires — the player may not even know a richer version exists until they try again with the right company.
+
+### 13. Introspection (thoughts)
+
+```
+click player (or T)
+→ engine selects highest-priority thought matching
+  WHO (character id / trait / all) ×
+  WHERE (room, optional spot radius) ×
+  WHEN (flags, items — plain RequireCondition[])
+→ inner-monologue dialog; a '…' glyph over the player telegraphs an
+  unread match (per-thought `glyph` override for special cases)
+```
+
+A second channel, deliberately outside the E grammar: **no items, no
+puzzle writes, no failure state**. Thoughts are *readers* of world
+state, exactly like endings — there is no `produces` field, on purpose.
+A place anchors a *stack* of thoughts; progress selects the layer, so
+the same room says something new as flags accrue. Repeat modes: `never`
+(one read, gone), `silent` (re-readable, notified once), `notify`
+(glyph re-lights every visit).
+
+> *This is pattern #11 (character-specific insight) turned inward:
+> different bodies read the same room differently. It is how the city
+> is narrated without signs or documents — and it must never name a
+> solution. An oblique nudge is the ceiling. All data, in
+> `src/data/thoughts.json`; field reference in `AUTHORING.md`.*
 
 ---
 

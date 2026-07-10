@@ -4,7 +4,7 @@ import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
-import { PixelCanvas, PixelTool, PenStyle } from '@/editor/PixelCanvas';
+import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle } from '@/editor/PixelCanvas';
 
 const FRAME     = 64;    // frame size in px
 const SHEET_PX  = 256;   // sheet is 256×256
@@ -29,6 +29,9 @@ const THUMB   = CELL - 4;                // scaled thumbnail size (native frame 
 const DRAW_X = 288, DRAW_Y = 100;
 const DRAW_SCALE = 10;                   // 64 × 10 = 640px draw area
 const DRAW_SIZE  = FRAME * DRAW_SCALE;   // ends at x=928, clear of the panel at 940
+const FOCUS_CANVAS_DEPTH = 1_000_000;
+const FOCUS_BUTTON_DEPTH = 1_000_001;
+const DEFAULT_UI_DEPTH = 3;
 
 const PREV_X = 940, PREV_Y = 100;
 const PREV_W = 330, PREV_H = 300;
@@ -88,6 +91,11 @@ export class SpriteEditorScene extends Phaser.Scene {
   private styleBtns: StyleBtnEntry[] = [];
   private onionBtnGfx!: Phaser.GameObjects.Graphics;
   private mirrorBtnGfx!: Phaser.GameObjects.Graphics;
+  private focusBtnGfx!: Phaser.GameObjects.Graphics;
+  private focusBtnText!: Phaser.GameObjects.Text;
+  private focusMode = false;
+  private savedCanvasView?: PixelCanvasView;
+  private savedCanvasDepth?: number;
 
   // preview state
   private previewSprite!: Phaser.GameObjects.Sprite;
@@ -158,6 +166,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     });
     this.buildToolButtons();
     this.buildUtilButtons();
+    this.buildFocusButton();
 
     this.statusText = this.add.text(DRAW_X, STATUS_Y, '', {
       fontSize: '16px', color: '#667799', fontFamily: 'monospace',
@@ -761,6 +770,73 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.canvas.redraw();
     this.syncFrameToTexture();
     this.statusText.setText('frame flipped horizontally');
+  }
+
+  private buildFocusButton(): void {
+    const x = DRAW_X + DRAW_SIZE + 8;
+    const y = DRAW_Y + 4;
+    const w = 24;
+    const h = 24;
+    this.focusBtnGfx = this.add.graphics();
+    this.drawBtn(this.focusBtnGfx, x, y, w, h, false);
+    this.focusBtnText = this.add.text(x + w / 2, y + h / 2, '»', {
+      fontSize: '16px', color: '#aaccff', fontFamily: 'monospace',
+    }).setOrigin(0.5).setDepth(DEFAULT_UI_DEPTH);
+    this.focusBtnGfx.setInteractive(new Phaser.Geom.Rectangle(x, y, w, h), Phaser.Geom.Rectangle.Contains);
+    this.focusBtnGfx.on('pointerdown', () => this.toggleFocusMode());
+    this.focusBtnText.setInteractive({ useHandCursor: true });
+    this.focusBtnText.on('pointerdown', () => this.toggleFocusMode());
+    this.focusBtnGfx.setDepth(DEFAULT_UI_DEPTH);
+  }
+
+  private toggleFocusMode(): void {
+    const canvasGraphics = this.canvas.getGraphicsObject();
+    if (!this.focusMode) {
+      this.focusMode = true;
+      this.savedCanvasView = this.canvas.getView();
+
+      const focusX = LABEL_X;
+      const focusY = 56;
+      const focusPad = 12;
+      const maxScale = Math.max(1, Math.floor(Math.min(
+        (GAME_CONFIG.WIDTH - focusX - focusPad) / FRAME,
+        (GAME_CONFIG.HEIGHT - focusY - focusPad) / FRAME,
+      )));
+      const size = FRAME * maxScale;
+      this.canvas.setView({
+        x: focusX,
+        y: focusY,
+        scale: maxScale,
+        containerX: focusX,
+        containerY: focusY,
+        containerSize: size,
+      });
+      this.savedCanvasDepth = canvasGraphics.depth;
+      canvasGraphics.setDepth(FOCUS_CANVAS_DEPTH);
+      canvasGraphics.setInteractive(new Phaser.Geom.Rectangle(focusX, focusY, size, size), Phaser.Geom.Rectangle.Contains);
+      this.drawBtn(this.focusBtnGfx, focusX + size + 8, focusY + 4, 24, 24, true);
+      this.focusBtnGfx.setInteractive(new Phaser.Geom.Rectangle(focusX + size + 8, focusY + 4, 24, 24), Phaser.Geom.Rectangle.Contains);
+      this.focusBtnGfx.setDepth(FOCUS_BUTTON_DEPTH);
+      this.focusBtnText.setDepth(FOCUS_BUTTON_DEPTH);
+      this.focusBtnText.setPosition(focusX + size + 20, focusY + 16).setText('«');
+      this.statusText?.setText(`focus mode on (${maxScale}x)`);
+      return;
+    }
+
+    this.focusMode = false;
+    if (this.savedCanvasView) {
+      this.canvas.setView(this.savedCanvasView);
+      this.savedCanvasView = undefined;
+    }
+    canvasGraphics.disableInteractive();
+    canvasGraphics.setDepth(this.savedCanvasDepth ?? 0);
+    this.savedCanvasDepth = undefined;
+    this.drawBtn(this.focusBtnGfx, DRAW_X + DRAW_SIZE + 8, DRAW_Y + 4, 24, 24, false);
+    this.focusBtnGfx.setInteractive(new Phaser.Geom.Rectangle(DRAW_X + DRAW_SIZE + 8, DRAW_Y + 4, 24, 24), Phaser.Geom.Rectangle.Contains);
+    this.focusBtnGfx.setDepth(DEFAULT_UI_DEPTH);
+    this.focusBtnText.setDepth(DEFAULT_UI_DEPTH);
+    this.focusBtnText.setPosition(DRAW_X + DRAW_SIZE + 20, DRAW_Y + 16).setText('»');
+    this.statusText?.setText('focus mode off');
   }
 
   private refreshToolButtons(): void {

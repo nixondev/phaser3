@@ -16,6 +16,7 @@ export class InputManager {
   private flashlightKey: Phaser.Input.Keyboard.Key;
   private f1Key: Phaser.Input.Keyboard.Key;
   private f3Key: Phaser.Input.Keyboard.Key;
+  private introspectKey: Phaser.Input.Keyboard.Key;
   private charKeys: Phaser.Input.Keyboard.Key[];
 
   // Shared across all InputManager instances so Cast inputs work in any scene
@@ -38,6 +39,7 @@ export class InputManager {
     this.flashlightKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F);
     this.f1Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F1);
     this.f3Key = kb.addKey(Phaser.Input.Keyboard.KeyCodes.F3);
+    this.introspectKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.T);
     this.charKeys = [
       kb.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
       kb.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
@@ -84,6 +86,7 @@ export class InputManager {
       char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]) || taps.has('char2') || !!InputManager.virtualState.char2,
       char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]) || taps.has('char3') || !!InputManager.virtualState.char3,
       char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]) || taps.has('char4') || !!InputManager.virtualState.char4,
+      introspect: Phaser.Input.Keyboard.JustDown(this.introspectKey) || taps.has('introspect') || !!InputManager.virtualState.introspect,
     };
   }
 
@@ -108,6 +111,7 @@ export class InputManager {
       char2: Phaser.Input.Keyboard.JustDown(this.charKeys[1]) || taps.has('char2') || !!InputManager.virtualState.char2,
       char3: Phaser.Input.Keyboard.JustDown(this.charKeys[2]) || taps.has('char3') || !!InputManager.virtualState.char3,
       char4: Phaser.Input.Keyboard.JustDown(this.charKeys[3]) || taps.has('char4') || !!InputManager.virtualState.char4,
+      introspect: Phaser.Input.Keyboard.JustDown(this.introspectKey) || taps.has('introspect') || !!InputManager.virtualState.introspect,
     };
   }
 }

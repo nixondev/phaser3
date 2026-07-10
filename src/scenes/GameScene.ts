@@ -10,13 +10,14 @@ import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef, DialogMessage, DialogMessageType } from '@/types';
+import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef, DialogMessage, DialogMessageType, ThoughtDef } from '@/types';
 import { debug } from '@utils/Debug';
 import { WeatherManager } from '@systems/WeatherManager';
 // SaveManager is intentionally not called — every run starts fresh.
 // The serialize/loadFrom infrastructure is preserved for future use.
 // import { SaveManager } from '@utils/SaveManager';
 import { checkRequires, checkRequiresAny, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
+import { selectThought, selectNotifiableThought } from '@systems/ThoughtManager';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 const CLINIC_DOOR_X     = 672;
@@ -66,6 +67,16 @@ export class GameScene extends Phaser.Scene {
 
   // Standing sprites for inactive roster members present in the current room
   private parkedBodies: Map<string, Phaser.GameObjects.Sprite> = new Map();
+
+  // Introspection channel (pattern #13)
+  private thoughtGlyph!: Phaser.GameObjects.Text;
+  private thoughtEvalTimer = 0;
+  private pendingThought: ThoughtDef | null = null;
+  // Click requests are deferred to the end of update() so any world/room
+  // dialog triggered the same frame opens first; the thought then yields.
+  private introspectRequested = false;
+  // Transient — cleared on room entry; gives repeat:'notify' its per-visit re-light
+  private visitNotified: Set<string> = new Set();
 
   private edgeShadows?: Phaser.GameObjects.RenderTexture;
 
@@ -142,6 +153,27 @@ export class GameScene extends Phaser.Scene {
 
     this.rsm.initRoster({ id: 'player', textureKey: 'player', roomId: startRoom, x: spawn.x, y: spawn.y });
 
+    // Introspection: click the player (padded hit area on the 64×64 frame) or press T
+    this.player.setInteractive(
+      new Phaser.Geom.Rectangle(-12, -12, 88, 88),
+      Phaser.Geom.Rectangle.Contains,
+    );
+    this.player.on('pointerdown', () => { this.introspectRequested = true; });
+    this.thoughtGlyph = this.add.text(0, 0, '…', {
+      fontSize: '40px',
+      color: '#ffffff',
+      fontFamily: 'monospace',
+      stroke: '#000000',
+      strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(DEPTH.LIGHTING + 1).setVisible(false);
+    this.events.on('room-changed', () => {
+      this.visitNotified.clear();
+      this.thoughtEvalTimer = 9999;
+    });
+    this.events.on('character-switched', () => {
+      this.thoughtEvalTimer = 9999;
+    });
+
     this.setupCollisions();
     this.setupCamera();
     applyFlagConditions(roomDef, this.rsm, this.roomManager);
@@ -152,12 +184,6 @@ export class GameScene extends Phaser.Scene {
 
     this.emitFullState(roomDef.name);
     debug('GameScene created, starting in room:', startRoom);
-
-    if (!this.rsm.isTutorialShown()) {
-      this.time.delayedCall(1000, () => {
-        this.showTutorialDialog();
-      });
-    }
   }
 
   private paginateText(text: string, maxLines = 6): string[] {
@@ -181,12 +207,59 @@ export class GameScene extends Phaser.Scene {
     for (let i = 1; i < pages.length; i++) this.messageQueue.push({ text: pages[i], type });
   }
 
-  private showTutorialDialog(): void {
-    this.rsm.setTutorialShown(true);
-    this.openDialog("Welcome. Controls: WASD to move, E to interact, TAB for inventory, F to toggle Flashlight, ESC for menu.", 'system');
+  // ── Introspection channel (pattern #13) ───────────────────────────────────
+
+  /** Click on player or T: show the best matching thought (read or not). */
+  private tryIntrospect(): void {
+    if (this.dialogOpen || this.inventoryMode || this.isTransitioning) return;
+    const thought = selectThought(
+      this.rsm,
+      this.roomManager.getCurrentRoomId(),
+      this.player.x,
+      this.player.y,
+    );
+    if (!thought) return;
+    this.rsm.markThoughtRead(thought.id);
+    this.visitNotified.add(thought.id);
+    this.openDialog(thought.lines.join('\n'), 'thought');
+    this.thoughtEvalTimer = 9999;
+  }
+
+  /**
+   * Glyph above the player when an unnotified thought matches. Runs every
+   * frame (position/bob); re-selects on a 250ms throttle, or immediately
+   * after room change / character switch / dialog close (timer bump).
+   */
+  private updateThoughtIndicator(delta: number): void {
+    this.thoughtEvalTimer += delta;
+    if (this.thoughtEvalTimer >= 250) {
+      this.thoughtEvalTimer = 0;
+      this.pendingThought = selectNotifiableThought(
+        this.rsm,
+        this.roomManager.getCurrentRoomId(),
+        this.player.x,
+        this.player.y,
+        this.visitNotified,
+      );
+    }
+    const visible = !!this.pendingThought && !this.dialogOpen && !this.inventoryMode && !this.isTransitioning;
+    this.thoughtGlyph.setVisible(visible);
+    if (visible) {
+      this.thoughtGlyph.setText(this.pendingThought!.glyph ?? '…');
+      // Manual sine bob — a tween would fight the per-frame position write
+      this.thoughtGlyph.setPosition(
+        this.player.x,
+        this.player.y - 52 + Math.sin(this.time.now / 300) * 3,
+      );
+    }
   }
 
   update(_time: number, delta: number): void {
+    // Consume the click request every frame — if any early return below fires
+    // (transition, inventory, an open dialog), the request is simply dropped:
+    // the room's dialog came first and the glyph stays lit for a re-click.
+    const introspectClick = this.introspectRequested;
+    this.introspectRequested = false;
     // TODO: remove before ship — Ctrl+Shift+/ unlocks all doors across all rooms
     if (this.dbgSlashKey && Phaser.Input.Keyboard.JustDown(this.dbgSlashKey) &&
         this.dbgCtrlKey?.isDown && this.dbgShiftKey?.isDown) {
@@ -203,6 +276,7 @@ export class GameScene extends Phaser.Scene {
       this.player.y - cam.scrollY,
       this.flashlight,
     );
+    this.updateThoughtIndicator(delta);
     if (this.isTransitioning) return;
     if (this.lockedDoorCooldown > 0) this.lockedDoorCooldown--;
 
@@ -244,6 +318,7 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.dialogOpen = false;
           this.events.emit('dialog-close');
+          this.thoughtEvalTimer = 9999; // refresh indicator the instant the box closes
         }
       }
       return;
@@ -288,6 +363,12 @@ export class GameScene extends Phaser.Scene {
 
     this.checkInteractables(input);
     this.updateClinicProximity();
+
+    // Introspection (T / click) — evaluated last so any world dialog opened
+    // this frame wins the race; tryIntrospect() yields while a dialog is open.
+    if (input.introspect || introspectClick) {
+      this.tryIntrospect();
+    }
 
     if (input.menu) {
       this.scene.pause();
@@ -1037,7 +1118,7 @@ export class GameScene extends Phaser.Scene {
     // Catch so the base black-silhouette RT still renders even if the shadow pass fails.
     try {
 //       rt.postFX.addShadow(-120, 30, .08, 1, 0x000000, 3, 1);
-      rt.postFX.addBlur(1, 2, 2, 1, 0x000000, 5);
+      rt.postFX.addBlur(1, 20, 20, 1, 0xFFFFFF, 5);
     } catch (e) {
       console.warn('[GameScene] postFX unavailable (limited GPU?), shadow will render without blur:', e);
     }

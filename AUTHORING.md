@@ -459,6 +459,80 @@ so the world always reflects the current flag state.
 
 ---
 
+## Thoughts (introspection channel)
+
+Thoughts are inner-monologue lore drops shown when the player **clicks the
+player sprite** or presses **T**. A `…` glyph floats above the player when
+an unread matching thought exists (override per-thought via `glyph` for
+special cases). Thoughts are
+**readers of game state — they never write it.** There is deliberately no
+`produces` field. They live in `src/data/thoughts.json`, one entry per
+thought, zero code per entry.
+
+### Fields
+
+```json
+{
+  "id": "clinic-shelves-kai",
+  "character": "kai",
+  "trait": "lab-trained",
+  "room": "clinic",
+  "spot": { "x": 120, "y": 80, "r": 40 },
+  "requires":    [{ "type": "flag", "value": "found_ledger" }],
+  "requiresAny": [{ "type": "item", "value": "lab-keycard" }],
+  "priority": 10,
+  "repeat": "never",
+  "lines": ["Page one.", "Page two — E pages, 6 lines per page."]
+}
+```
+
+| Field | Gate | Meaning |
+|-------|------|---------|
+| `character` | WHO | Exact character id. Omit = any character. |
+| `trait` | WHO | Any character bearing this trait (see `grantTrait`). Both given = AND. |
+| `room` | WHERE | Room id. Omit = fires anywhere (pure-progress thought). |
+| `spot` | WHERE | `{x,y,r}` pixel anchor within the room. Optional. |
+| `requires` | WHEN | `RequireCondition[]`, all must pass (same as interactables). |
+| `requiresAny` | WHEN | At least one must pass. |
+| `glyph` | — | Optional indicator override (default `…`). Reserve for special cases. |
+| `priority` | — | Higher wins; ties → earlier in file. |
+| `repeat` | — | See below. |
+| `lines` | — | Joined with newlines; dialog paginates at 6 lines/page. |
+
+### `repeat` modes
+
+| Mode | Clickable | Glyph |
+|------|-----------|-------|
+| `never` | Once — leaves the pool after first read (per-run; death wipes) | Until read |
+| `silent` | Forever | Until first read only (ambient lines) |
+| `notify` | Forever | **Re-lights on every room entry** (recurring charged memories) |
+
+### Selection rules
+
+- **Pool** = thoughts matching WHO/WHERE/WHEN, minus read `repeat: never`
+  entries. Click/T shows the best pool entry: **unread before read**, then
+  highest priority, then file order. Read repeatables stay reachable as
+  fallbacks once everything unread is exhausted.
+- The **glyph** lights only when an *unread* (or, for `notify`,
+  un-renotified-this-visit) pool entry exists — and because unread wins
+  selection, clicking always shows the thought the glyph is lit for.
+- **Layering**: stack several thoughts on one room with rising `priority`
+  and progress gates — the same place says something new as flags accrue.
+  Reading a `never` thought reveals the next layer down on the next click.
+  Use `flagAbsent` to suppress stale lower layers if drill-down is unwanted.
+- Ambient per-character fallbacks are just `priority: 0, repeat: "silent"`
+  entries.
+
+### Rules of thumb
+
+- **WHO goes in the top-level `character`/`trait` fields, not in
+  `requires`** — a `{"type":"character"}` condition always tests the
+  *active* character and would break future parked-body evaluation.
+- Thoughts never name solutions. "This valve is stiff" is fine; "use the
+  pipe wrench on the valve" is not. Mystery, not cruelty.
+
+---
+
 ## Room-specific tilesets
 
 By default every room uses the shared core tileset (`tileset.png`, 128 tiles).

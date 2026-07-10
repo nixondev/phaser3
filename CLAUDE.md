@@ -64,6 +64,8 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/RoomStateManager.ts` | Singleton — all persistent game state |
 | `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zones, `Spectra` layer, `resizeMap()` |
 | `src/systems/InputManager.ts` | Keyboard input: `getState()` continuous, `getTapState()` one-shot |
+| `src/systems/ThoughtManager.ts` | Introspection channel (pattern #13): pure WHO/WHERE/WHEN thought selection |
+| `src/data/thoughts.json` | All thought entries — lore drops shown on player click / T |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
 | `src/systems/MusicManager.ts` | MIDI music — singleton, proximity layers, reverb cycle |
 | `src/systems/WeatherManager.ts` | Weather effects on room transitions (data-driven from `rooms.json`) |
@@ -103,7 +105,7 @@ poweredDevices: Set<string>
 generatorFuel: number
 droppedItems: Map<roomId, DroppedItemState[]>
 visitedRooms: Set<string>
-tutorialShown: boolean
+readThoughts: Set<string>             — introspection entries read this run
 ```
 
 Future state to support: character roster / active character, per-character item ownership, persistent world changes, soft-doom states.
@@ -166,6 +168,7 @@ Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, HIDDEN=31,
 | Arrow / WASD | Move |
 | E | Interact / use item / dismiss dialog |
 | F | Toggle flashlight (requires item with `keyId: "flashlight"`) |
+| T / click player | Introspect — inner-monologue thought (`…` glyph above player when unread) |
 | TAB | Toggle inventory |
 | Q | Drop selected item |
 | ESC | Pause menu |

@@ -234,6 +234,12 @@ export class UIScene extends Phaser.Scene {
     const BOX_BOTTOM = h - 32;
     const BOX_WIDTH = w - 64;
 
+    // Inner-voice styling for thoughts; must reset on every call — dialogText
+    // is a reused object and the style would otherwise stick.
+    const isThought = payload.type === 'thought';
+    this.dialogText.setFontStyle(isThought ? 'italic' : 'normal');
+    this.dialogText.setColor(isThought ? '#b8c4e8' : '#ffffff');
+
     this.dialogText.setText(payload.text);
     const textH = this.dialogText.height;
     const boxH = Math.max(120, textH + PAD_Y * 2);

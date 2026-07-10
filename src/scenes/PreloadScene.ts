@@ -45,7 +45,7 @@ export class PreloadScene extends Phaser.Scene {
       this.load.spritesheet(`${name}-sprites`, tsPath, { frameWidth: upscale, frameHeight: upscale });
     }
 
-    this.load.spritesheet('player', 'assets/sprites/player.png', {
+    this.load.spritesheet('player', 'assets/sprites/player-good.png', {
       frameWidth: 64,
       frameHeight: 64,
     });

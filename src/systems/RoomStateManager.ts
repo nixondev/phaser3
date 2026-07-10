@@ -12,13 +12,13 @@ export class RoomStateManager {
   private generatorFuel = 0;
   private inventory: (ItemDef | null)[] = new Array(12).fill(null);
   private droppedItems: Map<string, DroppedItemState[]> = new Map();
-  private tutorialShown = false;
   private roster: CharacterState[] = [];
   private activeCharacterId = 'player';
   private characterInventories: Map<string, (ItemDef | null)[]> = new Map();
   private worldFlags: Set<string> = new Set();
   private flagExpiries: Map<string, number> = new Map();
   private flagPending: Map<string, number> = new Map();
+  private readThoughts: Set<string> = new Set();
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -296,14 +296,15 @@ export class RoomStateManager {
 
   getFlags(): Set<string> { return this.worldFlags; }
 
-  // ── Tutorial ────────────────────────────────────────────────────────────
 
-  isTutorialShown(): boolean {
-    return this.tutorialShown;
+  // ── Thoughts (introspection channel) ────────────────────────────────────
+
+  markThoughtRead(thoughtId: string): void {
+    this.readThoughts.add(thoughtId);
   }
 
-  setTutorialShown(shown: boolean): void {
-    this.tutorialShown = shown;
+  isThoughtRead(thoughtId: string): boolean {
+    return this.readThoughts.has(thoughtId);
   }
 
   // ── Persistence ─────────────────────────────────────────────────────────
@@ -320,13 +321,13 @@ export class RoomStateManager {
       generatorFuel: this.generatorFuel,
       inventory: this.inventory,
       droppedItems: [...this.droppedItems.entries()],
-      tutorialShown: this.tutorialShown,
       roster: this.roster,
       activeCharacterId: this.activeCharacterId,
       characterInventories: [...this.characterInventories.entries()],
       worldFlags: [...this.worldFlags],
       flagExpiries: [...this.flagExpiries.entries()],
       flagPending: [...this.flagPending.entries()],
+      readThoughts: [...this.readThoughts],
     };
   }
 
@@ -341,13 +342,13 @@ export class RoomStateManager {
     this.generatorFuel = data.generatorFuel ?? 0;
     this.inventory = data.inventory ?? new Array(12).fill(null);
     this.droppedItems = new Map(data.droppedItems ?? []);
-    this.tutorialShown = data.tutorialShown ?? false;
     this.roster = data.roster ?? [];
     this.activeCharacterId = data.activeCharacterId ?? 'player';
     this.characterInventories = new Map(data.characterInventories ?? []);
     this.worldFlags = new Set(data.worldFlags ?? []);
     this.flagExpiries = new Map(data.flagExpiries ?? []);
     this.flagPending = new Map(data.flagPending ?? []);
+    this.readThoughts = new Set(data.readThoughts ?? []);
   }
 
   // ── Reset ───────────────────────────────────────────────────────────────
@@ -363,13 +364,13 @@ export class RoomStateManager {
     this.generatorFuel = 0;
     this.inventory = new Array(12).fill(null);
     this.droppedItems.clear();
-    this.tutorialShown = false;
     this.roster = [];
     this.activeCharacterId = 'player';
     this.characterInventories.clear();
     this.worldFlags.clear();
     this.flagExpiries.clear();
     this.flagPending.clear();
+    this.readThoughts.clear();
   }
 }
 

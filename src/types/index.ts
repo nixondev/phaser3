@@ -250,6 +250,7 @@ export interface InputState {
   char2: boolean;
   char3: boolean;
   char4: boolean;
+  introspect: boolean;
 }
 
 
@@ -270,9 +271,52 @@ export interface TextSequenceEntry {
   afterDelay?: number;
 }
 
-export type DialogMessageType = 'narrative' | 'system' | 'lore';
+export type DialogMessageType = 'narrative' | 'system' | 'lore' | 'thought';
 
 export interface DialogMessage {
   text: string;
   type?: DialogMessageType;
+}
+
+/** Sub-room anchor for a thought — matches when the player is within r px of (x, y). */
+export interface ThoughtSpot {
+  x: number;
+  y: number;
+  r: number;
+}
+
+/**
+ * A single introspection entry (pattern #13). Thoughts are READERS of game
+ * state — deliberately no `produces` field; they never write puzzle state.
+ */
+export interface ThoughtDef {
+  id: string;
+  /** WHO — exact character id. Omit (with trait) = all characters. */
+  character?: string;
+  /** WHO — any character bearing this trait. Both given = AND. */
+  trait?: string;
+  /** WHERE — room id. Omit = fires anywhere (pure-progress thought). */
+  room?: string;
+  /** WHERE — sub-room anchor; only meaningful with room. */
+  spot?: ThoughtSpot;
+  /** WHEN — all must pass (checkRequires). */
+  requires?: RequireCondition[];
+  /** WHEN — at least one must pass (checkRequiresAny). */
+  requiresAny?: RequireCondition[];
+  /** Indicator override for special cases. Defaults to '…'. */
+  glyph?: string;
+  /** Joined with \n; openDialog paginates at 6 lines/page. */
+  lines: string[];
+  /** Higher wins; ties broken by file order (earlier wins). */
+  priority: number;
+  /**
+   * never  — one read, then permanently out of the pool (per-run).
+   * silent — always clickable; glyph lights only until first read.
+   * notify — always clickable; glyph re-lights on every room entry.
+   */
+  repeat: 'never' | 'silent' | 'notify';
+}
+
+export interface ThoughtsData {
+  thoughts: ThoughtDef[];
 }
