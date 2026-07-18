@@ -349,94 +349,41 @@
       ],
       "afflicted": [
         {
-          "id": "street-wanderer-1",
-          "name": "Kai",
-          "role": "Former Lab Technician",
+          "id": "kai",
+          "character": "kai",
           "x": 1600,
           "y": 2000,
-          "behaviorLoop": "wander",
-          "variant": "walker",
-          "playerVariant": "ranger",
-          "associatedRoom": "house-b",
-          "curedClue": "...they look up and mumble something about the north block... the smell of chemicals... a lab coat...",
-          "backstory": [
-            "words:dialog/kai/backstory-1",
-            "words:dialog/kai/backstory-2",
-            "words:dialog/kai/backstory-3"
-          ],
-          "recoveredItems": [
-            {
-              "name": "Lab Keycard",
-              "tileFrame": 8,
-              "category": "key",
-              "keyId": "lab-door"
-            },
-            {
-              "name": "Compound Sample",
-              "tileFrame": 9,
-              "category": "cure"
-            }
-          ]
+          "behaviorLoop": "wander"
         },
         {
-          "id": "street-wanderer-2",
-          "name": "Maren",
-          "role": "Local Shopkeeper",
+          "id": "maren",
+          "character": "maren",
           "x": 4000,
           "y": 2800,
-          "behaviorLoop": "wander",
-          "variant": "walker",
-          "playerVariant": "rogue",
-          "associatedRoom": "house-c",
-          "curedClue": "...they whisper about the community room... counting shelves... the logbook...",
-          "backstory": [
-            "words:dialog/maren/backstory-1",
-            "words:dialog/maren/backstory-2",
-            "words:dialog/maren/backstory-3"
-          ],
-          "recoveredItems": [
-            {
-              "name": "Store Key",
-              "tileFrame": 8,
-              "category": "key",
-              "keyId": "store-front"
-            },
-            {
-              "name": "Supply Manifest",
-              "tileFrame": 7,
-              "category": "document",
-              "content": "words:documents/supply-manifest"
-            }
-          ]
+          "behaviorLoop": "wander"
         },
         {
           "id": "street-sentinel-1",
-          "name": "Unknown",
-          "role": "",
           "x": 5354,
           "y": 925,
           "behaviorLoop": "sentinel",
-          "variant": "walker"
+          "afflictedSheet": "afflicted-walker"
         },
         {
           "id": "street-pacer-1",
-          "name": "Unknown",
-          "role": "",
           "x": 5021,
           "y": 3871,
           "behaviorLoop": "pace",
-          "variant": "walker",
+          "afflictedSheet": "afflicted-walker",
           "paceAngle": 0,
           "paceLength": 256
         },
         {
           "id": "street-drifter-1",
-          "name": "Unknown",
-          "role": "",
           "x": 676,
           "y": 4061,
           "behaviorLoop": "drift",
-          "variant": "walker",
+          "afflictedSheet": "afflicted-walker",
           "wanderRadius": 192
         }
       ],
@@ -657,19 +604,6 @@
           }
         }
       ],
-      "afflicted": [
-        {
-          "id": "street-wanderer-1",
-          "name": "Kai",
-          "role": "Former Lab Technician",
-          "x": 576,
-          "y": 320,
-          "behaviorLoop": "wander",
-          "variant": "walker",
-          "playerVariant": "ranger",
-          "associatedRoom": "house-b"
-        }
-      ],
       "tilesets": [
         "house-b-tiles"
       ]
@@ -732,19 +666,6 @@
             "category": "document",
             "content": "words:documents/wardens-log"
           }
-        }
-      ],
-      "afflicted": [
-        {
-          "id": "street-wanderer-2",
-          "name": "Maren",
-          "role": "Local Shopkeeper",
-          "x": 640,
-          "y": 640,
-          "behaviorLoop": "wander",
-          "variant": "walker",
-          "playerVariant": "rogue",
-          "associatedRoom": "house-c"
         }
       ],
       "tilesets": [
@@ -1380,21 +1301,17 @@
       "afflicted": [
         {
           "id": "ts-wanderer-a",
-          "name": "Unknown",
-          "role": "",
           "x": 320,
           "y": 450,
           "behaviorLoop": "wander",
-          "variant": "walker"
+          "afflictedSheet": "afflicted-walker"
         },
         {
           "id": "ts-wanderer-b",
-          "name": "Unknown",
-          "role": "",
           "x": 900,
           "y": 560,
           "behaviorLoop": "wander",
-          "variant": "husk"
+          "afflictedSheet": "afflicted-husk"
         }
       ],
       "tilesets": [

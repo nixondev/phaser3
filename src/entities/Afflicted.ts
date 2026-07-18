@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { Entity } from './Entity';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
-import { AfflictedDef, AfflictedStatus, BehaviorLoop, ItemDef, ProduceEffect, Position } from '@/types';
+import { AfflictedPlacement, AfflictedStatus, BehaviorLoop, CharacterDef, ItemDef, ProduceEffect, Position } from '@/types';
 import { MusicManager } from '@systems/MusicManager';
 import { Direction } from './Direction';
+import { ensureCharacterAnims } from './animHelpers';
 
 const WANDER_SPEED      = 80;
 const WANDER_PAUSE_MIN  = 1500;
@@ -27,7 +28,7 @@ export class Afflicted extends Entity {
   private behaviorLoop: BehaviorLoop;
   private wanderRadius: number;
   private speedMult: number;
-  private variant: string;
+  private afflictedSheet: string;
   private origin: Position;
   private wanderTarget: Position | null = null;
   private wanderTimer?: Phaser.Time.TimerEvent;
@@ -39,8 +40,9 @@ export class Afflicted extends Entity {
   private circleAngularSpeed: number = 0; // rad/s
   private baseScale: number;
   private currentDir: Direction = Direction.DOWN;
-  private playerVariant: string | null;
-  private associatedRoom: string | null;
+  private characterId: string | null;
+  private humanSheet: string | null;
+  private homeRoom: string | null;
   private curedClue: string | null;
   private backstory: string[];
   private recoveredItems: ItemDef[];
@@ -50,32 +52,39 @@ export class Afflicted extends Entity {
   private conversationProduces: ProduceEffect[];
   private traits: string[];
 
-  constructor(scene: Phaser.Scene, def: AfflictedDef, initialStatus: AfflictedStatus) {
-    const variant = def.variant || 'walker';
-    const texture = `afflicted-${variant}`;
-    super(scene, def.x, def.y, texture, 0);
-    
+  constructor(
+    scene: Phaser.Scene,
+    def: AfflictedPlacement,
+    character: CharacterDef | null,
+    initialStatus: AfflictedStatus,
+  ) {
+    const afflictedSheet = character?.afflictedSheet ?? def.afflictedSheet ?? 'afflicted-walker';
+    super(scene, def.x, def.y, afflictedSheet, 0);
+
     this.baseScale = 1.0;
     this.setScale(this.baseScale);
 
-    this.afflictedId    = def.id;
-    this.residentName   = def.name;
-    this.role           = def.role;
+    // Cast members are keyed by their character slug in all persistent state;
+    // extras fall back to the placement id.
+    this.afflictedId    = def.character ?? def.id;
+    this.characterId    = def.character ?? null;
+    this.residentName   = character?.name ?? def.name ?? 'Unknown';
+    this.role           = character?.role ?? '';
     this.behaviorLoop   = def.behaviorLoop;
     this.wanderRadius   = def.wanderRadius ?? WANDER_RANGE;
     this.speedMult      = def.speedMult ?? 1.0;
     this.status         = initialStatus;
-    this.variant        = variant;
-    this.playerVariant  = def.playerVariant || null;
-    this.associatedRoom = def.associatedRoom || null;
-    this.curedClue      = def.curedClue || null;
-    this.backstory           = def.backstory || [];
-    this.recoveredItems      = def.recoveredItems || [];
-    this.holds               = def.holds || [];
-    this.conversationRequires = def.conversationRequires || null;
-    this.conversationDialog  = def.conversationDialog || [];
-    this.conversationProduces = def.conversationProduces || [];
-    this.traits              = def.traits || [];
+    this.afflictedSheet = afflictedSheet;
+    this.humanSheet     = character?.sheet ?? null;
+    this.homeRoom       = character?.home?.room ?? null;
+    this.curedClue      = character?.curedClue ?? null;
+    this.backstory           = character?.backstory ?? [];
+    this.recoveredItems      = character?.recoveredItems ?? [];
+    this.holds               = def.holds ?? [];
+    this.conversationRequires = character?.conversationRequires ?? null;
+    this.conversationDialog  = character?.conversationDialog ?? [];
+    this.conversationProduces = character?.conversationProduces ?? [];
+    this.traits              = character?.traits ?? [];
     this.origin         = { x: def.x, y: def.y };
 
     if (def.behaviorLoop === 'pace') {
@@ -98,15 +107,15 @@ export class Afflicted extends Entity {
     body.setOffset(18, 38);
     body.setCollideWorldBounds(true);
 
-    this.createAnimations();
+    ensureCharacterAnims(scene, afflictedSheet);
     this.setupVisuals();
 
-    // When spawning already-cured/recovered (room re-entry), apply the player texture
+    // When spawning already-cured/recovered (room re-entry), apply the human sheet
     // immediately. setStatus() handles this on live transitions but is never called here.
-    if ((initialStatus === 'cured' || initialStatus === 'recovered') && this.playerVariant) {
-      this.createCuredAnimations();
-      this.setTexture(`player-${this.playerVariant}`, 0);
-      this.play(`player-${this.playerVariant}-idle-${this.currentDir}`, true);
+    if ((initialStatus === 'cured' || initialStatus === 'recovered') && this.humanSheet) {
+      ensureCharacterAnims(scene, this.humanSheet);
+      this.setTexture(this.humanSheet, 0);
+      this.play(`${this.humanSheet}-idle-${this.currentDir}`, true);
     }
 
     if (this.status === 'wandering') {
@@ -116,42 +125,6 @@ export class Afflicted extends Entity {
     }
 
     MusicManager.getInstance().playProximity(this.afflictedId, 'goblins', def.soundRoom ?? 'city-street');
-  }
-
-  private createAnimations(): void {
-    const texture = `afflicted-${this.variant}`;
-    const dirs: { key: Direction; row: number }[] = [
-      { key: Direction.DOWN, row: 0 },
-      { key: Direction.LEFT, row: 1 },
-      { key: Direction.RIGHT, row: 2 },
-      { key: Direction.UP, row: 3 },
-    ];
-
-    for (const { key, row } of dirs) {
-      const start = row * 4;
-      const walkKey = `${texture}-walk-${key}`;
-      const idleKey = `${texture}-idle-${key}`;
-
-      if (!this.scene.anims.exists(walkKey)) {
-        this.scene.anims.create({
-          key: walkKey,
-          frames: this.scene.anims.generateFrameNumbers(texture, {
-            frames: [start, start + 1, start + 2, start + 3],
-          }),
-          frameRate: 8,
-          repeat: -1,
-        });
-      }
-
-      if (!this.scene.anims.exists(idleKey)) {
-        this.scene.anims.create({
-          key: idleKey,
-          frames: [{ key: texture, frame: start }],
-          frameRate: 1,
-          repeat: -1,
-        });
-      }
-    }
   }
 
   private setupVisuals(): void {
@@ -202,42 +175,10 @@ export class Afflicted extends Entity {
     }
   }
 
-  private createCuredAnimations(): void {
-    if (!this.playerVariant) return;
-    const texture = `player-${this.playerVariant}`;
-    const dirs: { key: Direction; row: number }[] = [
-      { key: Direction.DOWN,  row: 0 },
-      { key: Direction.LEFT,  row: 1 },
-      { key: Direction.RIGHT, row: 2 },
-      { key: Direction.UP,    row: 3 },
-    ];
-    for (const { key, row } of dirs) {
-      const start = row * 4;
-      const walkKey = `${texture}-walk-${key}`;
-      const idleKey = `${texture}-idle-${key}`;
-      if (!this.scene.anims.exists(walkKey)) {
-        this.scene.anims.create({
-          key: walkKey,
-          frames: this.scene.anims.generateFrameNumbers(texture, { frames: [start, start + 1, start + 2, start + 3] }),
-          frameRate: 8,
-          repeat: -1,
-        });
-      }
-      if (!this.scene.anims.exists(idleKey)) {
-        this.scene.anims.create({
-          key: idleKey,
-          frames: [{ key: texture, frame: start }],
-          frameRate: 1,
-          repeat: -1,
-        });
-      }
-    }
-  }
-
   private updateAnimation(): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    const usePlayerSprite = (this.status === 'cured' || this.status === 'recovered') && this.playerVariant;
-    const texture = usePlayerSprite ? `player-${this.playerVariant}` : `afflicted-${this.variant}`;
+    const useHumanSheet = (this.status === 'cured' || this.status === 'recovered') && this.humanSheet;
+    const texture = useHumanSheet ? this.humanSheet : this.afflictedSheet;
 
     if (body.velocity.x !== 0 || body.velocity.y !== 0) {
       if (Math.abs(body.velocity.y) >= Math.abs(body.velocity.x)) {
@@ -395,10 +336,10 @@ export class Afflicted extends Entity {
 
     if (newStatus === 'cured' || newStatus === 'recovered') {
       MusicManager.getInstance().stopProximity(this.afflictedId);
-      if (this.playerVariant) {
-        this.setTexture(`player-${this.playerVariant}`, 0);
-        this.createCuredAnimations();
-        this.play(`player-${this.playerVariant}-idle-${this.currentDir}`, true);
+      if (this.humanSheet) {
+        ensureCharacterAnims(this.scene, this.humanSheet);
+        this.setTexture(this.humanSheet, 0);
+        this.play(`${this.humanSheet}-idle-${this.currentDir}`, true);
       }
     }
 
@@ -418,8 +359,10 @@ export class Afflicted extends Entity {
   getId():             string           { return this.afflictedId;    }
   getName():           string           { return this.residentName;   }
   getRole():           string           { return this.role;           }
-  getPlayerVariant():  string | null    { return this.playerVariant;  }
-  getAssociatedRoom(): string | null    { return this.associatedRoom; }
+  getCharacterId():    string | null    { return this.characterId;    }
+  isCast():            boolean          { return this.characterId !== null; }
+  getHumanSheet():     string | null    { return this.humanSheet;     }
+  getHomeRoom():       string | null    { return this.homeRoom;       }
   getCuredClue():      string | null    { return this.curedClue;      }
   getBackstory():      string[]         { return this.backstory;      }
   getRecoveredItems():      ItemDef[]        { return this.recoveredItems;       }

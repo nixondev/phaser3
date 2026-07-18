@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SCENES, GAME_CONFIG, USE_MIDI_MUSIC } from '@utils/Constants';
 import { RoomManager } from '@systems/RoomManager';
+import { collectReferencedSheets } from '@systems/CharacterRegistry';
 import { debug } from '@utils/Debug';
 
 export class PreloadScene extends Phaser.Scene {
@@ -45,35 +46,13 @@ export class PreloadScene extends Phaser.Scene {
       this.load.spritesheet(`${name}-sprites`, tsPath, { frameWidth: upscale, frameHeight: upscale });
     }
 
-    this.load.spritesheet('player', 'assets/sprites/player-good.png', {
-      frameWidth: 64,
-      frameHeight: 64,
-    });
-
     this.load.image('vial_cure', 'assets/sprites/vial_cure.png');
 
-    const playerVariants = [
-      'warden', 'ranger', 'rogue', 'mystic', 'drifter', 'scavenger', 'ashwalker',
-    ];
-    for (const v of playerVariants) {
-      this.load.spritesheet(`player-${v}`, `assets/sprites/player-${v}.png`, {
-        frameWidth: 64,
-        frameHeight: 64,
-      });
-    }
-
-    const afflictedVariants = [
-      'walker',
-      'bloater',
-      'crawler',
-      'husk',
-      'spitter',
-      'brute',
-      'ashrot',
-      'veinhost',
-    ];
-    for (const v of afflictedVariants) {
-      this.load.spritesheet(`afflicted-${v}`, `assets/sprites/afflicted-${v}.png`, {
+    // Character spritesheets: exactly what characters.json + room placements
+    // reference. Texture key = PNG basename. (Dev additionally loads every
+    // 256×256 sheet on disk in create(), so new art needs no registration.)
+    for (const sheet of collectReferencedSheets()) {
+      this.load.spritesheet(sheet, `assets/sprites/${sheet}.png`, {
         frameWidth: 64,
         frameHeight: 64,
       });
@@ -112,8 +91,39 @@ export class PreloadScene extends Phaser.Scene {
       document.fonts.load('1em Silkscreen'),
       document.fonts.load('1em "Bitcount Ink"'),
       document.fonts.load('1em "Workbench"'),
+      this.loadAllDevSheets(),
     ]).finally(() => {
       this.scene.start(SCENES.MENU);
     });
+  }
+
+  /**
+   * Dev only: load every 256×256 sheet in public/assets/sprites/ so freshly
+   * painted sheets are immediately usable (skin picker, characters.json edits)
+   * without touching code. Production loads only referenced sheets.
+   */
+  private loadAllDevSheets(): Promise<void> {
+    if (!import.meta.env.DEV) return Promise.resolve();
+    return fetch('/__editor/list-sprites')
+      .then(r => r.json())
+      .then((data: { sprites: { name: string; width: number; height: number }[] }) => {
+        let queued = 0;
+        for (const s of data.sprites) {
+          if (s.width !== 256 || s.height !== 256) continue;
+          if (this.textures.exists(s.name)) continue;
+          this.load.spritesheet(s.name, `assets/sprites/${s.name}.png`, {
+            frameWidth: 64,
+            frameHeight: 64,
+          });
+          queued++;
+        }
+        if (queued === 0) return;
+        debug(`Dev: loading ${queued} additional character sheets`);
+        return new Promise<void>(resolve => {
+          this.load.once('complete', () => resolve());
+          this.load.start();
+        });
+      })
+      .catch(() => undefined);
   }
 }

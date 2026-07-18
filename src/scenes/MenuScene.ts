@@ -251,8 +251,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.buildEdgeShadows(map.width, map.height);
 
-    this.wanderers.push(this.makeWanderer('menu-walker', 320, 450, 'walker', 0x5577cc));
-    this.wanderers.push(this.makeWanderer('menu-husk',   900, 560, 'husk',   0x997755));
+    this.wanderers.push(this.makeWanderer('menu-walker', 320, 450, 'afflicted-walker', 0x5577cc));
+    this.wanderers.push(this.makeWanderer('menu-husk',   900, 560, 'afflicted-husk',   0x997755));
 
     if (this.collisionLayer) {
       this.collisionLayer.setCollisionByExclusion([-1]);
@@ -303,12 +303,12 @@ export class MenuScene extends Phaser.Scene {
     this.edgeShadows = rt;
   }
 
-  private makeWanderer(id: string, x: number, y: number, variant: string, tint: number): Afflicted {
+  private makeWanderer(id: string, x: number, y: number, sheet: string, tint: number): Afflicted {
     const afflicted = new Afflicted(this, {
-      id, variant,
-      name: '', role: '', x, y,
+      id, afflictedSheet: sheet,
+      x, y,
       behaviorLoop: 'wander',
-    }, 'wandering');
+    }, null, 'wandering');
     MusicManager.getInstance().stopProximity(id);
     afflicted.setTint(tint);
     afflicted.setScrollFactor(0);

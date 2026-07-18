@@ -189,18 +189,17 @@ A roster of recovered residents the player can switch between. Each:
 
 Switching characters teleports the camera/control, not the bodies.
 
-A recovered resident's data in `rooms.json`:
+A cast member's identity lives in `src/data/characters.json` (see
+CHARACTERS.md); the room only holds a placement:
 
 ```json
-{
-  "id": "street-wanderer-1",
+// characters.json
+"kai": {
   "name": "Kai",
   "role": "Former Lab Technician",
-  "x": 400, "y": 500,
-  "behaviorLoop": "wander",
-  "variant": "walker",
-  "playerVariant": "ranger",
-  "associatedRoom": "house-b",
+  "sheet": "player-ranger",
+  "afflictedSheet": "afflicted-walker",
+  "home": { "room": "house-b", "x": 576, "y": 320 },
   "curedClue": "...mumbles about the north block... chemicals...",
   "backstory": [
     "Page one dialog string.",
@@ -212,6 +211,9 @@ A recovered resident's data in `rooms.json`:
     { "name": "Compound Sample", "tileFrame": 9, "category": "component" }
   ]
 }
+
+// rooms.json placement
+{ "id": "kai", "character": "kai", "x": 400, "y": 500, "behaviorLoop": "wander" }
 ```
 
 `associatedRoom` controls where the cured resident reappears after

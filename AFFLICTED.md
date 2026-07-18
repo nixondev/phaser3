@@ -6,18 +6,19 @@ Everything about the afflicted entity system, curing mechanics, and the recovery
 
 ## Current Afflicted Inventory
 
-All afflicted defined in `src/data/rooms.json`.
+Cast identity lives in `src/data/characters.json`; room spawns are placements
+in `src/data/rooms.json` (see CHARACTERS.md).
 
-### Kai — Former Lab Technician (`street-wanderer-1`)
+### Kai — Former Lab Technician (`kai`)
 
 | Field | Value |
 |-------|-------|
-| ID | `street-wanderer-1` |
-| behaviorLoop | `wander` |
-| variant | `walker` |
-| playerVariant | `ranger` |
-| associatedRoom | `house-b` |
-| Appears in | `city-street` (x:1600, y:2000), `house-b` (x:576, y:320) |
+| ID (registry slug) | `kai` |
+| behaviorLoop | `wander` (city-street placement) |
+| afflictedSheet | `afflicted-walker` |
+| sheet (human) | `player-ranger` |
+| home | `house-b` (x:576, y:320) |
+| Placed in | `city-street` (x:1600, y:2000) |
 
 **curedClue:** `"...they look up and mumble something about the north block... the smell of chemicals... a lab coat..."`
 
@@ -32,16 +33,16 @@ All afflicted defined in `src/data/rooms.json`.
 
 ---
 
-### Maren — Local Shopkeeper (`street-wanderer-2`)
+### Maren — Local Shopkeeper (`maren`)
 
 | Field | Value |
 |-------|-------|
-| ID | `street-wanderer-2` |
-| behaviorLoop | `wander` |
-| variant | `walker` |
-| playerVariant | `rogue` |
-| associatedRoom | `house-c` |
-| Appears in | `city-street` (x:4000, y:2800), `house-c` (x:640, y:640) |
+| ID (registry slug) | `maren` |
+| behaviorLoop | `wander` (city-street placement) |
+| afflictedSheet | `afflicted-walker` |
+| sheet (human) | `player-rogue` |
+| home | `house-c` (x:640, y:640) |
+| Placed in | `city-street` (x:4000, y:2800) |
 
 **curedClue:** `"...they whisper about the community room... counting shelves... the logbook..."`
 
@@ -56,12 +57,12 @@ All afflicted defined in `src/data/rooms.json`.
 
 ---
 
-### Title Screen Afflicted
+### Title Screen Afflicted (extras)
 
-| ID | Variant | Room | Notes |
-|----|---------|------|-------|
-| `ts-wanderer-a` | `walker` | `title-screen` (x:320, y:450) | Decorative; no name, role, or cure data |
-| `ts-wanderer-b` | `husk` | `title-screen` (x:900, y:560) | Decorative; only `husk` variant in use |
+| ID | afflictedSheet | Room | Notes |
+|----|----------------|------|-------|
+| `ts-wanderer-a` | `afflicted-walker` | `title-screen` (x:320, y:450) | Decorative extra; no registry entry |
+| `ts-wanderer-b` | `afflicted-husk` | `title-screen` (x:900, y:560) | Decorative extra; only husk sheet in use |
 
 ---
 
@@ -131,20 +132,38 @@ Orbits continuously around origin at `wanderRadius` distance. Uses `circleSpeed`
 
 ---
 
-## AfflictedDef Field Reference
+## Field Reference
 
-All fields defined in `src/types/index.ts`.
+Types in `src/types/index.ts`. Identity and placement are separate since the
+character registry (see CHARACTERS.md).
+
+### `CharacterDef` — `src/data/characters.json`, keyed by slug
 
 | Field | Required | Type | Purpose |
 |-------|----------|------|---------|
-| `id` | ✓ | string | Unique identifier; used in RoomStateManager sets |
 | `name` | ✓ | string | Display name in dialog |
-| `role` | ✓ | string | Role description shown at recovery |
-| `x` | ✓ | number | Spawn X in pixels |
-| `y` | ✓ | number | Spawn Y in pixels |
-| `behaviorLoop` | ✓ | `'wander'` \| `'sentinel'` \| `'drift'` | Movement mode |
-| `variant` | — | string | Sprite sheet: `walker`, `husk` |
-| `playerVariant` | — | string | Sprite key suffix for cured/recovered state: `ranger`, `rogue` |
+| `role` | — | string | Role description shown at recovery |
+| `sheet` | ✓ | string | Human spritesheet basename = texture key (`player-ranger`) |
+| `afflictedSheet` | — | string | Afflicted spritesheet basename; omit for never-afflicted (protagonist) |
+| `home` | — | `{room,x,y}` | Where they appear post-cure (see Spawn Rules). Omit → recover in place. |
+| `curedClue` | — | string | Dialog shown immediately after curing |
+| `backstory` | — | string[] | Multi-page dialog shown in home room leading to recovery |
+| `recoveredItems` | — | ItemDef[] | Items given to character inventory on recovery |
+| `traits` | — | string[] | Trait tags copied to CharacterState on recovery |
+| `conversationRequires` | — | string | Partner character slug for inter-character dialog |
+| `conversationDialog` | — | string[] | Dialog shown when partner is present |
+| `conversationProduces` | — | ProduceEffect[] | Effects applied on final conversation page |
+
+### `AfflictedPlacement` — `rooms.json` `afflicted` arrays
+
+| Field | Required | Type | Purpose |
+|-------|----------|------|---------|
+| `id` | ✓ | string | Unique per room; cast placements use the character slug |
+| `character` | — | string | Registry slug — present for cast members, absent for extras |
+| `name` | — | string | Extras only: display name (default `Unknown`) |
+| `afflictedSheet` | — | string | Extras only: spritesheet basename (default `afflicted-walker`) |
+| `x` / `y` | ✓ | number | Spawn position in pixels |
+| `behaviorLoop` | ✓ | `'wander'` \| `'sentinel'` \| `'drift'` \| `'pace'` \| `'circle'` | Movement mode |
 | `wanderRadius` | — | number | Wander radius (default 128px). Drift uses 3×. Circle uses as orbit radius. |
 | `speedMult` | — | number | Speed multiplier on all states (default 1.0) |
 | `soundRoom` | — | string | Room ID for proximity SF2 selection (default `'city-street'`) |
@@ -152,16 +171,7 @@ All fields defined in `src/types/index.ts`.
 | `paceLength` | — | number | `pace` only: distance from origin to far endpoint in pixels. Default 128. |
 | `circleSpeed` | — | number | `circle` only: orbital speed in degrees/second. Default 45. |
 | `circleStartAngle` | — | number | `circle` only: starting position on orbit in degrees. Default 0. |
-| `associatedRoom` | — | string | Room they move to post-cure (see Spawn Rules) |
-| `curedClue` | — | string | Dialog shown immediately after curing |
-| `backstory` | — | string[] | Multi-page dialog shown in associatedRoom leading to recovery |
-| `recoveredItems` | — | ItemDef[] | Items given to character inventory on recovery |
 | `holds` | — | ItemDef[] | Items dropped in world at afflicted's position when cured |
-| `cureCondition` | — | string | Reserved; not yet implemented |
-| `recoveryUnlock` | — | string | Reserved; not yet implemented |
-| `conversationRequires` | — | string | Partner resident ID for inter-character dialog |
-| `conversationDialog` | — | string[] | Dialog shown when `conversationRequires` partner is present |
-| `conversationProduces` | — | ProduceEffect[] | Effects applied on final conversation page |
 
 ---
 
@@ -174,8 +184,8 @@ Curing is **collision-only**. The player must physically walk into a wandering o
 3. Starts 500ms `cureCooldown` to prevent repeated triggers
 4. Removes cure item from inventory
 5. `rsm.cureResident(id)` — adds to `curedResidents` set
-6. `afflicted.setStatus('cured')` — green tint, stops movement, stops proximity sound, switches to `playerVariant` sprite
-7. `unlockDoorsToRoom(associatedRoom)` if set
+6. `afflicted.setStatus('cured')` — green tint, stops movement, stops proximity sound, switches cast members to their human `sheet`
+7. `unlockDoorsToRoom(home.room)` if the character has a home
 8. `dropHeldItems(afflicted)` — spawns `holds` items at afflicted's position
 9. Camera shake (200ms)
 10. Opens dialog with `curedClue` or generic message
@@ -191,15 +201,17 @@ If a cure item has `useTarget: "some-id"`, it only works on the afflicted with t
 
 Recovery turns a cured resident into a playable roster character.
 
-**Prerequisite:** Afflicted must be `'cured'` and the player must be in their `associatedRoom`.
+**Prerequisite:** Afflicted must be `'cured'`, must be a cast member (extras
+can never recover — E on a cured extra shows a calming-down line), and the
+player must be in their `home` room.
 
-If the player is in a different room from `associatedRoom`, pressing E on the cured afflicted shows: *"[name] stares past you. They seem distant. Maybe they need somewhere familiar."*
+If the player is in a different room from `home.room`, pressing E on the cured afflicted shows: *"[name] stares past you. They seem distant. Maybe they need somewhere familiar."*
 
 Once in the right room, E progresses through `backstory` pages one at a time. On the **final page** (or immediately if no backstory):
 
 1. `rsm.recoverResident(id)` — adds to `recoveredResidents` set
 2. `afflicted.setStatus('recovered')`
-3. `rsm.addToRoster(charState)` — character added with `textureKey: player-${playerVariant}`
+3. `rsm.addToRoster(charState)` — character added with `textureKey` = registry `sheet`
 4. `recoveredItems` copied into the character's inventory slots
 5. Afflicted NPC entity destroyed (`afflicted.destroy()`)
 6. `refreshParkedBodies()` — a standing sprite appears in their position
@@ -209,27 +221,33 @@ Once in the right room, E progresses through `backstory` pages one at a time. On
 
 ## Spawning Rules
 
-Called on every room transition in `spawnAfflicted()`. Four checks gate whether an afflicted NPC spawns:
+Called on every room transition in `spawnAfflicted()`. Two passes:
 
+**Pass 1 — placements in this room:**
 1. **Recovered → skip.** Recovered residents are parked bodies, never NPCs.
-2. **Cured + associatedRoom set → only spawn in that room.** The afflicted only appears in their home room post-cure.
-3. **Uncured + associatedRoom + currently in that room → skip.** The home room is reserved; the afflicted is only present in the city until cured.
-4. **Active character → skip.** If the afflicted is the currently-controlled character, don't also spawn them as an NPC.
+2. **Active character → skip.** If the placement is the currently-controlled character, don't also spawn them as an NPC.
+3. **Cured cast member with a `home` → skip.** They've gone home; their placement empties out.
+4. Otherwise spawn: `cured` if cured (extras / homeless cast), else `wandering`.
 
-The spawn uses `findFullAfflictedDef(id)` to always get the most complete definition (with backstory/recoveredItems), but uses the current room's x/y for positioning.
+**Pass 2 — home spawns:** every cast member whose `home.room` is the current
+room and who is cured-but-not-recovered spawns at `home` as a stationary
+(`sentinel`) cured NPC, waiting for the backstory conversation. Home rooms
+carry **no** afflicted placements in rooms.json — this pass generates the
+spawn entirely from the registry.
 
-**Spawn texture initialization:** When an afflicted spawns with `initialStatus = 'cured'` or `'recovered'`, the constructor applies the `player-${playerVariant}` texture immediately — it does not go through `setStatus()`, so this must be done explicitly in the constructor. Omitting this caused a one-frame flicker where the afflicted sprite appeared before the player sprite.
+**Spawn texture initialization:** When an afflicted spawns with `initialStatus = 'cured'` or `'recovered'`, the constructor applies the human `sheet` texture immediately — it does not go through `setStatus()`, so this must be done explicitly in the constructor. Omitting this caused a one-frame flicker where the afflicted sprite appeared before the player sprite.
 
 ---
 
-## Visual Variants
+## Visual Sheets
 
-| Key | Spritesheet | Notes |
-|-----|-------------|-------|
-| `walker` | `afflicted-walker.png` | Standard 4-direction walking sprite |
-| `husk` | `afflicted-husk.png` | Alternate appearance; currently same behavior as walker |
+| Sheet | Notes |
+|-------|-------|
+| `afflicted-walker` | Standard 4-direction walking sprite |
+| `afflicted-husk` | Alternate appearance; currently same behavior as walker |
 
-Cured/recovered afflicted switch to `player-${playerVariant}` sprites (e.g., `player-ranger`, `player-rogue`).
+Sheet fields hold the PNG basename, which is also the Phaser texture key.
+Cured/recovered cast members switch to their human `sheet` (e.g., `player-ranger`, `player-rogue`).
 
 ---
 
@@ -252,8 +270,12 @@ Stopped when:
 
 ## Design Notes
 
-### Dual-room pattern
-The same afflicted ID can appear in two rooms in `rooms.json` — once in the city, once in their `associatedRoom`. The engine automatically gates visibility: city entry (uncured), home room entry (cured). The `associatedRoom` entry only needs `id`, `name`, `role`, `x`, `y`, `behaviorLoop`, `variant`, `playerVariant`, and `associatedRoom` — the full backstory/items come from the city entry via `findFullAfflictedDef`.
+### Home pattern
+A cast member's post-cure location is the `home` field on their registry
+entry — the home room needs no afflicted placement at all. The engine gates
+visibility automatically: city placement while uncured, home spawn once
+cured, parked body once recovered. (This replaced the old duplicate-entry /
+`associatedRoom` mechanism.)
 
 ### `behaviorLoop` for puzzle design
 - Use `sentinel` for locked-room enforcers where the player needs to maneuver around a stationary threat.

@@ -129,7 +129,7 @@ thoughts selection pattern.
 
 ```json
 { "id": "kai/to-player-first",
-  "npc": "street-wanderer-1",
+  "npc": "kai",
   "requires": [{ "type": "character", "value": "player" }],
   "produces": [{ "type": "setFlag", "value": "kai/heard-your-voice" }],
   "priority": 10,

@@ -2,7 +2,7 @@
   "conversations": [
     {
       "id": "kai/to-player-first",
-      "npc": "street-wanderer-1",
+      "npc": "kai",
       "requires": [{ "type": "character", "value": "player" }],
       "produces": [{ "type": "setFlag", "value": "kai/heard-your-voice" }],
       "priority": 10,
@@ -11,7 +11,7 @@
     },
     {
       "id": "kai/to-player-again",
-      "npc": "street-wanderer-1",
+      "npc": "kai",
       "requires": [
         { "type": "character", "value": "player" },
         { "type": "flag", "value": "kai/heard-your-voice" }
@@ -22,22 +22,22 @@
     },
     {
       "id": "kai/to-maren",
-      "npc": "street-wanderer-1",
-      "requires": [{ "type": "character", "value": "street-wanderer-2" }],
+      "npc": "kai",
+      "requires": [{ "type": "character", "value": "maren" }],
       "priority": 10,
       "repeat": "never",
       "text": "words:dialog/kai/to-maren"
     },
     {
       "id": "kai/waiting",
-      "npc": "street-wanderer-1",
+      "npc": "kai",
       "priority": 0,
       "repeat": "silent",
       "text": "words:dialog/kai/waiting"
     },
     {
       "id": "maren/to-player-first",
-      "npc": "street-wanderer-2",
+      "npc": "maren",
       "requires": [{ "type": "character", "value": "player" }],
       "priority": 10,
       "repeat": "never",
@@ -45,7 +45,7 @@
     },
     {
       "id": "maren/waiting",
-      "npc": "street-wanderer-2",
+      "npc": "maren",
       "priority": 0,
       "repeat": "silent",
       "text": "words:dialog/maren/waiting"

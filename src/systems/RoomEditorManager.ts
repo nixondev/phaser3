@@ -765,11 +765,9 @@ export class RoomEditorManager {
     } else if (this.placementMode === 'afflicted') {
       snippet = {
         id: `aff-${rand}`,
-        name: 'TODO',
-        role: 'TODO',
         x, y,
         behaviorLoop: 'wander',
-        variant: this.afflictedVariants[this.afflictedVariantIndex]
+        afflictedSheet: `afflicted-${this.afflictedVariants[this.afflictedVariantIndex]}`
       };
       path = `rooms.${roomId}.afflicted`;
       label = 'Afflicted';

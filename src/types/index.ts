@@ -122,15 +122,61 @@ export type AfflictedStatus = 'wandering' | 'agitated' | 'frightened' | 'cured' 
  */
 export type BehaviorLoop = 'wander' | 'sentinel' | 'drift' | 'pace' | 'circle';
 
-export interface AfflictedDef {
-  id: string;
+/** Where a cast member appears after being cured. */
+export interface CharacterHome {
+  room: string;
+  x: number;
+  y: number;
+}
+
+/**
+ * One cast member — a named, curable/playable person. Lives in
+ * `src/data/characters.json`, keyed by slug (matches `words/dialog/<slug>/`).
+ * All identity lives here; rooms only hold placements (AfflictedPlacement).
+ */
+export interface CharacterDef {
   name: string;
-  role: string;
+  role?: string;
+  /** Human spritesheet — PNG basename = Phaser texture key (e.g. 'player-ranger'). */
+  sheet: string;
+  /** Afflicted spritesheet basename. Omit for never-afflicted characters (protagonist). */
+  afflictedSheet?: string;
+  /** Where they appear once cured. Omit → they recover in place. */
+  home?: CharacterHome;
+  curedClue?: string;
+  backstory?: string[];
+  recoveredItems?: ItemDef[];
+  /** Trait tags copied to CharacterState on recovery. Used for trait require conditions. */
+  traits?: string[];
+  /**
+   * If set, pressing E on this recovered resident while the named roster member
+   * is also in the current room triggers `conversationDialog` instead of the
+   * default solo response. The named value is the other resident's slug.
+   */
+  conversationRequires?: string;
+  /** Multi-page dialog shown when conversationRequires partner is present. */
+  conversationDialog?: string[];
+  /** Effects applied once when the conversation reaches its final page. */
+  conversationProduces?: ProduceEffect[];
+}
+
+/**
+ * One afflicted spawn in a room. Cast members set `character` and carry no
+ * identity here; anonymous extras (ambience/hazards) carry `name`/
+ * `afflictedSheet` inline and can never be recovered into the roster.
+ */
+export interface AfflictedPlacement {
+  /** Unique per room. For cast placements, equals the character slug by convention. */
+  id: string;
+  /** Registry slug in characters.json — present for cast members only. */
+  character?: string;
+  /** Extras only: display name. Default 'Unknown'. */
+  name?: string;
+  /** Extras only: afflicted spritesheet basename. Default 'afflicted-walker'. */
+  afflictedSheet?: string;
   x: number;
   y: number;
   behaviorLoop: BehaviorLoop;
-  variant?: string;
-  playerVariant?: string;
   /** Radius from origin used for wander target picking. Default 128px. Drift uses 3×. Circle uses as orbit radius. */
   wanderRadius?: number;
   /** Speed multiplier applied to all movement speeds. Default 1.0. */
@@ -145,26 +191,8 @@ export interface AfflictedDef {
   circleSpeed?: number;
   /** For 'circle': starting angle on the orbit in degrees (0=right). Default 0. */
   circleStartAngle?: number;
-  cureCondition?: string;
-  recoveryUnlock?: string;
-  associatedRoom?: string;
-  curedClue?: string;
-  backstory?: string[];
-  recoveredItems?: ItemDef[];
   /** Items dropped into the world at the afflicted's position when cured. */
   holds?: ItemDef[];
-  /**
-   * If set, pressing E on this recovered resident while the named roster member
-   * is also in the current room triggers `conversationDialog` instead of the
-   * default solo response. The named value is the other resident's `id`.
-   */
-  conversationRequires?: string;
-  /** Multi-page dialog shown when conversationRequires partner is present. */
-  conversationDialog?: string[];
-  /** Effects applied once when the conversation reaches its final page. */
-  conversationProduces?: ProduceEffect[];
-  /** Trait tags copied to CharacterState on recovery. Used for trait require conditions. */
-  traits?: string[];
 }
 
 /** One effect applied when a specific world flag is set, evaluated at room load. */
@@ -203,7 +231,7 @@ export interface RoomDefinition {
   playerSpawn?: Position;
   doors: DoorDefinition[];
   interactables?: InteractableDef[];
-  afflicted?: AfflictedDef[];
+  afflicted?: AfflictedPlacement[];
   music?: string;
   reverb?: string;
   reverbMix?: number;

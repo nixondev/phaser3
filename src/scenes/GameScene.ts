@@ -10,7 +10,7 @@ import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef, DialogMessage, DialogMessageType, ThoughtDef, ConversationDef } from '@/types';
+import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedPlacement, DialogMessage, DialogMessageType, ThoughtDef, ConversationDef } from '@/types';
 import { debug } from '@utils/Debug';
 import { WeatherManager } from '@systems/WeatherManager';
 // SaveManager is intentionally not called — every run starts fresh.
@@ -20,6 +20,7 @@ import { checkRequires, checkRequiresAny, consumeRequires, applyProduces, applyF
 import { selectThought, selectNotifiableThought } from '@systems/ThoughtManager';
 import { selectConversation, selectNotifiableConversation } from '@systems/ConversationManager';
 import { auditFlags } from '@systems/FlagAudit';
+import { getCharacter, allCharacters, auditCharacters } from '@systems/CharacterRegistry';
 import { resolveText } from '@systems/Words';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
@@ -157,9 +158,13 @@ export class GameScene extends Phaser.Scene {
     });
 
     const spawn = roomDef.playerSpawn || { x: GAME_CONFIG.WIDTH / 2, y: GAME_CONFIG.HEIGHT / 2 };
-    this.player = new Player(this, spawn.x, spawn.y);
+    const protagSheet = getCharacter('player')?.sheet ?? 'player-good';
+    this.rsm.initRoster({ id: 'player', textureKey: protagSheet, roomId: startRoom, x: spawn.x, y: spawn.y });
 
-    this.rsm.initRoster({ id: 'player', textureKey: 'player', roomId: startRoom, x: spawn.x, y: spawn.y });
+    // On a restart with surviving state, the active character may not be the
+    // protagonist — spawn the player sprite on whatever sheet that character wears.
+    const activeState = this.rsm.getCharacterState(this.rsm.getActiveCharacterId());
+    this.player = new Player(this, spawn.x, spawn.y, activeState?.textureKey ?? protagSheet);
 
     // Introspection: click the player (padded hit area on the 64×64 frame) or press T
     this.player.setInteractive(
@@ -194,7 +199,10 @@ export class GameScene extends Phaser.Scene {
     this.refreshParkedBodies();
 
     this.emitFullState(roomDef.name);
-    if (import.meta.env.DEV) auditFlags();
+    if (import.meta.env.DEV) {
+      auditFlags();
+      auditCharacters();
+    }
     debug('GameScene created, starting in room:', startRoom);
   }
 
@@ -455,22 +463,6 @@ export class GameScene extends Phaser.Scene {
 
   // ── Afflicted ───────────────────────────────────────────────────────────
 
-  // Returns the most complete def for an afflicted ID across all rooms —
-  // the one with backstory/recoveredItems wins over minimal stub entries.
-  private findFullAfflictedDef(id: string): AfflictedDef | null {
-    const allRooms = RoomManager.getRoomsData().rooms;
-    let best: AfflictedDef | null = null;
-    for (const room of Object.values(allRooms)) {
-      for (const d of room.afflicted || []) {
-        if (d.id !== id) continue;
-        if (!best || (d.backstory?.length ?? 0) > (best.backstory?.length ?? 0)) {
-          best = d;
-        }
-      }
-    }
-    return best;
-  }
-
   private spawnAfflicted(): void {
     // Clear existing and stop their proximity sounds
     this.afflictedGroup.getChildren().forEach((a) => {
@@ -482,37 +474,43 @@ export class GameScene extends Phaser.Scene {
 
     const roomDef = this.roomManager.getCurrentRoomDef();
     const currentRoomId = this.roomManager.getCurrentRoomId();
+    const activeId = this.rsm.getActiveCharacterId();
+
+    // 1) Placements in this room — where each afflicted spawns pre-cure.
     for (const def of roomDef.afflicted || []) {
-      let status: AfflictedStatus = 'wandering';
-      const isCured = this.rsm.isResidentCured(def.id);
-      const isRecovered = this.rsm.isResidentRecovered(def.id);
-      if (isRecovered) status = 'recovered';
-      else if (isCured) status = 'cured';
+      const character = def.character ? getCharacter(def.character) : null;
+      const stateId = def.character ?? def.id;
+      const isCured = this.rsm.isResidentCured(stateId);
 
       // Recovered residents are represented by parked body sprites — never spawn as NPC
-      if (isRecovered) continue;
-
-      // Cured residents with an associatedRoom only appear in that room
-      if (isCured && def.associatedRoom && def.associatedRoom !== currentRoomId) {
-        continue;
-      }
-
-      // Uncured residents never appear in their associatedRoom — that space is reserved for after the cure
-      if (!isCured && def.associatedRoom && def.associatedRoom === currentRoomId) {
-        continue;
-      }
+      if (this.rsm.isResidentRecovered(stateId)) continue;
 
       // The currently active character IS the player sprite — don't also spawn them as an NPC
-      if (def.id === this.rsm.getActiveCharacterId()) {
-        continue;
-      }
+      if (stateId === activeId) continue;
 
-      // Use the most complete def (the one with backstory/recoveredItems),
-      // but keep the current room's x/y for positioning.
-      const fullDef = this.findFullAfflictedDef(def.id);
-      const spawnDef: AfflictedDef = fullDef ? { ...fullDef, x: def.x, y: def.y } : def;
+      // Cured cast members with a home have gone home — their placement empties out
+      if (isCured && character?.home) continue;
 
-      const afflicted = new Afflicted(this, spawnDef, status);
+      const afflicted = new Afflicted(this, def, character, isCured ? 'cured' : 'wandering');
+      this.afflictedGroup.add(afflicted);
+    }
+
+    // 2) Home spawns — cured-but-not-recovered cast members appear at home,
+    //    waiting for the backstory conversation. Replaces the old duplicate-
+    //    entry mechanism: home rooms carry no afflicted placements at all.
+    for (const [charId, character] of Object.entries(allCharacters())) {
+      if (!character.home || character.home.room !== currentRoomId) continue;
+      if (!this.rsm.isResidentCured(charId) || this.rsm.isResidentRecovered(charId)) continue;
+      if (charId === activeId) continue;
+
+      const homePlacement: AfflictedPlacement = {
+        id: charId,
+        character: charId,
+        x: character.home.x,
+        y: character.home.y,
+        behaviorLoop: 'sentinel',
+      };
+      const afflicted = new Afflicted(this, homePlacement, character, 'cured');
       this.afflictedGroup.add(afflicted);
     }
 
@@ -546,8 +544,8 @@ export class GameScene extends Phaser.Scene {
       this.rsm.removeFromInventory(cureSlot);
       this.rsm.cureResident(afflicted.getId());
       afflicted.setStatus('cured');
-      const associatedRoom = afflicted.getAssociatedRoom();
-      if (associatedRoom) this.unlockDoorsToRoom(associatedRoom);
+      const homeRoom = afflicted.getHomeRoom();
+      if (homeRoom) this.unlockDoorsToRoom(homeRoom);
       this.cameras.main.shake(200, 0.006);
       this.emitInventoryChanged();
       this.dropHeldItems(afflicted);
@@ -966,13 +964,21 @@ export class GameScene extends Phaser.Scene {
     const id = afflicted.getId();
 
     if (status === 'cured') {
-      const associatedRoom = afflicted.getAssociatedRoom();
+      const homeRoom = afflicted.getHomeRoom();
       const currentRoom = this.roomManager.getCurrentRoomId();
 
       // If they have a home room and we're not in it yet, they're just dazed.
       // The clue was already shown at cure time. Walk through a door to find them there.
-      if (associatedRoom && associatedRoom !== currentRoom) {
+      if (homeRoom && homeRoom !== currentRoom) {
         this.openDialog(`${name} stares past you. They seem distant.\nMaybe they need somewhere familiar.`, 'narrative');
+        this.events.emit('hide-interact-prompt');
+        return;
+      }
+
+      // Anonymous extras are never recovered into the roster — the cure calms
+      // them and that's the whole arc.
+      if (!afflicted.isCast()) {
+        this.openDialog(`${name} seems to be calming down.\nThey need some time alone.`, 'narrative');
         this.events.emit('hide-interact-prompt');
         return;
       }
@@ -990,7 +996,7 @@ export class GameScene extends Phaser.Scene {
 
         const charState: CharacterState = {
           id,
-          textureKey: `player-${afflicted.getPlayerVariant() ?? 'warden'}`,
+          textureKey: afflicted.getHumanSheet() ?? getCharacter('player')?.sheet ?? 'player-good',
           roomId: currentRoom,
           x: afflicted.x,
           y: afflicted.y,
@@ -1083,7 +1089,7 @@ export class GameScene extends Phaser.Scene {
       });
       toRemove.forEach(a => { a.destroy(); this.afflictedGroup.remove(a); });
 
-      this.player.rebuildAnimations(target.textureKey);
+      this.player.setSheet(target.textureKey);
       this.player.setPosition(target.x, target.y);
 
       // Brief cooldown so the player can't be killed the instant they teleport in
@@ -1225,7 +1231,7 @@ export class GameScene extends Phaser.Scene {
   /** E on a parked roster body — talk (conversation layer). Click still switches. */
   private handleParkedBodyInteract(id: string): void {
     if (!this.playConversation(id)) {
-      const name = this.findFullAfflictedDef(id)?.name ?? id;
+      const name = getCharacter(id)?.name ?? id;
       this.openDialog(`${name}\n"I'm ready when you are."`, 'narrative');
     }
     this.events.emit('hide-interact-prompt');

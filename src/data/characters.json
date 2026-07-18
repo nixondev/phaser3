@@ -1,0 +1,61 @@
+{
+  "characters": {
+    "player": {
+      "name": "You",
+      "sheet": "player-good"
+    },
+    "kai": {
+      "name": "Kai",
+      "role": "Former Lab Technician",
+      "sheet": "player-ranger",
+      "afflictedSheet": "afflicted-walker",
+      "home": { "room": "house-b", "x": 576, "y": 320 },
+      "curedClue": "...they look up and mumble something about the north block... the smell of chemicals... a lab coat...",
+      "backstory": [
+        "words:dialog/kai/backstory-1",
+        "words:dialog/kai/backstory-2",
+        "words:dialog/kai/backstory-3"
+      ],
+      "recoveredItems": [
+        {
+          "name": "Lab Keycard",
+          "tileFrame": 8,
+          "category": "key",
+          "keyId": "lab-door"
+        },
+        {
+          "name": "Compound Sample",
+          "tileFrame": 9,
+          "category": "cure"
+        }
+      ]
+    },
+    "maren": {
+      "name": "Maren",
+      "role": "Local Shopkeeper",
+      "sheet": "player-rogue",
+      "afflictedSheet": "afflicted-walker",
+      "home": { "room": "house-c", "x": 640, "y": 640 },
+      "curedClue": "...they whisper about the community room... counting shelves... the logbook...",
+      "backstory": [
+        "words:dialog/maren/backstory-1",
+        "words:dialog/maren/backstory-2",
+        "words:dialog/maren/backstory-3"
+      ],
+      "recoveredItems": [
+        {
+          "name": "Store Key",
+          "tileFrame": 8,
+          "category": "key",
+          "keyId": "store-front"
+        },
+        {
+          "name": "Supply Manifest",
+          "tileFrame": 7,
+          "category": "document",
+          "content": "words:documents/supply-manifest"
+        }
+      ]
+    }
+  }
+}

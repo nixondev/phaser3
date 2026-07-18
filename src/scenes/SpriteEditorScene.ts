@@ -6,6 +6,7 @@ import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
 import { EditorButtons } from '@/editor/EditorButtons';
 import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle } from '@/editor/PixelCanvas';
+import { collectReferencedSheets, getCharacter } from '@systems/CharacterRegistry';
 
 const FRAME     = 64;    // frame size in px
 const SHEET_PX  = 256;   // sheet is 256×256
@@ -50,11 +51,9 @@ const STYLE_Y  = TOOLS_Y + 58;              // 830 — STYLE gets its own row
 const UTILS_Y  = STYLE_Y + 54;              // 884 — COPY/PASTE/FLIP/… row
 const STATUS_Y = UTILS_Y + 38;              // 922
 
-const FALLBACK_SHEETS = [
-  'player',
-  ...['warden', 'ranger', 'rogue', 'mystic', 'drifter', 'scavenger', 'ashwalker'].map(v => `player-${v}`),
-  ...['walker', 'bloater', 'crawler', 'husk', 'spitter', 'brute', 'ashrot', 'veinhost'].map(v => `afflicted-${v}`),
-];
+// Non-dev fallback (no list-sprites endpoint): whatever character sheets the
+// game itself loaded — the registry-referenced set.
+const FALLBACK_SHEETS = [...collectReferencedSheets()];
 
 interface ToolBtnEntry {
   gfx: Phaser.GameObjects.Graphics;
@@ -261,7 +260,8 @@ export class SpriteEditorScene extends Phaser.Scene {
 
     this.buildSheetDropdown(names);
 
-    const initial = names.includes('player') ? 'player' : names[0];
+    const protagSheet = getCharacter('player')?.sheet ?? 'player-good';
+    const initial = names.includes(protagSheet) ? protagSheet : names[0];
     if (initial) {
       await this.loadSheet(initial);
     } else {
