@@ -5,6 +5,7 @@ import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
+import { EditorButtons } from '@/editor/EditorButtons';
 import { PixelCanvas, PixelTool, PenStyle } from '@/editor/PixelCanvas';
 
 const TILE = 64;
@@ -81,6 +82,16 @@ export class TileEditorScene extends Phaser.Scene {
   private activeTileset = 'tileset';
   private tilesetNames: string[] = [];
 
+  private btn!: EditorButtons;
+  private dirty = false;
+  private dirtyMark!: Phaser.GameObjects.Text;
+  private saveBtnTint?: (col?: number) => void;
+  private pendingFrame: number | null = null;
+  private pendingFrameAt = 0;
+  private pendingTileset?: string;
+  private pendingTilesetAt = 0;
+  private pendingExitAt = 0;
+
   constructor() {
     super(SCENES.TILE_EDITOR);
   }
@@ -91,6 +102,7 @@ export class TileEditorScene extends Phaser.Scene {
     MusicManager.getInstance().stop();
 
     this.overlay = new HtmlOverlay(this);
+    this.btn = new EditorButtons(this);
 
     this.add.rectangle(0, 0, GAME_CONFIG.WIDTH, GAME_CONFIG.HEIGHT, 0x12121f).setOrigin(0, 0);
     this.add.text(GAME_CONFIG.WIDTH / 2, 16, 'TILE EDITOR', {
@@ -109,7 +121,10 @@ export class TileEditorScene extends Phaser.Scene {
       wrapBrush: true,
       getColor: () => this.panel.color,
       onEyedrop: (argb) => this.panel.setColor(argb, true),
-      onChange: () => this.redrawPreview(),
+      onChange: () => {
+        this.redrawPreview();
+        this.setDirty(true);
+      },
       onToolChange: () => this.refreshToolButtons(),
       onStatus: (msg) => this.statusText?.setText(msg),
     });
@@ -122,6 +137,9 @@ export class TileEditorScene extends Phaser.Scene {
     this.add.text(DRAW_X, DRAW_Y - 20, 'DRAW', {
       fontSize: '16px', color: '#667788', fontFamily: 'monospace',
     });
+    this.dirtyMark = this.add.text(DRAW_X + 56, DRAW_Y - 18, '● unsaved', {
+      fontSize: '14px', color: '#ffaa44', fontFamily: 'monospace',
+    }).setVisible(false);
 
     this.buildTilesetDropdown();
     this.buildPickerUI();
@@ -145,11 +163,31 @@ export class TileEditorScene extends Phaser.Scene {
     this.loadTileIntoPixels(0);
     this.redrawAll();
 
-    this.input.keyboard!.on('keydown-ESC', () => this.scene.start(SCENES.MENU));
+    this.input.keyboard!.on('keydown-ESC', () => {
+      const now = this.time.now;
+      if (this.dirty && !(this.pendingExitAt > 0 && now - this.pendingExitAt < 3000)) {
+        this.pendingExitAt = now;
+        this.statusText?.setText('unsaved changes — ESC again to discard');
+        return;
+      }
+      this.scene.start(SCENES.MENU);
+    });
+    this.input.keyboard!.on('keydown-S', (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      this.saveTile();
+    });
     this.input.keyboard!.on('keydown-Z', (e: KeyboardEvent) => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.shiftKey ? this.canvas.redo() : this.canvas.undo();
     });
+  }
+
+  private setDirty(v: boolean): void {
+    if (this.dirty === v) return;
+    this.dirty = v;
+    this.dirtyMark?.setVisible(v);
+    this.saveBtnTint?.(v ? 0x2f6e1c : 0x1c3c6e);
   }
 
   // ─── Redraw ────────────────────────────────────────────────────────────────
@@ -254,15 +292,28 @@ export class TileEditorScene extends Phaser.Scene {
     }
 
     el.addEventListener('change', () => {
-      this.activeTileset = el.value;
+      const name = el.value;
+      el.blur(); // hand the keyboard back to the editor
+      if (name === this.activeTileset) return;
+      const now = this.time.now;
+      if (this.dirty && !(this.pendingTileset === name && now - this.pendingTilesetAt < 3000)) {
+        this.pendingTileset = name;
+        this.pendingTilesetAt = now;
+        el.value = this.activeTileset;
+        this.statusText?.setText('unsaved tile — select again to discard');
+        return;
+      }
+      this.pendingTileset = undefined;
+      this.activeTileset = name;
       this.pickerScroll  = 0;
       this.selectedFrame = 0;
       this.canvas.clearHistory();
       this.loadTileIntoPixels(0);
+      this.setDirty(false);
       this.frameLabel?.setText('frame: 0');
       this.refreshPickerSprites();
       this.redrawAll();
-      this.statusText?.setText(`tileset: ${el.value}`);
+      this.statusText?.setText(`tileset: ${name}`);
     });
     el.addEventListener('keydown', (e) => e.stopPropagation());
 
@@ -290,8 +341,8 @@ export class TileEditorScene extends Phaser.Scene {
     });
 
     const arrowStyle = { fontSize: '20px', color: '#aaccff', fontFamily: 'monospace' };
-    const upArrow   = this.add.text(PICKER_X + PICKER_COLS * PICKER_CELL - 18, PICKER_Y - 20, '▲', arrowStyle).setInteractive();
-    const downArrow = this.add.text(PICKER_X + PICKER_COLS * PICKER_CELL - 18, PICKER_Y + PICKER_VIS * PICKER_CELL + 4, '▼', arrowStyle).setInteractive();
+    const upArrow   = this.add.text(PICKER_X + PICKER_COLS * PICKER_CELL - 18, PICKER_Y - 20, '▲', arrowStyle).setInteractive({ useHandCursor: true });
+    const downArrow = this.add.text(PICKER_X + PICKER_COLS * PICKER_CELL - 18, PICKER_Y + PICKER_VIS * PICKER_CELL + 4, '▼', arrowStyle).setInteractive({ useHandCursor: true });
 
     upArrow.on('pointerdown', () => {
       if (this.pickerScroll > 0) { this.pickerScroll--; this.refreshPickerSprites(); }
@@ -301,7 +352,8 @@ export class TileEditorScene extends Phaser.Scene {
       if (this.pickerScroll < maxScroll) { this.pickerScroll++; this.refreshPickerSprites(); }
     });
 
-    this.input.on('wheel', (_p: unknown, _go: unknown, _dx: number, dy: number) => {
+    this.input.on('wheel', (p: Phaser.Input.Pointer, _go: unknown, _dx: number, dy: number) => {
+      if (p.x >= DRAW_X) return; // picker column only — the draw canvas wheel-zooms
       if (dy > 0 && this.pickerScroll < Math.ceil(this.getTotalFrames() / PICKER_COLS) - PICKER_VIS) {
         this.pickerScroll++;
         this.refreshPickerSprites();
@@ -333,6 +385,7 @@ export class TileEditorScene extends Phaser.Scene {
         .setOrigin(0, 0)
         .setScale(SCALE);
       sprite.setInteractive(new Phaser.Geom.Rectangle(0, 0, TILE, TILE), Phaser.Geom.Rectangle.Contains);
+      sprite.input!.cursor = 'pointer';
       sprite.on('pointerdown', () => this.selectFrame(frame));
       this.pickerSprites.push(sprite);
     }
@@ -341,9 +394,19 @@ export class TileEditorScene extends Phaser.Scene {
   }
 
   private selectFrame(frame: number): void {
+    // switching tiles discards the edit buffer — confirm when there are unsaved changes
+    const now = this.time.now;
+    if (this.dirty && !(this.pendingFrame === frame && now - this.pendingFrameAt < 3000)) {
+      this.pendingFrame = frame;
+      this.pendingFrameAt = now;
+      this.statusText?.setText('unsaved tile — click again to discard');
+      return;
+    }
+    this.pendingFrame = null;
     this.selectedFrame = frame;
     this.loadTileIntoPixels(frame);
     this.canvas.clearHistory();
+    this.setDirty(false);
     this.frameLabel?.setText(`frame: ${frame}`);
     this.statusText?.setText(`loaded tile #${frame}`);
     this.redrawAll();
@@ -380,19 +443,20 @@ export class TileEditorScene extends Phaser.Scene {
     const BW = Math.floor((PREV_SIZE - GAP * (BTN_COUNT - 1)) / BTN_COUNT);
     const actionsStartX = PREV_X + Math.floor((PREV_SIZE - (BTN_COUNT * BW + (BTN_COUNT - 1) * GAP)) / 2);
     const bx = (i: number): number => actionsStartX + i * (BW + GAP);
-    this.makeBtn('UNDO', bx(0), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => this.canvas.undo());
-    this.makeBtn('REDO', bx(1), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => this.canvas.redo());
-    this.makeBtn('MIRROR', bx(2), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => {
+    this.btn.make('UNDO', bx(0), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => this.canvas.undo());
+    this.btn.make('REDO', bx(1), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => this.canvas.redo());
+    this.btn.make('MIRROR', bx(2), ACTIONS_R_Y, BW, BH, 0x2f4f5f, () => {
       this.canvas.mirrorX = !this.canvas.mirrorX;
       this.statusText.setText(`mirror ${this.canvas.mirrorX ? 'on' : 'off'}`);
     });
-    this.makeBtn('CLEAR', bx(3), ACTIONS_R_Y, BW, BH, 0x6e1c1c, () => {
+    this.btn.make('CLEAR', bx(3), ACTIONS_R_Y, BW, BH, 0x6e1c1c, () => {
       this.canvas.pushHistory();
       this.canvas.pixels.fill(0);
+      this.setDirty(true);
       this.redrawAll();
       this.statusText.setText('canvas cleared');
     });
-    this.makeBtn('SAVE', bx(4), ACTIONS_R_Y, BW, BH, 0x1c3c6e, () => this.saveTile());
+    this.saveBtnTint = this.btn.make('SAVE', bx(4), ACTIONS_R_Y, BW, BH, 0x1c3c6e, () => this.saveTile());
 
     const NBW = 34, NBG = 6;
     const nudgeY = DRAW_Y + DRAW_SIZE + 4;
@@ -400,10 +464,10 @@ export class TileEditorScene extends Phaser.Scene {
     this.add.text(nudgeStartX, nudgeY - 18, 'NUDGE', {
       fontSize: '15px', color: '#667788', fontFamily: 'monospace',
     });
-    this.makeBtn('←', nudgeStartX + (NBW + NBG) * 0, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(-1, 0));
-    this.makeBtn('↑', nudgeStartX + (NBW + NBG) * 1, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(0, -1));
-    this.makeBtn('↓', nudgeStartX + (NBW + NBG) * 2, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(0, 1));
-    this.makeBtn('→', nudgeStartX + (NBW + NBG) * 3, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(1, 0));
+    this.btn.make('←', nudgeStartX + (NBW + NBG) * 0, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(-1, 0));
+    this.btn.make('↑', nudgeStartX + (NBW + NBG) * 1, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(0, -1));
+    this.btn.make('↓', nudgeStartX + (NBW + NBG) * 2, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(0, 1));
+    this.btn.make('→', nudgeStartX + (NBW + NBG) * 3, nudgeY, NBW, BH, 0x2f4f5f, () => this.nudgeTile(1, 0));
   }
 
   private nudgeTile(dx: number, dy: number): void {
@@ -417,6 +481,7 @@ export class TileEditorScene extends Phaser.Scene {
       }
     }
     this.canvas.pixels.set(next);
+    this.setDirty(true);
     this.redrawAll();
     this.statusText.setText(`nudged ${dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down'}`);
   }
@@ -440,12 +505,11 @@ export class TileEditorScene extends Phaser.Scene {
     tools.forEach(({ tool, label }, i) => {
       const bx = DRAW_X + i * (BW + 8);
       const g = this.add.graphics();
-      this.drawBtn(g, bx, TOOLS_Y, BW, BH, tool === this.canvas.tool);
+      this.btn.draw(g, bx, TOOLS_Y, BW, BH, tool === this.canvas.tool);
       this.add.text(bx + BW / 2, TOOLS_Y + BH / 2, label, {
         fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
-      g.setInteractive(new Phaser.Geom.Rectangle(bx, TOOLS_Y, BW, BH), Phaser.Geom.Rectangle.Contains);
-      g.on('pointerdown', () => {
+      this.btn.bind(g, bx, TOOLS_Y, BW, BH, () => {
         this.canvas.tool = tool;
         this.refreshToolButtons();
       });
@@ -455,14 +519,13 @@ export class TileEditorScene extends Phaser.Scene {
     // Wrap toggle
     const wx = DRAW_X + tools.length * (BW + 8) + 16;
     const wg = this.add.graphics();
-    this.drawBtn(wg, wx, TOOLS_Y, BW, BH, this.canvas.wrapSample);
+    this.btn.draw(wg, wx, TOOLS_Y, BW, BH, this.canvas.wrapSample);
     this.add.text(wx + BW / 2, TOOLS_Y + BH / 2, 'WRAP', {
       fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
     }).setOrigin(0.5).setDepth(2);
-    wg.setInteractive(new Phaser.Geom.Rectangle(wx, TOOLS_Y, BW, BH), Phaser.Geom.Rectangle.Contains);
-    wg.on('pointerdown', () => {
+    this.btn.bind(wg, wx, TOOLS_Y, BW, BH, () => {
       this.canvas.wrapSample = !this.canvas.wrapSample;
-      this.drawBtn(wg, wx, TOOLS_Y, BW, BH, this.canvas.wrapSample);
+      this.btn.draw(wg, wx, TOOLS_Y, BW, BH, this.canvas.wrapSample);
     });
     this.wrapBtn = { gfx: wg, x: wx, y: TOOLS_Y, w: BW, h: BH };
 
@@ -475,14 +538,13 @@ export class TileEditorScene extends Phaser.Scene {
     [1, 2, 3, 4].forEach((size, i) => {
       const bx = sizeStartX + i * (SBW + SGAP);
       const g = this.add.graphics();
-      this.drawBtn(g, bx, TOOLS_Y, SBW, SBH, size === this.canvas.penSize);
+      this.btn.draw(g, bx, TOOLS_Y, SBW, SBH, size === this.canvas.penSize);
       this.add.text(bx + SBW / 2, TOOLS_Y + SBH / 2, String(size), {
         fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
-      g.setInteractive(new Phaser.Geom.Rectangle(bx, TOOLS_Y, SBW, SBH), Phaser.Geom.Rectangle.Contains);
-      g.on('pointerdown', () => {
+      this.btn.bind(g, bx, TOOLS_Y, SBW, SBH, () => {
         this.canvas.penSize = size;
-        this.sizeBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.size === this.canvas.penSize));
+        this.sizeBtns.forEach(b => this.btn.draw(b.gfx, b.x, b.y, b.w, b.h, b.size === this.canvas.penSize));
       });
       this.sizeBtns.push({ gfx: g, x: bx, y: TOOLS_Y, w: SBW, h: SBH, size });
     });
@@ -503,12 +565,11 @@ export class TileEditorScene extends Phaser.Scene {
     styles.forEach(({ style, label }, i) => {
       const bx = styleStartX + i * (STW + STG);
       const g = this.add.graphics();
-      this.drawBtn(g, bx, styleY, STW, BH, style === this.canvas.penStyle);
+      this.btn.draw(g, bx, styleY, STW, BH, style === this.canvas.penStyle);
       this.add.text(bx + STW / 2, styleY + BH / 2, label, {
         fontSize: '15px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
-      g.setInteractive(new Phaser.Geom.Rectangle(bx, styleY, STW, BH), Phaser.Geom.Rectangle.Contains);
-      g.on('pointerdown', () => {
+      this.btn.bind(g, bx, styleY, STW, BH, () => {
         this.canvas.penStyle = style;
         this.refreshStyleButtons();
         this.statusText.setText(`style: ${label.toLowerCase()}`);
@@ -523,12 +584,12 @@ export class TileEditorScene extends Phaser.Scene {
     this.add.text(DRAW_X, editY - 20, 'EDIT', {
       fontSize: '16px', color: '#667788', fontFamily: 'monospace',
     });
-    this.makeBtn('COPY',   ex(0), editY, EBW, EBH, 0x1c3c6e, () => this.copyTile());
-    this.makeBtn('PASTE',  ex(1), editY, EBW, EBH, 0x1c3c6e, () => this.pasteTile(false));
-    this.makeBtn('MERGE',  ex(2), editY, EBW, EBH, 0x1c3c6e, () => this.pasteTile(true));
-    this.makeBtn('FLIP ↔', ex(3), editY, EBW, EBH, 0x2f4f5f, () => this.flipTile('h'));
-    this.makeBtn('FLIP ↕', ex(4), editY, EBW, EBH, 0x2f4f5f, () => this.flipTile('v'));
-    this.makeBtn('ROT ↻',  ex(5), editY, EBW, EBH, 0x2f4f5f, () => this.rotateTileCW());
+    this.btn.make('COPY',   ex(0), editY, EBW, EBH, 0x1c3c6e, () => this.copyTile());
+    this.btn.make('PASTE',  ex(1), editY, EBW, EBH, 0x1c3c6e, () => this.pasteTile(false));
+    this.btn.make('MERGE',  ex(2), editY, EBW, EBH, 0x1c3c6e, () => this.pasteTile(true));
+    this.btn.make('FLIP ↔', ex(3), editY, EBW, EBH, 0x2f4f5f, () => this.flipTile('h'));
+    this.btn.make('FLIP ↕', ex(4), editY, EBW, EBH, 0x2f4f5f, () => this.flipTile('v'));
+    this.btn.make('ROT ↻',  ex(5), editY, EBW, EBH, 0x2f4f5f, () => this.rotateTileCW());
   }
 
   private copyTile(): void {
@@ -546,6 +607,7 @@ export class TileEditorScene extends Phaser.Scene {
     } else {
       this.canvas.pixels.set(this.clipboard);
     }
+    this.setDirty(true);
     this.redrawAll();
     this.statusText.setText(`${merge ? 'merged' : 'pasted'} onto tile ${this.selectedFrame}`);
   }
@@ -577,6 +639,7 @@ export class TileEditorScene extends Phaser.Scene {
         this.canvas.pixels[y * TILE + x] = src[sy * TILE + sx];
       }
     }
+    this.setDirty(true);
     this.redrawAll();
     this.statusText.setText(axis === 'h' ? 'flipped left/right' : 'flipped up/down');
   }
@@ -591,37 +654,17 @@ export class TileEditorScene extends Phaser.Scene {
         this.canvas.pixels[y * TILE + x] = src[(TILE - 1 - x) * TILE + y];
       }
     }
+    this.setDirty(true);
     this.redrawAll();
     this.statusText.setText('rotated 90° cw');
   }
 
   private refreshToolButtons(): void {
-    this.toolBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.tool === this.canvas.tool));
+    this.toolBtns.forEach(b => this.btn.draw(b.gfx, b.x, b.y, b.w, b.h, b.tool === this.canvas.tool));
   }
 
   private refreshStyleButtons(): void {
-    this.styleBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.style === this.canvas.penStyle));
-  }
-
-  private drawBtn(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, active: boolean): void {
-    g.clear();
-    g.fillStyle(active ? 0x1e3a5e : 0x181828, 1);
-    g.fillRect(x, y, w, h);
-    g.lineStyle(1, active ? 0x4499ff : 0x334455, 1);
-    g.strokeRect(x, y, w, h);
-  }
-
-  private makeBtn(label: string, x: number, y: number, w: number, h: number, col: number, cb: () => void): void {
-    const g = this.add.graphics();
-    g.fillStyle(col, 0.85);
-    g.fillRect(x, y, w, h);
-    g.lineStyle(1, col, 1);
-    g.strokeRect(x, y, w, h);
-    this.add.text(x + w / 2, y + h / 2, label, {
-      fontSize: '18px', color: '#ffffff', fontFamily: 'monospace',
-    }).setOrigin(0.5).setDepth(2);
-    g.setInteractive(new Phaser.Geom.Rectangle(x, y, w, h), Phaser.Geom.Rectangle.Contains);
-    g.on('pointerdown', cb);
+    this.styleBtns.forEach(b => this.btn.draw(b.gfx, b.x, b.y, b.w, b.h, b.style === this.canvas.penStyle));
   }
 
   // ─── Save ──────────────────────────────────────────────────────────────────
@@ -683,6 +726,7 @@ export class TileEditorScene extends Phaser.Scene {
           body: buf,
         });
         if (resp.ok) {
+          this.setDirty(false);
           this.statusText.setText(`saved tile #${this.selectedFrame} ✓  (reload page to see in-game)`);
         } else {
           this.statusText.setText(`save failed: ${resp.status}`);

@@ -275,6 +275,7 @@ export class DebugManager {
       });
     }
 
+    const flags = [...this.stateManager.getFlags()];
     this.infoText.setText([
       `FPS: ${fps}`,
       `Room: ${roomId}`,
@@ -282,6 +283,7 @@ export class DebugManager {
       `Music: ${room.music || 'none'}`,
       `Reverb: ${MusicManager.getInstance().getCurrentReverbType() ?? 'off'} (${Math.round(this.reverbMix * 100)}%)`,
       `Volume: ${Math.round(AudioManager.getInstance().getVolume() * 100)}%`,
+      `Flags: ${flags.length ? flags.join(', ') : 'none'}`,
       'Player:',
       `  World: ${Math.round(player?.x)}, ${Math.round(player?.y)}`,
       `  Facing: ${player?.getFacingAngle()}`,

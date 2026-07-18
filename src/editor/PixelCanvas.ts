@@ -71,8 +71,8 @@ export class PixelCanvas {
   private static readonly MIN_SCALE = 6;
   private static readonly MAX_SCALE = 18;
 
-  private history: Uint32Array[] = [];
-  private historyIndex = -1;
+  private undoStack: Uint32Array[] = [];
+  private redoStack: Uint32Array[] = [];
   private static readonly MAX_HISTORY = 50;
 
   constructor(cfg: PixelCanvasConfig) {
@@ -244,6 +244,34 @@ export class PixelCanvas {
         this.pinchStartScale = 0;
       }
     });
+    input.on('wheel', (p: Phaser.Input.Pointer, _over: unknown, _dx: number, dy: number) => {
+      if (!this.inContainer(p.x, p.y)) return;
+      this.zoomAt(p.x, p.y, dy < 0 ? 1 : -1);
+    });
+  }
+
+  private inContainer(sx: number, sy: number): boolean {
+    return sx >= this.containerX && sx < this.containerX + this.containerSize &&
+           sy >= this.containerY && sy < this.containerY + this.containerSize;
+  }
+
+  /** Steps the zoom toward the cursor (mouse-wheel counterpart of pinch). */
+  private zoomAt(sx: number, sy: number, step: number): void {
+    const nextScale = Phaser.Math.Clamp(
+      this.cfg.scale + step,
+      PixelCanvas.MIN_SCALE,
+      PixelCanvas.MAX_SCALE,
+    );
+    if (nextScale === this.cfg.scale) return;
+    const anchorU = (sx - this.cfg.x) / this.cfg.scale;
+    const anchorV = (sy - this.cfg.y) / this.cfg.scale;
+    this.cfg.scale = nextScale;
+    this.drawSize = this.size * nextScale;
+    this.cfg.x = sx - anchorU * nextScale;
+    this.cfg.y = sy - anchorV * nextScale;
+    this.clampCanvasToContainer();
+    this.redraw();
+    this.cfg.onStatus?.(`zoom ${nextScale}x`);
   }
 
   private isTouchPointer(p: Phaser.Input.Pointer): boolean {
@@ -544,45 +572,41 @@ export class PixelCanvas {
 
   // ─── History ──────────────────────────────────────────────────────────────
 
+  /** Snapshot the current pixels before a mutation (stroke start, fill, paste…). */
   pushHistory(): void {
-    // discard any future states if we branched
-    if (this.historyIndex < this.history.length - 1) {
-      this.history = this.history.slice(0, this.historyIndex + 1);
-    }
-    this.history.push(this.pixels.slice());
-    if (this.history.length > PixelCanvas.MAX_HISTORY) {
-      this.history.shift();
-    } else {
-      this.historyIndex++;
-    }
+    this.undoStack.push(this.pixels.slice());
+    if (this.undoStack.length > PixelCanvas.MAX_HISTORY) this.undoStack.shift();
+    this.redoStack = [];
   }
 
   clearHistory(): void {
-    this.history = [];
-    this.historyIndex = -1;
+    this.undoStack = [];
+    this.redoStack = [];
   }
 
   undo(): void {
-    if (this.historyIndex < 0) {
+    const prev = this.undoStack.pop();
+    if (!prev) {
       this.cfg.onStatus?.('nothing to undo');
       return;
     }
-    this.pixels.set(this.history[this.historyIndex]);
-    this.historyIndex--;
+    this.redoStack.push(this.pixels.slice());
+    this.pixels.set(prev);
     this.redraw();
     this.cfg.onChange?.();
-    this.cfg.onStatus?.(`undo  (${this.historyIndex + 1}/${this.history.length})`);
+    this.cfg.onStatus?.(`undo  (${this.undoStack.length} left)`);
   }
 
   redo(): void {
-    if (this.historyIndex >= this.history.length - 1) {
+    const next = this.redoStack.pop();
+    if (!next) {
       this.cfg.onStatus?.('nothing to redo');
       return;
     }
-    this.historyIndex++;
-    this.pixels.set(this.history[this.historyIndex]);
+    this.undoStack.push(this.pixels.slice());
+    this.pixels.set(next);
     this.redraw();
     this.cfg.onChange?.();
-    this.cfg.onStatus?.(`redo  (${this.historyIndex + 1}/${this.history.length})`);
+    this.cfg.onStatus?.(`redo  (${this.redoStack.length} left)`);
   }
 }

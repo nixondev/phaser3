@@ -56,6 +56,24 @@ export const AUDIO_CONFIG = {
   DEFAULT_REVERB_MIX: 0.3,
 } as const;
 
+export const FONTS = {
+  SPEECH: '"Bitcount Ink", monospace', // people talking + inner voice
+  TYPE: '"Workbench", monospace',              // typed/printed matter (lore, documents)
+  UI: 'Silkscreen, monospace',                 // system/meta messages
+} as const;
+
+/**
+ * Per-channel look for player-facing text. Keys = DialogMessageType plus
+ * 'document' (the reader scene). Tune everything here — no scene edits.
+ */
+export const TEXT_STYLES = {
+  narrative: { fontFamily: FONTS.SPEECH, fontSize: '35px', color: '#ffffff', fontStyle: 'normal', boxColor: 0x000000, boxAlpha: 0.75 },
+  thought:   { fontFamily: FONTS.SPEECH,   fontSize: '35px', color: '#b8c4e8', fontStyle: 'italic', boxColor: 0x0c1424, boxAlpha: 0.78 },
+  lore:      { fontFamily: FONTS.TYPE,   fontSize: '40px', color: '#d8d4c0', fontStyle: 'normal', boxColor: 0x0a0a06, boxAlpha: 0.80 },
+  system:    { fontFamily: FONTS.UI,     fontSize: '28px', color: '#c9c9c9', fontStyle: 'normal', boxColor: 0x141414, boxAlpha: 0.85 },
+  document:  { fontFamily: FONTS.TYPE,   fontSize: '34px', color: '#ccccbb', fontStyle: 'normal', boxColor: 0x0a0a0a, boxAlpha: 0.95 },
+} as const;
+
 export const SCENES = {
   BOOT: 'Boot',
   PRELOAD: 'Preload',

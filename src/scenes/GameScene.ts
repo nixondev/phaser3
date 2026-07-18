@@ -10,7 +10,7 @@ import { TransitionManager } from '@systems/TransitionManager';
 import { RoomStateManager } from '@systems/RoomStateManager';
 import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
-import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef, DialogMessage, DialogMessageType, ThoughtDef } from '@/types';
+import { DoorDefinition, InteractableDef, DroppedItemState, InputState, ItemDef, AfflictedStatus, CharacterState, AfflictedDef, DialogMessage, DialogMessageType, ThoughtDef, ConversationDef } from '@/types';
 import { debug } from '@utils/Debug';
 import { WeatherManager } from '@systems/WeatherManager';
 // SaveManager is intentionally not called — every run starts fresh.
@@ -18,6 +18,9 @@ import { WeatherManager } from '@systems/WeatherManager';
 // import { SaveManager } from '@utils/SaveManager';
 import { checkRequires, checkRequiresAny, consumeRequires, applyProduces, applyFlagConditions } from '@systems/InteractionResolver';
 import { selectThought, selectNotifiableThought } from '@systems/ThoughtManager';
+import { selectConversation, selectNotifiableConversation } from '@systems/ConversationManager';
+import { auditFlags } from '@systems/FlagAudit';
+import { resolveText } from '@systems/Words';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
 const CLINIC_DOOR_X     = 672;
@@ -72,6 +75,11 @@ export class GameScene extends Phaser.Scene {
   private thoughtGlyph!: Phaser.GameObjects.Text;
   private thoughtEvalTimer = 0;
   private pendingThought: ThoughtDef | null = null;
+  /** ? glyphs over recovered residents with unheard words (conversation layer). */
+  private convGlyphs: Map<string, Phaser.GameObjects.Text> = new Map();
+  private pendingConvs: Map<string, ConversationDef> = new Map();
+  private convEvalTimer = 0;
+  private convVisitNotified: Set<string> = new Set();
   // Click requests are deferred to the end of update() so any world/room
   // dialog triggered the same frame opens first; the thought then yields.
   private introspectRequested = false;
@@ -169,9 +177,12 @@ export class GameScene extends Phaser.Scene {
     this.events.on('room-changed', () => {
       this.visitNotified.clear();
       this.thoughtEvalTimer = 9999;
+      this.convVisitNotified.clear();
+      this.convEvalTimer = 9999;
     });
     this.events.on('character-switched', () => {
       this.thoughtEvalTimer = 9999;
+      this.convEvalTimer = 9999;
     });
 
     this.setupCollisions();
@@ -183,21 +194,25 @@ export class GameScene extends Phaser.Scene {
     this.refreshParkedBodies();
 
     this.emitFullState(roomDef.name);
+    if (import.meta.env.DEV) auditFlags();
     debug('GameScene created, starting in room:', startRoom);
   }
 
-  private paginateText(text: string, maxLines = 6): string[] {
-    const lines = text.split('\n');
-    if (lines.length <= maxLines) return [text];
+  /** `---` alone on a line = explicit page break; maxLines is the safety net. */
+  private paginateText(text: string, maxLines = 10): string[] {
+    const sections = text.split('\n---\n').map(s => s.trim()).filter(Boolean);
     const pages: string[] = [];
-    for (let i = 0; i < lines.length; i += maxLines) {
-      pages.push(lines.slice(i, i + maxLines).join('\n'));
+    for (const section of sections) {
+      const lines = section.split('\n');
+      for (let i = 0; i < lines.length; i += maxLines) {
+        pages.push(lines.slice(i, i + maxLines).join('\n'));
+      }
     }
-    return pages;
+    return pages.length ? pages : [text];
   }
 
   private openDialog(text: string, type?: DialogMessageType): void {
-    const pages = this.paginateText(text);
+    const pages = this.paginateText(resolveText(text));
     if (this.dialogOpen) {
       for (const page of pages) this.messageQueue.push({ text: page, type });
       return;
@@ -254,6 +269,66 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * `?` glyph over each recovered resident with unheard words for the active
+   * character (conversation layer). Same rhythm as the thought glyph:
+   * re-selects on a 250ms throttle (or an event-driven timer bump), syncs
+   * glyph objects to the result every frame. Glyphs for NPCs that left the
+   * group (room change, recovery into a parked body) self-prune.
+   */
+  private updateConversationIndicators(delta: number): void {
+    this.convEvalTimer += delta;
+    if (this.convEvalTimer >= 250) {
+      this.convEvalTimer = 0;
+      this.pendingConvs.clear();
+      const roomId = this.roomManager.getCurrentRoomId();
+      for (const parkedId of this.parkedBodies.keys()) {
+        const conv = selectNotifiableConversation(this.rsm, roomId, parkedId, this.convVisitNotified);
+        if (conv) this.pendingConvs.set(parkedId, conv);
+      }
+      for (const child of this.afflictedGroup.getChildren()) {
+        const npc = child as Afflicted;
+        if (npc.getStatus() !== 'recovered') continue;
+        const conv = selectNotifiableConversation(this.rsm, roomId, npc.getId(), this.convVisitNotified);
+        if (conv) this.pendingConvs.set(npc.getId(), conv);
+      }
+    }
+
+    for (const [id, glyph] of this.convGlyphs) {
+      if (!this.pendingConvs.has(id)) {
+        glyph.destroy();
+        this.convGlyphs.delete(id);
+      }
+    }
+    const hidden = this.dialogOpen || this.inventoryMode || this.isTransitioning;
+    for (const [id, conv] of this.pendingConvs) {
+      const npc: { x: number; y: number; active: boolean } | undefined =
+        this.parkedBodies.get(id) ??
+        (this.afflictedGroup.getChildren().find(
+          c => (c as Afflicted).getId() === id,
+        ) as Afflicted | undefined);
+      if (!npc || !npc.active) {
+        this.convGlyphs.get(id)?.destroy();
+        this.convGlyphs.delete(id);
+        continue;
+      }
+      let glyph = this.convGlyphs.get(id);
+      if (!glyph) {
+        glyph = this.add.text(0, 0, '?', {
+          fontSize: '40px',
+          color: '#ffffff',
+          fontFamily: 'monospace',
+          stroke: '#000000',
+          strokeThickness: 6,
+        }).setOrigin(0.5).setDepth(DEPTH.LIGHTING + 1);
+        this.convGlyphs.set(id, glyph);
+      }
+      glyph.setVisible(!hidden);
+      glyph.setText(conv.glyph ?? '?');
+      glyph.setPosition(npc.x, npc.y - 52 + Math.sin(this.time.now / 300) * 3);
+    }
+  }
+
   update(_time: number, delta: number): void {
     // Consume the click request every frame — if any early return below fires
     // (transition, inventory, an open dialog), the request is simply dropped:
@@ -277,6 +352,7 @@ export class GameScene extends Phaser.Scene {
       this.flashlight,
     );
     this.updateThoughtIndicator(delta);
+    this.updateConversationIndicators(delta);
     if (this.isTransitioning) return;
     if (this.lockedDoorCooldown > 0) this.lockedDoorCooldown--;
 
@@ -318,7 +394,8 @@ export class GameScene extends Phaser.Scene {
         } else {
           this.dialogOpen = false;
           this.events.emit('dialog-close');
-          this.thoughtEvalTimer = 9999; // refresh indicator the instant the box closes
+          this.thoughtEvalTimer = 9999; // refresh indicators the instant the box closes
+          this.convEvalTimer = 9999;
         }
       }
       return;
@@ -483,18 +560,45 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    this.isTransitioning = true;
-    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
+    // Death. If another playable body exists, the run continues as them
+    // (succession); the classic full reset only fires for the last one.
+    const deadId = this.rsm.getActiveCharacterId();
+    const roster = this.rsm.getRoster();
+    const deadIndex = roster.findIndex(c => c.id === deadId);
+    const successor = roster.length > 1 && deadIndex !== -1
+      ? roster[(deadIndex + 1) % roster.length]
+      : null;
 
+    (this.player.body as Phaser.Physics.Arcade.Body).setVelocity(0, 0);
     this.cameras.main.shake(400, 0.01);
 
-    this.time.delayedCall(400, () => {
-      this.transitionManager.transition(() => {
-        if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
-        this.rsm.reset();
-        this.scene.restart();
+    if (!successor) {
+      this.isTransitioning = true;
+      this.time.delayedCall(400, () => {
+        this.transitionManager.transition(() => {
+          if (USE_MIDI_MUSIC) MusicManager.getInstance().stop();
+          this.rsm.reset();
+          this.scene.restart();
+        });
       });
-    });
+      return;
+    }
+
+    // Succession — the dead drop everything where they fell.
+    // cureCooldown blocks overlap re-fire until the switch's own cooldown takes over.
+    this.cureCooldown = true;
+    if (this.dialogOpen) {
+      // Physics overlaps fire even while a dialog is open, and
+      // switchToCharacter refuses under dialogOpen — close the box first.
+      this.dialogOpen = false;
+      this.messageQueue.length = 0;
+      this.events.emit('dialog-close');
+    }
+    this.dropAllInventoryAt(this.player.x, this.player.y);
+    this.rsm.setFlag(`died/${deadId}`);
+    this.rsm.removeFromRoster(deadId);
+    this.events.emit('roster-changed', this.rsm.getRoster());
+    this.time.delayedCall(400, () => this.switchToCharacter(successor.id));
   }
 
   private getNearestAfflicted(): Afflicted | null {
@@ -637,11 +741,12 @@ export class GameScene extends Phaser.Scene {
     const roomId = this.rsm.getCurrentRoom();
     const droppedItems = this.rsm.getDroppedItems(roomId);
 
-    let nearestType: 'door' | 'interactable' | 'dropped' | 'afflicted' | null = null;
+    let nearestType: 'door' | 'interactable' | 'dropped' | 'afflicted' | 'parked' | null = null;
     let nearestDoor: DoorDefinition | null = null;
     let nearestInteractable: InteractableDef | null = null;
     let nearestDropped: DroppedItemState | null = null;
     let nearestAfflicted: Afflicted | null = null;
+    let nearestParkedId: string | null = null;
     let nearestDist = Infinity;
     const defaultRadius = INTERACT_CONFIG.DISTANCE as number;
 
@@ -703,6 +808,19 @@ export class GameScene extends Phaser.Scene {
         nearestDropped = null;
       }
     }
+    // Parked roster bodies — E talks to them (conversation layer); click still switches.
+    for (const [parkedId, sprite] of this.parkedBodies) {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y);
+      if (dist < defaultRadius && dist < nearestDist) {
+        nearestDist = dist;
+        nearestType = 'parked';
+        nearestParkedId = parkedId;
+        nearestDoor = null;
+        nearestInteractable = null;
+        nearestDropped = null;
+        nearestAfflicted = null;
+      }
+    }
 
     this.nearDoor = nearestType === 'door' ? nearestDoor : null;
 
@@ -717,6 +835,8 @@ export class GameScene extends Phaser.Scene {
           this.handleDroppedItemPickup(nearestDropped);
         } else if (nearestType === 'afflicted' && nearestAfflicted) {
           this.handleAfflictedInteract(nearestAfflicted);
+        } else if (nearestType === 'parked' && nearestParkedId) {
+          this.handleParkedBodyInteract(nearestParkedId);
         }
       }
     } else {
@@ -924,8 +1044,10 @@ export class GameScene extends Phaser.Scene {
           this.conversationPage.set(id, page + 1);
         }
       } else {
-        // Solo response — partner not present or no conversation defined
-        this.openDialog(`${name}\n"I'm ready when you are."`, 'narrative');
+        // Solo response — speaker×listener conversation layer, stock line as fallback
+        if (!this.playConversation(id)) {
+          this.openDialog(`${name}\n"I'm ready when you are."`, 'narrative');
+        }
         this.events.emit('hide-interact-prompt');
       }
     }
@@ -1044,6 +1166,32 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** Death drop: scatter the active character's whole inventory around (x, y). */
+  private dropAllInventoryAt(x: number, y: number): void {
+    const roomId = this.rsm.getCurrentRoom();
+    const inventory = this.rsm.getInventory();
+    const count = inventory.filter(Boolean).length;
+    const radius = count > 1 ? 40 : 0;
+    let placed = 0;
+    for (let i = 0; i < inventory.length; i++) {
+      const item = inventory[i];
+      if (!item) continue;
+      const angle = (placed / Math.max(count, 1)) * Math.PI * 2;
+      const dropped: DroppedItemState = {
+        item,
+        x: Math.round(x + Math.cos(angle) * radius),
+        y: Math.round(y + Math.sin(angle) * radius),
+        instanceId: `death-${item.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      };
+      this.rsm.addDroppedItem(roomId, dropped);
+      const r = resolveTileSprite(item.tileFrame, item.tilesetKey);
+      this.createItemSprite(dropped.instanceId, r.key, r.frame, dropped.x, dropped.y);
+      this.rsm.removeFromInventory(i);
+      placed++;
+    }
+    this.emitInventoryChanged();
+  }
+
   private unlockDoorsToRoom(targetRoomId: string): void {
     const allRooms = RoomManager.getRoomsData().rooms;
     for (const room of Object.values(allRooms)) {
@@ -1053,6 +1201,34 @@ export class GameScene extends Phaser.Scene {
         }
       }
     }
+  }
+
+  /**
+   * Play the best conversation-layer entry for this NPC (a parked roster
+   * body, or a recovered afflicted if one ever exists). Returns false when
+   * nothing matches so the caller can fall back to a stock line.
+   */
+  private playConversation(npcId: string): boolean {
+    const conv = selectConversation(this.rsm, this.roomManager.getCurrentRoomId(), npcId);
+    if (!conv) return false;
+    if (conv.produces?.length && !this.rsm.isConversationRead(conv.id)) {
+      applyProduces(conv.produces, this.rsm, this.rsm.getCurrentRoom());
+      this.emitInventoryChanged();
+    }
+    this.rsm.markConversationRead(conv.id);
+    this.convVisitNotified.add(conv.id);
+    this.convEvalTimer = 9999;
+    this.openDialog(conv.text, 'narrative');
+    return true;
+  }
+
+  /** E on a parked roster body — talk (conversation layer). Click still switches. */
+  private handleParkedBodyInteract(id: string): void {
+    if (!this.playConversation(id)) {
+      const name = this.findFullAfflictedDef(id)?.name ?? id;
+      this.openDialog(`${name}\n"I'm ready when you are."`, 'narrative');
+    }
+    this.events.emit('hide-interact-prompt');
   }
 
   private refreshParkedBodies(): void {

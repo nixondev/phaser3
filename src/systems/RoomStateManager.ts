@@ -19,6 +19,7 @@ export class RoomStateManager {
   private flagExpiries: Map<string, number> = new Map();
   private flagPending: Map<string, number> = new Map();
   private readThoughts: Set<string> = new Set();
+  private readConversations: Set<string> = new Set();
 
   static getInstance(): RoomStateManager {
     if (!RoomStateManager.instance) {
@@ -189,6 +190,12 @@ export class RoomStateManager {
     this.characterInventories.set(state.id, new Array(12).fill(null));
   }
 
+  /** Death: the character leaves the playable cast permanently (per-run). */
+  removeFromRoster(id: string): void {
+    this.roster = this.roster.filter(c => c.id !== id);
+    this.characterInventories.delete(id);
+  }
+
   getRoster(): CharacterState[] {
     return this.roster;
   }
@@ -307,6 +314,16 @@ export class RoomStateManager {
     return this.readThoughts.has(thoughtId);
   }
 
+  // ── Conversations (speaker×listener layer) ──────────────────────────────
+
+  markConversationRead(conversationId: string): void {
+    this.readConversations.add(conversationId);
+  }
+
+  isConversationRead(conversationId: string): boolean {
+    return this.readConversations.has(conversationId);
+  }
+
   // ── Persistence ─────────────────────────────────────────────────────────
 
   serialize(): object {
@@ -328,6 +345,7 @@ export class RoomStateManager {
       flagExpiries: [...this.flagExpiries.entries()],
       flagPending: [...this.flagPending.entries()],
       readThoughts: [...this.readThoughts],
+      readConversations: [...this.readConversations],
     };
   }
 
@@ -349,6 +367,7 @@ export class RoomStateManager {
     this.flagExpiries = new Map(data.flagExpiries ?? []);
     this.flagPending = new Map(data.flagPending ?? []);
     this.readThoughts = new Set(data.readThoughts ?? []);
+    this.readConversations = new Set(data.readConversations ?? []);
   }
 
   // ── Reset ───────────────────────────────────────────────────────────────
@@ -371,6 +390,7 @@ export class RoomStateManager {
     this.flagExpiries.clear();
     this.flagPending.clear();
     this.readThoughts.clear();
+    this.readConversations.clear();
   }
 }
 

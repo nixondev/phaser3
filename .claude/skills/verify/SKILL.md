@@ -38,6 +38,10 @@ Drive with puppeteer-core (ESM — use `await import('puppeteer-core')`) against
 - Startup timing: ~6s to menu, Space, ~2.5s to GameScene. (The old auto-opening tutorial
   dialog was removed 2026-07 — no dialog to dismiss on spawn.)
 - Two 404s in the console on load are pre-existing asset noise, not a regression.
+- **Direct keydown listeners can fire 2-4× per CDP keypress** (same DOM event, identical
+  `timeStamp`, re-emitted by Phaser across catch-up steps — worse right after a screenshot
+  stall). Real browsers emit once. For exact-count actions (undo/redo, toggles), drive the
+  UI **button with `page.mouse.click`** instead — mouse events are delivered exactly once.
 
 ## Flows worth driving
 

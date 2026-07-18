@@ -360,9 +360,9 @@
           "associatedRoom": "house-b",
           "curedClue": "...they look up and mumble something about the north block... the smell of chemicals... a lab coat...",
           "backstory": [
-            "Kai — Former Lab Technician\n\"I remember now. The city sealed overnight.\nWe were mid-experiment.\"",
-            "\"Whatever you used... it worked. I've been\nlooping for weeks. Trapped in that corner.\"\n\n\"I know this city's systems. I want out too.\"",
-            "\"Tell me what you need. I'll help.\"\n\n[Kai hands you a Lab Keycard and a Compound Sample.]\n[Kai joins your cause. They are waiting for you at Apartment 4B.]"
+            "words:dialog/kai/backstory-1",
+            "words:dialog/kai/backstory-2",
+            "words:dialog/kai/backstory-3"
           ],
           "recoveredItems": [
             {
@@ -390,9 +390,9 @@
           "associatedRoom": "house-c",
           "curedClue": "...they whisper about the community room... counting shelves... the logbook...",
           "backstory": [
-            "Maren — Local Shopkeeper\n\"The community room. That's where I kept\nthe last of the supplies. I know what's left.\"",
-            "\"I've been walking the same block\nfor... I don't know how long. Thank you.\"\n\n\"Take what you need from what I have.\"",
-            "\"I'll help you map what's still usable\nin here. There's more to this city\nthan anyone told us.\"\n\n[Maren joins your cause. They are waiting for you at the Community Room.]"
+            "words:dialog/maren/backstory-1",
+            "words:dialog/maren/backstory-2",
+            "words:dialog/maren/backstory-3"
           ],
           "recoveredItems": [
             {
@@ -405,7 +405,7 @@
               "name": "Supply Manifest",
               "tileFrame": 7,
               "category": "document",
-              "content": "Hand-written stock count.\nSection 3 still sealed.\nGenerator fuel: 4 cans — basement, east wall.\nNote: don't trust the east corridor after dark."
+              "content": "words:documents/supply-manifest"
             }
           ]
         },
@@ -525,7 +525,7 @@
             "name": "Your Notes",
             "tileFrame": 7,
             "category": "document",
-            "content": "Day 14. Still no signal outside.\nThe city is quiet in the wrong way.\nI heard someone on the street last night —\nbut they were moving wrong."
+            "content": "words:documents/your-notes"
           }
         },
         {
@@ -653,7 +653,7 @@
             "name": "Neighbor's Note",
             "tileFrame": 7,
             "category": "document",
-            "content": "They said it would pass in a week.\nThat was three weeks ago.\nI'm staying inside until someone\ncomes to tell us it's over."
+            "content": "words:documents/neighbors-note"
           }
         }
       ],
@@ -730,7 +730,7 @@
             "name": "Warden's Log",
             "tileFrame": 7,
             "category": "document",
-            "content": "Entry 9: Three more on the east block.\nThey don't respond. They don't stop.\nWe sealed the outer gate at 0600.\nI don't know if anyone outside knows."
+            "content": "words:documents/wardens-log"
           }
         }
       ],

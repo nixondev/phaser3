@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { SCENES, GAME_CONFIG } from '@utils/Constants';
+import { SCENES, GAME_CONFIG, FONTS, TEXT_STYLES } from '@utils/Constants';
+import { resolveText } from '@systems/Words';
 
 interface DocumentReaderData {
   title: string;
@@ -21,7 +22,7 @@ export class DocumentReaderScene extends Phaser.Scene {
     const w = GAME_CONFIG.WIDTH;
     const h = GAME_CONFIG.HEIGHT;
 
-    this.pages = this.splitPages(data.content ?? '');
+    this.pages = this.splitPages(resolveText(data.content ?? ''));
     this.pageIndex = 0;
 
     // Dark overlay
@@ -37,7 +38,7 @@ export class DocumentReaderScene extends Phaser.Scene {
     this.add.text(w / 2, margin + 40, data.title ?? 'Document', {
       fontSize: '36px',
       color: '#d4c87a',
-      fontFamily: 'monospace',
+      fontFamily: FONTS.TYPE,
       fontStyle: 'bold',
     }).setOrigin(0.5, 0);
 
@@ -48,9 +49,9 @@ export class DocumentReaderScene extends Phaser.Scene {
 
     // Body text (updated per page)
     this.bodyText = this.add.text(margin + 24, margin + 120, '', {
-      fontSize: '32px',
-      color: '#ccccbb',
-      fontFamily: 'monospace',
+      fontSize: TEXT_STYLES.document.fontSize,
+      color: TEXT_STYLES.document.color,
+      fontFamily: TEXT_STYLES.document.fontFamily,
       wordWrap: { width: w - (margin + 24) * 2 },
       lineSpacing: 8,
     });

@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { ThoughtDef, ThoughtsData } from '@/types';
+import { ThoughtDef, ThoughtsData, ThoughtsSourceData } from '@/types';
 import { RoomStateManager } from './RoomStateManager';
 import { checkRequires, checkRequiresAny } from './InteractionResolver';
+import { getLines } from './Words';
 import thoughtsDataRaw from '@/data/thoughts.json';
 
 /**
@@ -13,7 +14,13 @@ import thoughtsDataRaw from '@/data/thoughts.json';
  * Pool rule: a `repeat: 'never'` thought leaves the pool once read.
  * Selection: highest priority wins; ties broken by file order.
  */
-const thoughtsData = thoughtsDataRaw as ThoughtsData;
+/** Prose lives in words/ (passage `thoughts/<id>`); inline `lines` still win if present. */
+const thoughtsData: ThoughtsData = {
+  thoughts: (thoughtsDataRaw as ThoughtsSourceData).thoughts.map(t => ({
+    ...t,
+    lines: t.lines ?? getLines(`thoughts/${t.id}`),
+  })),
+};
 
 function matchesThought(
   t: ThoughtDef,

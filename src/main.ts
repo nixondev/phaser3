@@ -22,9 +22,9 @@ const config: Phaser.Types.Core.GameConfig = {
   height: GAME_CONFIG.HEIGHT,
   zoom: 1,
   parent: 'game-container',
-  pixelArt: true,
-  antialias: true,
-  roundPixels: true,
+//   pixelArt: true,
+//   antialias: true,
+//   roundPixels: true,
   physics: {
     default: 'arcade',
     arcade: {
@@ -40,7 +40,17 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 function startGame(): Phaser.Game {
-  return new Phaser.Game(config);
+  const game = new Phaser.Game(config);
+  // Dev-only handle for tooling/headless verification. Dynamic page-context
+  // imports can land in a separate Vite module graph (fresh singletons), so
+  // tests must reach the game's real instances through this handle instead.
+  if (import.meta.env.DEV) {
+    const handle: Record<string, unknown> = { game };
+    (window as any).__warden = handle;
+    void import('@systems/ConversationManager').then(m => { handle.cm = m; });
+    void import('@systems/Words').then(m => { handle.words = m; });
+  }
+  return game;
 }
 
 let activeGame: Phaser.Game | null = null;

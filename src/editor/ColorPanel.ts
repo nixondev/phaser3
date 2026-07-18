@@ -174,6 +174,8 @@ export class ColorPanel {
       el.value = el.value.replace(/[^0-9a-fA-F]/g, '').toLowerCase();
       const v = el.value;
       if (v.length === 6 || v.length === 8) this.applyHexColor(v);
+      // full rrggbbaa entered — hand the keyboard back to the editor
+      if (v.length === 8) el.blur();
     });
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { el.blur(); e.preventDefault(); }
@@ -349,7 +351,7 @@ export class ColorPanel {
     const g = ctx.createLinearGradient(0, 0, w, 0);
     for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsl(${i * 60},100%,50%)`);
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-    const cx = (this.hsvH / 360) * w;
+    const cx = Phaser.Math.Clamp((this.hsvH / 360) * w, 4, w - 4);
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
     ctx.strokeRect(cx - 4, 1, 8, h - 2);
   }
@@ -369,7 +371,7 @@ export class ColorPanel {
     ag.addColorStop(0, `rgba(${r},${g},${b},0)`);
     ag.addColorStop(1, `rgba(${r},${g},${b},1)`);
     ctx.fillStyle = ag; ctx.fillRect(0, 0, w, h);
-    const cx = (this.hsvA / 255) * w;
+    const cx = Phaser.Math.Clamp((this.hsvA / 255) * w, 4, w - 4);
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
     ctx.strokeRect(cx - 4, 1, 8, h - 2);
   }

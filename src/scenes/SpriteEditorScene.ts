@@ -4,6 +4,7 @@ import { AudioManager } from '@systems/AudioManager';
 import { MusicManager } from '@systems/MusicManager';
 import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
+import { EditorButtons } from '@/editor/EditorButtons';
 import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle } from '@/editor/PixelCanvas';
 
 const FRAME     = 64;    // frame size in px
@@ -96,10 +97,16 @@ export class SpriteEditorScene extends Phaser.Scene {
   private focusMode = false;
   private savedCanvasView?: PixelCanvasView;
   private savedCanvasDepth?: number;
+  private btn!: EditorButtons;
+  private dirtyMark!: Phaser.GameObjects.Text;
+  private saveBtnTint?: (col?: number) => void;
+  private pendingExitAt = 0;
 
   // preview state
   private previewSprite!: Phaser.GameObjects.Sprite;
   private previewBorder!: Phaser.GameObjects.Graphics;
+  private previewBg!: Phaser.GameObjects.Graphics;
+  private previewBgIdx = 0;
   private previewHint!: Phaser.GameObjects.Text;
   private previewLabel!: Phaser.GameObjects.Text;
   private fpsLabel!: Phaser.GameObjects.Text;
@@ -129,6 +136,10 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.add.text(GAME_CONFIG.WIDTH - 12, 16, 'ESC — back', {
       fontSize: '18px', color: '#446688', fontFamily: 'monospace',
     }).setOrigin(1, 0);
+    this.dirtyMark = this.add.text(LABEL_X + 62, 34, '● unsaved', {
+      fontSize: '14px', color: '#ffaa44', fontFamily: 'monospace',
+    }).setVisible(false);
+    this.btn = new EditorButtons(this);
 
     this.buildWorkTexture();
 
@@ -279,7 +290,10 @@ export class SpriteEditorScene extends Phaser.Scene {
       el.appendChild(opt);
     }
 
-    el.addEventListener('change', () => this.trySelectSheet(el.value));
+    el.addEventListener('change', () => {
+      this.trySelectSheet(el.value);
+      el.blur(); // hand the keyboard back to the editor
+    });
     el.addEventListener('keydown', (e) => e.stopPropagation());
 
     this.overlay.add(el, LABEL_X, 56, GRID_X - LABEL_X + SHEET_COLS * CELL - 4, 18);
@@ -326,7 +340,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.workTex.refresh();
 
     this.currentSheet = name;
-    this.dirty = false;
+    this.setDirty(false);
     if (this.dropdownEl && this.dropdownEl.value !== name) this.dropdownEl.value = name;
     this.selectFrame(0);
     this.statusText?.setText(`sheet: ${name}`);
@@ -368,6 +382,7 @@ export class SpriteEditorScene extends Phaser.Scene {
         .setScale(THUMB / FRAME);
       // hit area is in the image's local (pre-scale) space, so it stays 64×64
       thumb.setInteractive(new Phaser.Geom.Rectangle(0, 0, FRAME, FRAME), Phaser.Geom.Rectangle.Contains);
+      thumb.input!.cursor = 'pointer';
       thumb.on('pointerdown', () => this.selectFrame(i));
       this.thumbs.push(thumb);
     }
@@ -426,7 +441,14 @@ export class SpriteEditorScene extends Phaser.Scene {
     }
     ctx.putImageData(img, col * FRAME, row * FRAME);
     this.workTex.refresh();
-    this.dirty = true;
+    this.setDirty(true);
+  }
+
+  private setDirty(v: boolean): void {
+    if (this.dirty === v) return;
+    this.dirty = v;
+    this.dirtyMark?.setVisible(v);
+    this.saveBtnTint?.(v ? 0x2f6e1c : 0x1c3c6e);
   }
 
   // ─── Onion skin ────────────────────────────────────────────────────────────
@@ -462,9 +484,8 @@ export class SpriteEditorScene extends Phaser.Scene {
       fontSize: '16px', color: '#446655', fontFamily: 'monospace',
     });
 
-    const bg = this.add.graphics();
-    bg.fillStyle(0x181828, 1);
-    bg.fillRect(PREV_X, PREV_Y, PREV_W, PREV_H);
+    this.previewBg = this.add.graphics();
+    this.drawPreviewBg();
 
     this.previewBorder = this.add.graphics();
     this.drawPreviewBorder(false);
@@ -482,11 +503,45 @@ export class SpriteEditorScene extends Phaser.Scene {
 
     // fps stepper
     const FY = PREV_CTRL_Y;
-    this.makeBtn('−', PREV_X + 190, FY, 24, 24, 0x1c3c6e, () => this.setFps(this.fps - 1));
+    this.btn.make('−', PREV_X + 190, FY, 24, 24, 0x1c3c6e, () => this.setFps(this.fps - 1));
     this.fpsLabel = this.add.text(PREV_X + 224, FY + 12, `fps ${this.fps}`, {
       fontSize: '16px', color: '#88aacc', fontFamily: 'monospace',
     }).setOrigin(0, 0.5);
-    this.makeBtn('+', PREV_X + 296, FY, 24, 24, 0x1c3c6e, () => this.setFps(this.fps + 1));
+    this.btn.make('+', PREV_X + 296, FY, 24, 24, 0x1c3c6e, () => this.setFps(this.fps + 1));
+
+    // backdrop cycle — light sprites are invisible on the default dark pane
+    const bgBtn = this.add.graphics();
+    const bbx = PREV_X + PREV_W - 28, bby = PREV_Y + 4;
+    this.btn.draw(bgBtn, bbx, bby, 24, 24, false);
+    this.add.text(bbx + 12, bby + 12, '▦', {
+      fontSize: '16px', color: '#aaccff', fontFamily: 'monospace',
+    }).setOrigin(0.5).setDepth(2);
+    this.btn.bind(bgBtn, bbx, bby, 24, 24, () => {
+      this.previewBgIdx = (this.previewBgIdx + 1) % SpriteEditorScene.PREVIEW_BGS.length;
+      this.drawPreviewBg();
+      this.statusText?.setText(`preview bg: ${SpriteEditorScene.PREVIEW_BGS[this.previewBgIdx]}`);
+    });
+  }
+
+  private static readonly PREVIEW_BGS = ['dark', 'checker', 'light', 'grass'] as const;
+
+  private drawPreviewBg(): void {
+    const g = this.previewBg;
+    g.clear();
+    const mode = SpriteEditorScene.PREVIEW_BGS[this.previewBgIdx];
+    if (mode === 'checker') {
+      const cs = 12;
+      for (let y = 0; y < PREV_H; y += cs) {
+        for (let x = 0; x < PREV_W; x += cs) {
+          g.fillStyle((x / cs + y / cs) % 2 === 0 ? 0x2e2e3e : 0x383848, 1);
+          g.fillRect(PREV_X + x, PREV_Y + y, Math.min(cs, PREV_W - x), Math.min(cs, PREV_H - y));
+        }
+      }
+    } else {
+      const col = mode === 'dark' ? 0x181828 : mode === 'light' ? 0xaab4be : 0x2d6a4f;
+      g.fillStyle(col, 1);
+      g.fillRect(PREV_X, PREV_Y, PREV_W, PREV_H);
+    }
   }
 
   private drawPreviewBorder(active: boolean): void {
@@ -499,7 +554,20 @@ export class SpriteEditorScene extends Phaser.Scene {
   private setupKeyboard(): void {
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT') as Record<string, Phaser.Input.Keyboard.Key>;
 
-    this.input.keyboard!.on('keydown-ESC', () => this.scene.start(SCENES.MENU));
+    this.input.keyboard!.on('keydown-ESC', () => {
+      const now = this.time.now;
+      if (this.dirty && !(this.pendingExitAt > 0 && now - this.pendingExitAt < 3000)) {
+        this.pendingExitAt = now;
+        this.statusText?.setText('unsaved changes — ESC again to discard');
+        return;
+      }
+      this.scene.start(SCENES.MENU);
+    });
+    this.input.keyboard!.on('keydown-S', (e: KeyboardEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      this.saveSheet();
+    });
     this.input.keyboard!.on('keydown-Q', (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) return;
       this.selectFrame(this.selectedFrame - 1);
@@ -593,12 +661,11 @@ export class SpriteEditorScene extends Phaser.Scene {
     tools.forEach(({ tool, label }, i) => {
       const bx = DRAW_X + i * (BW + 8);
       const g = this.add.graphics();
-      this.drawBtn(g, bx, TOOLS_Y, BW, BH, tool === this.canvas.tool);
+      this.btn.draw(g, bx, TOOLS_Y, BW, BH, tool === this.canvas.tool);
       this.add.text(bx + BW / 2, TOOLS_Y + BH / 2, label, {
         fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
-      g.setInteractive(new Phaser.Geom.Rectangle(bx, TOOLS_Y, BW, BH), Phaser.Geom.Rectangle.Contains);
-      g.on('pointerdown', () => {
+      this.btn.bind(g, bx, TOOLS_Y, BW, BH, () => {
         this.canvas.tool = tool;
         this.refreshToolButtons();
       });
@@ -614,14 +681,13 @@ export class SpriteEditorScene extends Phaser.Scene {
     [1, 2, 3, 4].forEach((size, i) => {
       const bx = sizeStartX + i * (SBW + SGAP);
       const g = this.add.graphics();
-      this.drawBtn(g, bx, TOOLS_Y, SBW, SBH, size === this.canvas.penSize);
+      this.btn.draw(g, bx, TOOLS_Y, SBW, SBH, size === this.canvas.penSize);
       this.add.text(bx + SBW / 2, TOOLS_Y + SBH / 2, String(size), {
         fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
-      g.setInteractive(new Phaser.Geom.Rectangle(bx, TOOLS_Y, SBW, SBH), Phaser.Geom.Rectangle.Contains);
-      g.on('pointerdown', () => {
+      this.btn.bind(g, bx, TOOLS_Y, SBW, SBH, () => {
         this.canvas.penSize = size;
-        this.sizeBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.size === this.canvas.penSize));
+        this.sizeBtns.forEach(b => this.btn.draw(b.gfx, b.x, b.y, b.w, b.h, b.size === this.canvas.penSize));
       });
       this.sizeBtns.push({ gfx: g, x: bx, y: TOOLS_Y, w: SBW, h: SBH, size });
     });
@@ -642,12 +708,11 @@ export class SpriteEditorScene extends Phaser.Scene {
     styles.forEach(({ style, label }, i) => {
       const bx = styleStartX + i * (STW + STG);
       const g = this.add.graphics();
-      this.drawBtn(g, bx, styleY, STW, BH, style === this.canvas.penStyle);
+      this.btn.draw(g, bx, styleY, STW, BH, style === this.canvas.penStyle);
       this.add.text(bx + STW / 2, styleY + BH / 2, label, {
         fontSize: '14px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
-      g.setInteractive(new Phaser.Geom.Rectangle(bx, styleY, STW, BH), Phaser.Geom.Rectangle.Contains);
-      g.on('pointerdown', () => {
+      this.btn.bind(g, bx, styleY, STW, BH, () => {
         this.canvas.penStyle = style;
         this.refreshStyleButtons();
         this.statusText.setText(`style: ${label.toLowerCase()}`);
@@ -657,24 +722,25 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private refreshStyleButtons(): void {
-    this.styleBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.style === this.canvas.penStyle));
+    this.styleBtns.forEach(b => this.btn.draw(b.gfx, b.x, b.y, b.w, b.h, b.style === this.canvas.penStyle));
   }
 
   private buildUtilButtons(): void {
-    const BW = 84, BH = 30, GAP = 8;
+    // 8 buttons of 74+6 = 640px — exactly the draw-area width
+    const BW = 74, BH = 30, GAP = 6;
     const bx = (i: number): number => DRAW_X + i * (BW + GAP);
 
     const LBW = 50;
     const LGAP = 6;
     const leftBlockX = LABEL_X;
-    const leftMirrorY = GRID_Y + CELL * 4 + 34;
+    const leftMirrorY = GRID_Y + CELL * 4 + 56;   // clears the frame label above
     const leftNudgeY = leftMirrorY + 52;
 
     this.add.text(leftBlockX, leftMirrorY - 20, 'TRANSFORM', {
       fontSize: '15px', color: '#667788', fontFamily: 'monospace',
     });
 
-    this.makeBtn('CLEAR', leftBlockX, leftMirrorY, BW, BH, 0x6e1c1c, () => {
+    this.btn.make('CLEAR', leftBlockX, leftMirrorY, BW, BH, 0x6e1c1c, () => {
       this.canvas.pushHistory();
       this.canvas.pixels.fill(0);
       this.canvas.redraw();
@@ -682,64 +748,67 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.statusText.setText('frame cleared');
     });
 
-    this.makeBtn('COPY', bx(0), UTILS_Y, BW, BH, 0x1c3c6e, () => {
+    this.btn.make('COPY', bx(0), UTILS_Y, BW, BH, 0x1c3c6e, () => {
       this.clipboard = this.canvas.pixels.slice();
       this.statusText.setText(`copied frame ${this.selectedFrame}`);
     });
-    this.makeBtn('PASTE', bx(1), UTILS_Y, BW, BH, 0x1c3c6e, () => {
-      if (!this.clipboard) { this.statusText.setText('clipboard empty'); return; }
-      this.canvas.pushHistory();
-      this.canvas.pixels.set(this.clipboard);
-      this.canvas.redraw();
-      this.syncFrameToTexture();
-      this.statusText.setText(`pasted onto frame ${this.selectedFrame}`);
-    });
-    this.makeBtn('FLIP', bx(2), UTILS_Y, BW, BH, 0x1c3c6e, () => this.flipFrameHorizontal());
+    this.btn.make('PASTE', bx(1), UTILS_Y, BW, BH, 0x1c3c6e, () => this.pasteClipboard(false));
+    this.btn.make('PASTE⇄', bx(2), UTILS_Y, BW, BH, 0x1c3c6e, () => this.pasteClipboard(true));
+    this.btn.make('FLIP', bx(3), UTILS_Y, BW, BH, 0x1c3c6e, () => this.flipFrameHorizontal());
     const mx = leftBlockX + BW + GAP;
     this.mirrorBtnGfx = this.add.graphics();
-    this.drawBtn(this.mirrorBtnGfx, mx, leftMirrorY, BW, BH, this.canvas.mirrorX);
+    this.btn.draw(this.mirrorBtnGfx, mx, leftMirrorY, BW, BH, this.canvas.mirrorX);
     this.add.text(mx + BW / 2, leftMirrorY + BH / 2, 'MIRROR', {
       fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
     }).setOrigin(0.5).setDepth(2);
-    this.mirrorBtnGfx.setInteractive(new Phaser.Geom.Rectangle(mx, leftMirrorY, BW, BH), Phaser.Geom.Rectangle.Contains);
-    this.mirrorBtnGfx.on('pointerdown', () => {
+    this.btn.bind(this.mirrorBtnGfx, mx, leftMirrorY, BW, BH, () => {
       this.canvas.mirrorX = !this.canvas.mirrorX;
-      this.drawBtn(this.mirrorBtnGfx, mx, leftMirrorY, BW, BH, this.canvas.mirrorX);
+      this.btn.draw(this.mirrorBtnGfx, mx, leftMirrorY, BW, BH, this.canvas.mirrorX);
       this.statusText.setText(`mirror ${this.canvas.mirrorX ? 'on' : 'off'}`);
     });
 
     this.add.text(leftBlockX, leftNudgeY - 18, 'NUDGE', {
       fontSize: '15px', color: '#667788', fontFamily: 'monospace',
     });
-    this.makeBtn('←', leftBlockX + (LBW + LGAP) * 0, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(-1, 0));
-    this.makeBtn('↑', leftBlockX + (LBW + LGAP) * 1, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(0, -1));
-    this.makeBtn('↓', leftBlockX + (LBW + LGAP) * 2, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(0, 1));
-    this.makeBtn('→', leftBlockX + (LBW + LGAP) * 3, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(1, 0));
+    this.btn.make('←', leftBlockX + (LBW + LGAP) * 0, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(-1, 0));
+    this.btn.make('↑', leftBlockX + (LBW + LGAP) * 1, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(0, -1));
+    this.btn.make('↓', leftBlockX + (LBW + LGAP) * 2, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(0, 1));
+    this.btn.make('→', leftBlockX + (LBW + LGAP) * 3, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(1, 0));
+
+    this.btn.make('UNDO', bx(4), UTILS_Y, BW, BH, 0x2f4f5f, () => this.canvas.undo());
+    this.btn.make('REDO', bx(5), UTILS_Y, BW, BH, 0x2f4f5f, () => this.canvas.redo());
+    this.saveBtnTint = this.btn.make('SAVE', bx(6), UTILS_Y, BW, BH, 0x1c3c6e, () => this.saveSheet());
 
     // Onion toggle
-    const ox = bx(6);
+    const ox = bx(7);
     this.onionBtnGfx = this.add.graphics();
-    this.drawBtn(this.onionBtnGfx, ox, UTILS_Y, BW, BH, this.onionOn);
+    this.btn.draw(this.onionBtnGfx, ox, UTILS_Y, BW, BH, this.onionOn);
     this.add.text(ox + BW / 2, UTILS_Y + BH / 2, 'ONION', {
       fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
     }).setOrigin(0.5).setDepth(2);
-    this.onionBtnGfx.setInteractive(new Phaser.Geom.Rectangle(ox, UTILS_Y, BW, BH), Phaser.Geom.Rectangle.Contains);
-    this.onionBtnGfx.on('pointerdown', () => {
+    this.btn.bind(this.onionBtnGfx, ox, UTILS_Y, BW, BH, () => {
       this.onionOn = !this.onionOn;
-      this.drawBtn(this.onionBtnGfx, ox, UTILS_Y, BW, BH, this.onionOn);
+      this.btn.draw(this.onionBtnGfx, ox, UTILS_Y, BW, BH, this.onionOn);
       this.canvas.redraw();
       this.statusText.setText(`onion skin ${this.onionOn ? 'on' : 'off'}`);
     });
+  }
 
-    this.makeBtn('UNDO', bx(3), UTILS_Y, BW, BH, 0x2f4f5f, () => {
-      this.canvas.undo();
-      this.syncFrameToTexture();
-    });
-    this.makeBtn('REDO', bx(4), UTILS_Y, BW, BH, 0x2f4f5f, () => {
-      this.canvas.redo();
-      this.syncFrameToTexture();
-    });
-    this.makeBtn('SAVE', bx(5), UTILS_Y, BW, BH, 0x1c3c6e, () => this.saveSheet());
+  private pasteClipboard(flipped: boolean): void {
+    if (!this.clipboard) { this.statusText.setText('clipboard empty'); return; }
+    this.canvas.pushHistory();
+    if (flipped) {
+      for (let y = 0; y < FRAME; y++) {
+        for (let x = 0; x < FRAME; x++) {
+          this.canvas.pixels[y * FRAME + x] = this.clipboard[y * FRAME + (FRAME - 1 - x)];
+        }
+      }
+    } else {
+      this.canvas.pixels.set(this.clipboard);
+    }
+    this.canvas.redraw();
+    this.syncFrameToTexture();
+    this.statusText.setText(`pasted${flipped ? ' flipped' : ''} onto frame ${this.selectedFrame}`);
   }
 
   private nudgeFrame(dx: number, dy: number): void {
@@ -778,11 +847,12 @@ export class SpriteEditorScene extends Phaser.Scene {
     const w = 24;
     const h = 24;
     this.focusBtnGfx = this.add.graphics();
-    this.drawBtn(this.focusBtnGfx, x, y, w, h, false);
+    this.btn.draw(this.focusBtnGfx, x, y, w, h, false);
     this.focusBtnText = this.add.text(x + w / 2, y + h / 2, '»', {
       fontSize: '16px', color: '#aaccff', fontFamily: 'monospace',
     }).setOrigin(0.5).setDepth(DEFAULT_UI_DEPTH);
     this.focusBtnGfx.setInteractive(new Phaser.Geom.Rectangle(x, y, w, h), Phaser.Geom.Rectangle.Contains);
+    this.focusBtnGfx.input!.cursor = 'pointer';
     this.focusBtnGfx.on('pointerdown', () => this.toggleFocusMode());
     this.focusBtnText.setInteractive({ useHandCursor: true });
     this.focusBtnText.on('pointerdown', () => this.toggleFocusMode());
@@ -798,10 +868,12 @@ export class SpriteEditorScene extends Phaser.Scene {
       const focusX = LABEL_X;
       const focusY = 56;
       const focusPad = 12;
+      // height capped above the utils row so its buttons stay usable
       const maxScale = Math.max(1, Math.floor(Math.min(
         (GAME_CONFIG.WIDTH - focusX - focusPad) / FRAME,
-        (GAME_CONFIG.HEIGHT - focusY - focusPad) / FRAME,
+        (UTILS_Y - focusPad - focusY) / FRAME,
       )));
+      if (this.dropdownEl) this.overlay.setVisible(this.dropdownEl, false);
       const size = FRAME * maxScale;
       this.canvas.setView({
         x: focusX,
@@ -814,8 +886,9 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.savedCanvasDepth = canvasGraphics.depth;
       canvasGraphics.setDepth(FOCUS_CANVAS_DEPTH);
       canvasGraphics.setInteractive(new Phaser.Geom.Rectangle(focusX, focusY, size, size), Phaser.Geom.Rectangle.Contains);
-      this.drawBtn(this.focusBtnGfx, focusX + size + 8, focusY + 4, 24, 24, true);
+      this.btn.draw(this.focusBtnGfx, focusX + size + 8, focusY + 4, 24, 24, true);
       this.focusBtnGfx.setInteractive(new Phaser.Geom.Rectangle(focusX + size + 8, focusY + 4, 24, 24), Phaser.Geom.Rectangle.Contains);
+      this.focusBtnGfx.input!.cursor = 'pointer';
       this.focusBtnGfx.setDepth(FOCUS_BUTTON_DEPTH);
       this.focusBtnText.setDepth(FOCUS_BUTTON_DEPTH);
       this.focusBtnText.setPosition(focusX + size + 20, focusY + 16).setText('«');
@@ -824,6 +897,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     }
 
     this.focusMode = false;
+    if (this.dropdownEl) this.overlay.setVisible(this.dropdownEl, true);
     if (this.savedCanvasView) {
       this.canvas.setView(this.savedCanvasView);
       this.savedCanvasView = undefined;
@@ -831,8 +905,9 @@ export class SpriteEditorScene extends Phaser.Scene {
     canvasGraphics.disableInteractive();
     canvasGraphics.setDepth(this.savedCanvasDepth ?? 0);
     this.savedCanvasDepth = undefined;
-    this.drawBtn(this.focusBtnGfx, DRAW_X + DRAW_SIZE + 8, DRAW_Y + 4, 24, 24, false);
+    this.btn.draw(this.focusBtnGfx, DRAW_X + DRAW_SIZE + 8, DRAW_Y + 4, 24, 24, false);
     this.focusBtnGfx.setInteractive(new Phaser.Geom.Rectangle(DRAW_X + DRAW_SIZE + 8, DRAW_Y + 4, 24, 24), Phaser.Geom.Rectangle.Contains);
+    this.focusBtnGfx.input!.cursor = 'pointer';
     this.focusBtnGfx.setDepth(DEFAULT_UI_DEPTH);
     this.focusBtnText.setDepth(DEFAULT_UI_DEPTH);
     this.focusBtnText.setPosition(DRAW_X + DRAW_SIZE + 20, DRAW_Y + 16).setText('»');
@@ -840,28 +915,7 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private refreshToolButtons(): void {
-    this.toolBtns.forEach(b => this.drawBtn(b.gfx, b.x, b.y, b.w, b.h, b.tool === this.canvas.tool));
-  }
-
-  private drawBtn(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, active: boolean): void {
-    g.clear();
-    g.fillStyle(active ? 0x1e3a5e : 0x181828, 1);
-    g.fillRect(x, y, w, h);
-    g.lineStyle(1, active ? 0x4499ff : 0x334455, 1);
-    g.strokeRect(x, y, w, h);
-  }
-
-  private makeBtn(label: string, x: number, y: number, w: number, h: number, col: number, cb: () => void): void {
-    const g = this.add.graphics();
-    g.fillStyle(col, 0.85);
-    g.fillRect(x, y, w, h);
-    g.lineStyle(1, col, 1);
-    g.strokeRect(x, y, w, h);
-    this.add.text(x + w / 2, y + h / 2, label, {
-      fontSize: '18px', color: '#ffffff', fontFamily: 'monospace',
-    }).setOrigin(0.5).setDepth(2);
-    g.setInteractive(new Phaser.Geom.Rectangle(x, y, w, h), Phaser.Geom.Rectangle.Contains);
-    g.on('pointerdown', cb);
+    this.toolBtns.forEach(b => this.btn.draw(b.gfx, b.x, b.y, b.w, b.h, b.tool === this.canvas.tool));
   }
 
   // ─── Save ──────────────────────────────────────────────────────────────────
@@ -888,7 +942,7 @@ export class SpriteEditorScene extends Phaser.Scene {
           body: buf,
         });
         if (resp.ok) {
-          this.dirty = false;
+          this.setDirty(false);
           this.statusText.setText(`saved ${this.currentSheet}.png ✓  (reload page to see in-game)`);
         } else {
           this.statusText.setText(`save failed: ${resp.status}`);

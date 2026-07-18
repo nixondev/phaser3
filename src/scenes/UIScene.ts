@@ -1,5 +1,5 @@
 ﻿import Phaser from 'phaser';
-import { SCENES, GAME_CONFIG, INVENTORY_CONFIG } from '@utils/Constants';
+import { SCENES, GAME_CONFIG, INVENTORY_CONFIG, FONTS, TEXT_STYLES } from '@utils/Constants';
 import { ItemDef, CharacterState, DialogMessage } from '@/types';
 import { resolveTileSprite } from '@utils/TilesetResolver';
 import { GameScene } from './GameScene';
@@ -70,7 +70,7 @@ export class UIScene extends Phaser.Scene {
     // Dialog box — plain dark surface, no border, sized dynamically in showDialog
     this.dialogBg = this.add.rectangle(0, 0, w - 64, 0, 0x000000, 0.75).setVisible(false);
     this.dialogText = this.add.text(0, 0, '', {
-      fontSize: '36px', color: '#ffffff', fontFamily: 'monospace', lineSpacing: 16, wordWrap: { width: w - 160 },
+      fontSize: '36px', color: '#ffffff', fontFamily: FONTS.SPEECH, lineSpacing: 16, wordWrap: { width: w - 160 },
     }).setVisible(false);
 
     // Dismiss prompt — positioned dynamically alongside the dialog box
@@ -234,11 +234,14 @@ export class UIScene extends Phaser.Scene {
     const BOX_BOTTOM = h - 32;
     const BOX_WIDTH = w - 64;
 
-    // Inner-voice styling for thoughts; must reset on every call — dialogText
-    // is a reused object and the style would otherwise stick.
-    const isThought = payload.type === 'thought';
-    this.dialogText.setFontStyle(isThought ? 'italic' : 'normal');
-    this.dialogText.setColor(isThought ? '#b8c4e8' : '#ffffff');
+    // Channel styling — dialogText/dialogBg are reused objects, so every
+    // field must be set on every call or the previous channel's style sticks.
+    const style = TEXT_STYLES[payload.type ?? 'narrative'];
+    this.dialogText.setFontFamily(style.fontFamily);
+    this.dialogText.setFontSize(style.fontSize);
+    this.dialogText.setFontStyle(style.fontStyle);
+    this.dialogText.setColor(style.color);
+    this.dialogBg.setFillStyle(style.boxColor, style.boxAlpha);
 
     this.dialogText.setText(payload.text);
     const textH = this.dialogText.height;

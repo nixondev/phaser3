@@ -305,7 +305,7 @@ export interface ThoughtDef {
   requiresAny?: RequireCondition[];
   /** Indicator override for special cases. Defaults to '…'. */
   glyph?: string;
-  /** Joined with \n; openDialog paginates at 6 lines/page. */
+  /** Joined with \n; openDialog breaks pages at `---` lines, else 10 lines/page. */
   lines: string[];
   /** Higher wins; ties broken by file order (earlier wins). */
   priority: number;
@@ -319,4 +319,47 @@ export interface ThoughtDef {
 
 export interface ThoughtsData {
   thoughts: ThoughtDef[];
+}
+
+/**
+ * thoughts.json on disk: `lines` may be omitted — the prose then lives in
+ * words/ as passage `thoughts/<id>` (resolved at load by ThoughtManager).
+ */
+export interface ThoughtsSourceData {
+  thoughts: (Omit<ThoughtDef, 'lines'> & { lines?: string[] })[];
+}
+
+/**
+ * One entry in the speaker×listener conversation layer (conversations.json).
+ * Selection mirrors thoughts: pool = entries for the NPC whose conditions
+ * pass, minus read `never` entries; highest priority wins, ties by file
+ * order. Speaker gating uses the ordinary condition grammar
+ * (e.g. { "type": "character", "value": "player" }).
+ */
+export interface ConversationDef {
+  id: string;
+  /** Recovered resident this talk belongs to (afflicted id). */
+  npc: string;
+  /** All must pass (checkRequires). Speaker/trait/flag/presence gates live here. */
+  requires?: RequireCondition[];
+  /** At least one must pass (checkRequiresAny). */
+  requiresAny?: RequireCondition[];
+  /** Applied once — the first time this conversation is opened. */
+  produces?: ProduceEffect[];
+  /** Higher wins; ties broken by file order (earlier wins). */
+  priority: number;
+  /**
+   * never  — one read, then permanently out of the pool (per-run).
+   * silent — always playable; glyph lights only until first read.
+   * notify — always playable; glyph re-lights on every room entry.
+   */
+  repeat: 'never' | 'silent' | 'notify';
+  /** Prose — usually a "words:dialog/…" ref. `---` lines break pages. */
+  text: string;
+  /** Indicator override for special cases. Defaults to '?'. */
+  glyph?: string;
+}
+
+export interface ConversationsData {
+  conversations: ConversationDef[];
 }

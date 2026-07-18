@@ -110,6 +110,8 @@ export class PreloadScene extends Phaser.Scene {
     Promise.all([
       document.fonts.load('1em VT323'),
       document.fonts.load('1em Silkscreen'),
+      document.fonts.load('1em "Bitcount Ink"'),
+      document.fonts.load('1em "Workbench"'),
     ]).finally(() => {
       this.scene.start(SCENES.MENU);
     });

@@ -1,0 +1,29 @@
+:: dialog/maren/backstory-1 [dialog maren]
+Maren — Local Shopkeeper
+"The community room. That's where I kept
+the last of the supplies. I know what's left."
+
+:: dialog/maren/backstory-2 [dialog maren]
+"I've been walking the same block
+for... I don't know how long. Thank you."
+
+"Take what you need from what I have."
+
+:: dialog/maren/backstory-3 [dialog maren]
+"I'll help you map what's still usable
+in here. There's more to this city
+than anyone told us."
+
+[Maren joins your cause. They are waiting for you at the Community Room.]
+
+:: dialog/maren/to-player-first [dialog maren]
+"You're the one who found me walking.
+I don't know how to thank someone for that."
+---
+"...you just did."
+
+Saying it out loud feels like unsealing a door.
+
+:: dialog/maren/waiting [dialog maren]
+"When you need the shelves counted,
+you know where I am. Careful out there."

@@ -1,6 +1,6 @@
 # WARDEN — CLAUDE.md
 
-Companion docs: `EDITORGUIDE.md`, `AUTHORING.md`, `PARADIGM.md`, `ROADMAP.md`, `TESTING.md`.
+Companion docs: `EDITORGUIDE.md`, `AUTHORING.md`, `PARADIGM.md`, `ROADMAP.md`, `TESTING.md`, `WORDS.md`, `TOUR.md` (code-tour curriculum — check off sessions as taught).
 
 ## Project Overview
 
@@ -65,7 +65,12 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/systems/RoomManager.ts` | Tilemap loading, collision layers, door zones, `Spectra` layer, `resizeMap()` |
 | `src/systems/InputManager.ts` | Keyboard input: `getState()` continuous, `getTapState()` one-shot |
 | `src/systems/ThoughtManager.ts` | Introspection channel (pattern #13): pure WHO/WHERE/WHEN thought selection |
-| `src/data/thoughts.json` | All thought entries — lore drops shown on player click / T |
+| `src/data/thoughts.json` | Thought metadata (WHO/WHERE/WHEN); prose lives in `words/thoughts/` |
+| `src/systems/Words.ts` | Prose registry — parses `words/**/*.twee` (Twee 3), resolves `words:<key>` refs |
+| `src/systems/ConversationManager.ts` | Speaker×listener talk selection over `conversations.json` (thoughts pattern) |
+| `src/data/conversations.json` | Conversation entries: npc + requires (speaker/flags) + priority → `words:` key |
+| `src/systems/FlagAudit.ts` | Dev startup check: flags checked-but-never-set / set-but-never-checked |
+| `words/` | All player-facing writing as twee passages — see `WORDS.md` |
 | `src/systems/TransitionManager.ts` | Fade-in/out between rooms |
 | `src/systems/MusicManager.ts` | MIDI music — singleton, proximity layers, reverb cycle |
 | `src/systems/WeatherManager.ts` | Weather effects on room transitions (data-driven from `rooms.json`) |
@@ -124,7 +129,7 @@ Future state to support: character roster / active character, per-character item
 | **cured** | Still, green tint, interactable (E). Proximity sound stops. |
 | **recovered** | Still, no tint, interactable (dialog / character unlock). |
 
-On overlap (agitated/wandering): screen shake, fade, respawn at `protag-house`.
+On overlap (agitated/wandering): **death**. The active character's items scatter in a ring at the death site, `died/<id>` world flag is set, they leave the roster permanently, and control passes to the next roster member (succession — you resume wherever that body was parked). Only when no other playable character exists: full run reset (`rsm.reset()` + scene restart).
 
 **`associatedRoom` rule:** afflicted excluded from `associatedRoom` until cured; after cure they only appear there and vanish from their spawn room. Same entry can exist in both rooms — engine gates by cure state.
 
@@ -206,6 +211,20 @@ Rooms in `src/data/rooms.json`. Every tilemap: three layers `Ground`, `Collision
 | `reverbMix` | 0..1 | Reverb wet mix (default 0.3) |
 
 **Dev note:** Adding a new `rooms.json` field requires server restart + hard browser refresh. Changing existing values hot-reloads.
+
+---
+
+## Words (Prose) System
+
+All player-facing writing lives in `words/**/*.twee` (Twee 3 plain text; full doc in `WORDS.md`). Bundled via `import.meta.glob` in `src/systems/Words.ts` — creating a file is the only registration.
+
+- Passage name = global key: `:: thoughts/protag-house-first [thought]`.
+- Any text field in `rooms.json` may hold `"words:<key>"` — resolved at display time (`GameScene.openDialog`, `DocumentReaderScene`).
+- `thoughts.json` omits `lines`; ThoughtManager auto-resolves passage `thoughts/<id>`.
+- `---` on its own line = explicit page break in all text types; auto-split at 10 lines is the safety net.
+- `[[label->target]]` links parse into `WordsPassage.links` (reserved for a future dialog runner) and are stripped from display text.
+- Missing key → console warning + `[missing words: <key>]` in-game, never a crash.
+- Key namespaces: `thoughts/<id>`, `documents/<slug>`, `dialog/<character>/<slug>`.
 
 ---
 

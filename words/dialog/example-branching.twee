@@ -1,0 +1,26 @@
+:: dialog/example/gate-warden [dialog example]
+The old gate warden doesn't look up from the ledger.
+"Nobody crosses. Not since the sealing."
+
+[[Ask about the sealing->dialog/example/sealing]]
+[[Show the lab keycard->dialog/example/keycard]]
+[[Leave->dialog/example/leave]]
+
+:: dialog/example/sealing [dialog example]
+"The alarm did its job. Everyone ran.
+Everyone who could hear it, anyway."
+
+He finally looks at you.
+"You slept through it, didn't you."
+
+[[Show the lab keycard->dialog/example/keycard]]
+[[Leave->dialog/example/leave]]
+
+:: dialog/example/keycard [dialog example]
+He turns the keycard over twice.
+"Clearance circle. Then you already know
+more than I'm allowed to say."
+
+:: dialog/example/leave [dialog example]
+He goes back to the ledger.
+The pen hasn't had ink in weeks.

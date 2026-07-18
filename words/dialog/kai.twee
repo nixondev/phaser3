@@ -1,0 +1,48 @@
+:: dialog/kai/backstory-1 [dialog kai]
+Kai — Former Lab Technician
+"I remember now. The city sealed overnight.
+We were mid-experiment."
+
+:: dialog/kai/backstory-2 [dialog kai]
+"Whatever you used... it worked. I've been
+looping for weeks. Trapped in that corner."
+
+"I know this city's systems. I want out too."
+
+:: dialog/kai/backstory-3 [dialog kai]
+"Tell me what you need. I'll help."
+
+[Kai hands you a Lab Keycard and a Compound Sample.]
+[Kai joins your cause. They are waiting for you at Apartment 4B.]
+
+:: dialog/kai/to-player-first [dialog kai]
+Kai studies you for a long moment.
+"You haven't said a word since you woke me.
+Do you even have a voice?"
+---
+"...I wasn't sure. Until now."
+
+Your own voice. Rusted from disuse.
+The first words spoken in the sealed city.
+---
+Kai nods slowly, as if that settled something.
+"Then we can start telling each other the truth."
+
+:: dialog/kai/to-player-again [dialog kai]
+"Still not much of a talker. That's fine.
+The city says enough for both of you."
+
+:: dialog/kai/to-maren [dialog kai]
+"Maren. You kept the community room going."
+
+"Kept it counted, anyway. You're the lab one —
+Kai, right? You people never bought from us.
+Everything came in on the company trucks."
+---
+Kai is quiet for a moment.
+"Those trucks stopped a week before the sirens.
+I remember thinking that was strange."
+
+:: dialog/kai/waiting [dialog kai]
+"I'm ready when you are.
+This city won't explain itself."
