@@ -3,6 +3,8 @@ import type { EditorScene } from './EditorScene';
 import type { EditorPreviewState } from '@systems/RoomEditorManager';
 import { DARKNESS_CONFIG } from '@utils/Constants';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
+import { getEdgeShadowSettings, setEdgeShadowSettings } from '@systems/EdgeShadows';
+import { EdgeShadowSettings } from '@/types';
 
 /**
  * DOM panel controller for the editor scene.
@@ -522,6 +524,49 @@ export class EditorUI {
     if (valEl)  valEl.textContent = this.currentDarkLevel.toFixed(2);
   }
 
+  // ── Edge shadows (global setting — rooms.json top-level) ─────────────────
+
+  private syncShadowControls(): void {
+    const s = getEdgeShadowSettings();
+    const flag = (id: string, label: string, on: boolean) => {
+      const btn = this.root.querySelector<HTMLButtonElement>(`#editor-shadow-${id}`);
+      if (!btn) return;
+      btn.classList.toggle('active', on);
+      btn.textContent = `${label}: ${on ? 'on' : 'off'}`;
+    };
+    flag('enabled', 'shadows', s.enabled);
+    flag('blurOn', 'blur', s.blurOn);
+    flag('shadowOn', 'drop shadow', s.shadowOn);
+    flag('borderOn', 'border', s.borderOn);
+
+    this.root.querySelectorAll<HTMLInputElement>('.shadow-slider').forEach(slider => {
+      const key = slider.dataset.key as keyof EdgeShadowSettings;
+      const val = s[key] as number;
+      slider.value = String(val);
+      const valEl = this.root.querySelector<HTMLSpanElement>(`#editor-sh-${key}-val`);
+      if (valEl) valEl.textContent = Number.isInteger(parseFloat(slider.step)) ? String(val) : val.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+    });
+  }
+
+  /** Live-apply a settings change and rebuild the preview (if shadows are showing). */
+  private applyShadows(patch: Partial<EdgeShadowSettings>): void {
+    setEdgeShadowSettings(patch);
+    this.syncShadowControls();
+    (this.scene as unknown as { refreshEdgeShadows?: () => void }).refreshEdgeShadows?.();
+  }
+
+  private saveShadows(): void {
+    const s = getEdgeShadowSettings();
+    fetch('/__editor/save-shadows', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(s),
+    })
+      .then(r => r.json())
+      .then(() => this.setStatus(`Shadows saved (${s.enabled ? 'on' : 'off'}, blur ${s.blurOn ? 'on' : 'off'}, drop ${s.shadowOn ? 'on' : 'off'})`))
+      .catch(e => this.setStatus(`Shadow save failed: ${e}`));
+  }
+
   private saveDark(): void {
     if (!this.currentRoomId) return;
     fetch('/__editor/save-dark', {
@@ -678,6 +723,26 @@ export class EditorUI {
       this.scene.game.canvas.focus();
     });
 
+    // Edge-shadow controls (global) — toggles + one handler per slider, all data-driven
+    this.syncShadowControls();
+    const flagKeys: (keyof EdgeShadowSettings)[] = ['enabled', 'blurOn', 'shadowOn', 'borderOn'];
+    for (const key of flagKeys) {
+      const btn = this.root.querySelector<HTMLButtonElement>(`#editor-shadow-${key}`);
+      btn?.addEventListener('click', () => {
+        this.applyShadows({ [key]: !getEdgeShadowSettings()[key] });
+        this.saveShadows();
+        this.scene.game.canvas.focus();
+      });
+    }
+    this.root.querySelectorAll<HTMLInputElement>('.shadow-slider').forEach(slider => {
+      const key = slider.dataset.key as keyof EdgeShadowSettings;
+      slider.addEventListener('input', () => this.applyShadows({ [key]: parseFloat(slider.value) }));
+      slider.addEventListener('change', () => {
+        this.saveShadows();
+        this.scene.game.canvas.focus();
+      });
+    });
+
     const darkSlider = this.root.querySelector<HTMLInputElement>('#editor-dark-level');
     darkSlider?.addEventListener('input', () => {
       this.currentDarkLevel = parseFloat(darkSlider.value);
@@ -737,6 +802,70 @@ export class EditorUI {
         <h3>Rooms</h3>
         <div id="editor-room-list" class="room-list"></div>
         <div class="hint">Add: <code>npm run new-room &lt;id&gt;</code></div>
+        <h3>Shadows (global)</h3>
+        <div class="row col" style="gap:6px">
+          <button class="btn shadow-flag" id="editor-shadow-enabled">shadows: on</button>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Alpha: <span id="editor-sh-alpha-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="alpha" id="editor-sh-alpha" min="0" max="1" step="0.05">
+          </div>
+          <button class="btn shadow-flag" id="editor-shadow-blurOn">blur: on</button>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Quality: <span id="editor-sh-blurQuality-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="blurQuality" id="editor-sh-blurQuality" min="0" max="2" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Blur X: <span id="editor-sh-blurX-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="blurX" id="editor-sh-blurX" min="0" max="100" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Blur Y: <span id="editor-sh-blurY-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="blurY" id="editor-sh-blurY" min="0" max="100" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Strength: <span id="editor-sh-blurStrength-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="blurStrength" id="editor-sh-blurStrength" min="0" max="2" step="0.05">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Steps: <span id="editor-sh-blurSteps-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="blurSteps" id="editor-sh-blurSteps" min="1" max="16" step="1">
+          </div>
+          <button class="btn shadow-flag" id="editor-shadow-shadowOn">drop shadow: off</button>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Dir X: <span id="editor-sh-shadowX-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="shadowX" id="editor-sh-shadowX" min="-15" max="15" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Dir Y: <span id="editor-sh-shadowY-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="shadowY" id="editor-sh-shadowY" min="-15" max="15" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Decay: <span id="editor-sh-shadowDecay-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="shadowDecay" id="editor-sh-shadowDecay" min="0" max="0.05" step="0.001">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Power: <span id="editor-sh-shadowPower-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="shadowPower" id="editor-sh-shadowPower" min="0" max="2" step="0.05">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Samples: <span id="editor-sh-shadowSamples-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="shadowSamples" id="editor-sh-shadowSamples" min="1" max="12" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Intensity: <span id="editor-sh-shadowIntensity-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="shadowIntensity" id="editor-sh-shadowIntensity" min="0" max="1" step="0.05">
+          </div>
+          <button class="btn shadow-flag" id="editor-shadow-borderOn">border: off</button>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Width: <span id="editor-sh-borderWidth-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="borderWidth" id="editor-sh-borderWidth" min="1" max="10" step="1">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">B-Alpha: <span id="editor-sh-borderAlpha-val"></span></span>
+            <input type="range" class="shadow-slider" data-key="borderAlpha" id="editor-sh-borderAlpha" min="0" max="1" step="0.05">
+          </div>
+          <div class="hint">Preview with <kbd>G</kbd> actual view</div>
+        </div>
       </aside>
 
       <main id="editor-center"></main>
@@ -888,6 +1017,7 @@ export class EditorUI {
       #editor-overlay .btn-warn:hover { background: #5a3030; }
       #editor-overlay .weather-btn.active { background: #2d3a2d; border-color: #4f6d4f; color: #d4f1d4; }
       #editor-overlay #editor-dark-toggle.active { background: #1a1a2e; border-color: #4a4a8f; color: #aaaaff; }
+      #editor-overlay .shadow-flag.active { background: #1a1a2e; border-color: #4a4a8f; color: #aaaaff; }
       #editor-overlay #editor-actual-view.active { background: #2d3a2d; border-color: #4f6d4f; color: #d4f1d4; }
 
       /* Tool / mode active states — green = "you are in this mode" */

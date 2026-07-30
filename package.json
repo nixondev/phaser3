@@ -31,6 +31,8 @@
   "devDependencies": {
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/cli": "^2.11.1",
+    "@types/node": "^26.1.1",
+    "puppeteer-core": "^25.3.0",
     "spessasynth_core": "^4.2.13",
     "spessasynth_lib": "^4.2.15",
     "typescript": "^5.4.0",

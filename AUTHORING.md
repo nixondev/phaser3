@@ -298,42 +298,35 @@ Multi-page content: separate pages with `\n---\n` in the `content` string.
 
 ## Afflicted / NPC fields
 
-Minimal snippet (just a wandering NPC):
+Identity and placement are separate (see `CHARACTERS.md`). Rooms hold
+**placements**; named cast members live in `src/data/characters.json`.
+
+**Extra** — anonymous ambience/hazard, never joins the roster. Placement only:
 
 ```json
 {
   "id": "wanderer-1",
-  "name": "Unknown Resident",
-  "role": "Unnamed",
   "x": 200, "y": 160,
-  "behaviorLoop": "wander"
+  "behaviorLoop": "wander",
+  "afflictedSheet": "afflicted-walker"
 }
 ```
 
-Full curable character that joins the roster:
+**Cast member** — curable, recoverable, playable. Registry entry in
+`characters.json`:
 
 ```json
-{
-  "id": "kai",
+"kai": {
   "name": "Kai",
   "role": "Former Lab Technician",
-  "x": 400, "y": 500,
-  "behaviorLoop": "wander",
-
-  "variant": "walker",
-  "playerVariant": "ranger",
-
-  "associatedRoom": "house-b",
+  "sheet": "player-ranger",
+  "afflictedSheet": "afflicted-walker",
+  "home": { "room": "house-b", "x": 576, "y": 320 },
   "curedClue": "...mumbles about the north block...",
-
-  "holds": [
-    { "name": "Security Badge", "tileFrame": 8, "category": "key", "keyId": "security-badge" }
-  ],
-
   "backstory": [
-    "First dialog page shown when E is pressed after cure.",
-    "Second page.",
-    "Final page — triggers full recovery and item handover."
+    "words:dialog/kai/backstory-1",
+    "words:dialog/kai/backstory-2",
+    "words:dialog/kai/backstory-3"
   ],
   "recoveredItems": [
     { "name": "Lab Keycard", "tileFrame": 8, "category": "key", "keyId": "lab-door" },
@@ -342,25 +335,33 @@ Full curable character that joins the roster:
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `variant` | Afflicted sprite: `walker`, `bloater`, `crawler`, `husk`, `spitter`, `brute`, `ashrot`, `veinhost` |
-| `playerVariant` | Player sprite on character switch (omit for no swap) |
-| `associatedRoom` | Room where they reappear after cure (disappear from original room) |
-| `curedClue` | Short line in the cure dialog — hints where to find them |
-| `holds` | Items **dropped into the world at their position when cured** |
-| `backstory` | Array of dialog pages (E × n). Final page triggers recovery + item handover |
-| `recoveredItems` | Items placed in their personal inventory on recovery (by convention: two) |
+…plus a placement in their spawn room (the home room gets **no** entry —
+the engine spawns them at `home` once cured):
+
+```json
+{ "id": "kai", "character": "kai", "x": 400, "y": 500, "behaviorLoop": "wander",
+  "holds": [ { "name": "Security Badge", "tileFrame": 8, "category": "key", "keyId": "security-badge" } ] }
+```
+
+| Field | Lives on | Description |
+|-------|----------|-------------|
+| `sheet` | character | Human spritesheet basename = texture key. Assign via `$` editor ASSIGN button. |
+| `afflictedSheet` | character / extra placement | Afflicted spritesheet basename |
+| `home` | character | `{room,x,y}` where they reappear after cure (omit → recover in place) |
+| `curedClue` | character | Short line in the cure dialog — hints where to find them |
+| `holds` | placement | Items **dropped into the world at their position when cured** |
+| `backstory` | character | Dialog pages (E × n) in the home room. Final page triggers recovery + item handover |
+| `recoveredItems` | character | Items placed in their personal inventory on recovery (by convention: two) |
+| behavior fields | placement | `behaviorLoop`, `wanderRadius`, `speedMult`, pace/circle params, `soundRoom` |
 
 ### Inter-character conversation
 
 A recovered resident can have a unique conversation that only triggers when a
 specific other recovered resident is also in the same room. This uses three
-optional fields on the afflicted def:
+optional fields on the character's `characters.json` entry:
 
 ```json
-{
-  "id": "kai",
+"kai": {
   ...
   "conversationRequires": "maren",
   "conversationDialog": [
@@ -375,7 +376,7 @@ optional fields on the afflicted def:
 
 | Field | Description |
 |-------|-------------|
-| `conversationRequires` | `id` of the roster member that must be present in the same room |
+| `conversationRequires` | slug of the roster member that must be present in the same room |
 | `conversationDialog` | Multi-page dialog shown when the partner is present (E advances pages) |
 | `conversationProduces` | Effects applied once when the conversation reaches its final page |
 
@@ -385,11 +386,10 @@ If the partner is absent, pressing E on the resident shows the default solo resp
 
 `conversationProduces` fire only on the **first** completion of the conversation (per session). Subsequent re-readings show the full dialog again but do not re-apply effects. Use `setFlag` / `clearFlag` in produces — `dropItem` will not duplicate on re-read but is better placed elsewhere.
 
-The same NPC should appear in **both** the original room (wandering) and
-`associatedRoom` (as a cured spawn destination). The `associatedRoom`
-copy only needs `id`, `name`, `role`, `x`, `y`, `behaviorLoop`,
-`variant`, `playerVariant`, and `associatedRoom` — the engine reads full
-fields from all defs and uses the most complete one.
+A cast member appears **only once** in rooms.json — their spawn placement.
+The post-cure location is the `home` field on their `characters.json` entry;
+the engine generates the home spawn from the registry (the old duplicate
+`associatedRoom` entry mechanism is gone).
 
 ### Entity holds
 

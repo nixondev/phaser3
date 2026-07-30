@@ -7,6 +7,7 @@ import { RainEffect } from '@systems/RainEffect';
 import { CloudEffect } from '@systems/CloudEffect';
 import { Afflicted } from '@entities/Afflicted';
 import { InputManager } from '@systems/InputManager';
+import { buildEdgeShadows } from '@systems/EdgeShadows';
 
 const TEXT_DEPTH = DEPTH.UI;
 
@@ -16,7 +17,7 @@ export class MenuScene extends Phaser.Scene {
   private cloudEffect: CloudEffect | null = null;
   private wanderers: Afflicted[] = [];
   private collisionLayer: Phaser.Tilemaps.TilemapLayer | null = null;
-  private edgeShadows?: Phaser.GameObjects.RenderTexture;
+  private edgeShadows?: Phaser.GameObjects.RenderTexture[];
   private inputManager!: InputManager;
 
   constructor() {
@@ -201,7 +202,7 @@ export class MenuScene extends Phaser.Scene {
       this.cloudEffect = null;
       for (const a of this.wanderers) a.destroy();
       this.wanderers = [];
-      this.edgeShadows?.destroy();
+      this.edgeShadows?.forEach(rt => rt.destroy());
       this.edgeShadows = undefined;
     });
 
@@ -263,44 +264,21 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private buildEdgeShadows(mapWidth: number, mapHeight: number): void {
-    if (this.edgeShadows) {
-      this.edgeShadows.destroy();
-      this.edgeShadows = undefined;
-    }
+    this.edgeShadows?.forEach(rt => rt.destroy());
+    this.edgeShadows = undefined;
     if (!this.collisionLayer) return;
 
-    const TILE = GAME_CONFIG.TILE_SIZE;
-    const roomW = mapWidth * TILE;
-    const roomH = mapHeight * TILE;
-
-    const rt = this.add.renderTexture(0, 0, roomW, roomH);
-    rt.setOrigin(0, 0);
-    rt.setDepth(DEPTH.GROUND + 0.5);
-    rt.setScrollFactor(0);
-    rt.setAlpha(0.75);
-
-    const gfx = this.make.graphics();
-    gfx.fillStyle(0x000000, 1);
-
-    const layerData = this.collisionLayer.layer.data;
-    for (let ty = 0; ty < mapHeight; ty++) {
-      for (let tx = 0; tx < mapWidth; tx++) {
-        const tile = layerData[ty]?.[tx];
-        if (!tile || tile.index < 0) continue;
-        gfx.fillRect(tx * TILE, ty * TILE, TILE, TILE);
-      }
-    }
-
-    rt.draw(gfx, 0, 0);
-    gfx.destroy();
-
-    try {
-      rt.postFX.addBlur(1000 , 125, 125, 0.5, 0x000000, 55);
-    } catch (e) {
-      console.warn('[MenuScene] postFX unavailable, edge blur skipped:', e);
-    }
-
-    this.edgeShadows = rt;
+    // Shared builder; the title screen keeps its much heavier vignette blur.
+    const rts = buildEdgeShadows(this, {
+      widthTiles: mapWidth,
+      heightTiles: mapHeight,
+      collisionData: this.collisionLayer.layer.data,
+    }, {
+      style: 'blocks',
+      scrollFactor: 0,
+      fx: { quality: 1000, x: 125, y: 125, strength: 0.5, color: 0x000000, steps: 55 },
+    });
+    this.edgeShadows = rts.length ? rts : undefined;
   }
 
   private makeWanderer(id: string, x: number, y: number, sheet: string, tint: number): Afflicted {

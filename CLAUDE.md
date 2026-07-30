@@ -91,7 +91,10 @@ Boot → Preload → Menu → Game (+ UI in parallel) → [Pause overlay]
 | `src/entities/Entity.ts` | Base sprite class |
 | `src/utils/Constants.ts` | All numeric constants |
 | `src/types/index.ts` | All TypeScript interfaces and types |
-| `src/data/rooms.json` | World definition — rooms, doors, items, afflicted, interactables |
+| `src/data/rooms.json` | World definition — rooms, doors, items, afflicted placements, interactables |
+| `src/data/characters.json` | **Cast registry** — all character identity: name, sheets, home, backstory, recovered items (see `CHARACTERS.md`) |
+| `src/systems/CharacterRegistry.ts` | characters.json lookups + dev startup audit (dangling refs) |
+| `src/entities/animHelpers.ts` | `ensureCharacterAnims()` — single source of `<sheet>-walk/idle-<dir>` anims |
 | `vite.config.ts` | Build config + dev-only `editorSavePlugin` |
 
 ---
@@ -131,7 +134,14 @@ Future state to support: character roster / active character, per-character item
 
 On overlap (agitated/wandering): **death**. The active character's items scatter in a ring at the death site, `died/<id>` world flag is set, they leave the roster permanently, and control passes to the next roster member (succession — you resume wherever that body was parked). Only when no other playable character exists: full run reset (`rsm.reset()` + scene restart).
 
-**`associatedRoom` rule:** afflicted excluded from `associatedRoom` until cured; after cure they only appear there and vanish from their spawn room. Same entry can exist in both rooms — engine gates by cure state.
+**Home rule:** a cast member's post-cure location is the `home` field on
+their `characters.json` entry — the home room has no afflicted placement.
+Uncured: they spawn at their room placement. Cured: the placement empties
+and they spawn at `home` (human sheet) until recovered. See `CHARACTERS.md`
+and `AFFLICTED.md`.
+
+**Cure path:** all cure triggers (touch; Ctrl+Shift+C debug; future bait)
+route through `GameScene.applyCure(afflicted, cureSlot, source)`.
 
 ---
 
@@ -155,7 +165,7 @@ On overlap (agitated/wandering): **death**. The active character's items scatter
 
 ```text
 Display:    320×240 @ 3× zoom, 16px tiles
-Player:     320 px/s, 8 fps animations
+Player:     220 px/s, 8 fps animations
 Interact:   28px range
 Inventory:  2 rows × 6 cols, 14px slots
 Depth:      GROUND=0, ENTITIES=10, PLAYER=20, ABOVE=30, HIDDEN=31,
@@ -209,6 +219,12 @@ Rooms in `src/data/rooms.json`. Every tilemap: three layers `Ground`, `Collision
 | `dark` | `boolean` | Full-screen darkness overlay |
 | `reverb` | string | `city` / `indoor` / `sewer` / `hospital` / `substation` |
 | `reverbMix` | 0..1 | Reverb wet mix (default 0.3) |
+
+**Global (top-level in rooms.json):** `edgeShadows: { enabled, alpha, blur }` —
+the collision edge-shadow look, shared by game / `?`-editor actual view / title
+screen via `src/systems/EdgeShadows.ts` (one builder; also shadows
+color-collision cells). Tunable live in the `?` editor's left-panel Shadows
+section (persists via `/__editor/save-shadows`).
 
 **Dev note:** Adding a new `rooms.json` field requires server restart + hard browser refresh. Changing existing values hot-reloads.
 
@@ -278,14 +294,23 @@ All tilesets: 8-column PNG grid of 64×64 tiles at `public/assets/tilemaps/<name
 
 ## Debug & Editor Systems
 
-| Key | System | Purpose |
-| **F1** | DebugManager | HUD: FPS, room, music, reverb, coords, GIDs |
-| **F3** | DebugManager | Visual overlays: collision (red), doors (cyan), afflicted radii |
+All debug/editor tooling lives in the standalone editors opened from the
+title screen — there are no in-game function-key tools (early idea, removed).
+
+| Key (title screen) | System | Purpose |
 | **#** | TileEditorScene | Standalone tile atlas / painter |
-| **$** | SpriteEditorScene | Spritesheet editor: paint 64×64 frames, live walk-cycle preview (hover pane + WASD) |
+| **$** | SpriteEditorScene | Spritesheet editor: paint 64×64 frames, live walk-cycle preview (hover pane + WASD), ASSIGN button → give the open sheet to a cast member (characters.json) |
 | **?** | EditorScene | Main room editor: objects, layers (1-7), color tiles, smart save |
 
-**Global shortcuts (active debug HUD or Editor):**
+Inside the `?` editor, DebugManager provides **F1** (info HUD), **F3**
+(visual overlays: collision, doors, afflicted radii), **F4** (warp picker),
+**F5** (map-graph dump).
+
+In-game there are exactly two debug chords (both TODO: remove before ship):
+**Ctrl+Shift+/** unlocks all doors, **Ctrl+Shift+C** cures all afflicted in
+the room (via `applyCure`, so home doors unlock and held items drop).
+
+**Shortcuts inside the ? editor (F1 HUD active):**
 
 | Key | Action |
 |-----|--------|
@@ -320,6 +345,8 @@ Resize and drag (Select mode) shift all fields (doors, interactables, afflicted)
 - POST /__editor/save-object -> patches {roomId, kind, id, x, y, spawnX, spawnY} in src/data/rooms.json (supports door, interactable, fflicted)
 - GET /__editor/list-sprites -> lists public/assets/sprites/*.png with dimensions (sprite editor dropdown)
 - POST /__editor/save-sprite?sheet=<name> -> writes public/assets/sprites/<name>.png (sprite editor SAVE)
+- POST /__editor/save-character {id, field: sheet|afflictedSheet, value} -> patches src/data/characters.json (sprite editor ASSIGN)
+- POST /__editor/save-shadows {enabled, alpha, blur} -> writes rooms.json top-level edgeShadows (? editor Shadows panel)
 ---
 
 ## Adding Content
@@ -334,8 +361,20 @@ Resize and drag (Select mode) shift all fields (doors, interactables, afflicted)
 1. Add to interactable's `item` field or dropped item list in `rooms.json`.
 2. Set `name`, `tileFrame`, `category`. Add `keyId` if key, `useTarget` if usable.
 
-### Afflicted
-1. Add to room's `afflicted` array in `rooms.json`, or drag in F2 editor (auto-saves x/y).
+### Character (cast member — curable/playable)
+1. Add an entry to `src/data/characters.json`: `name`, `role`, `sheet`,
+   `afflictedSheet`, `home {room,x,y}`, `curedClue`, `backstory` (words keys),
+   `recoveredItems`, `traits`.
+2. Place them in a room: `{ "id": "<slug>", "character": "<slug>", "x", "y",
+   "behaviorLoop" }` in that room's `afflicted` array. No home-room entry.
+3. Write their prose under `words/dialog/<slug>/`; conversations reference
+   the slug as `npc`. The startup audit flags dangling references.
+4. Sheets: assign via the `$` editor's ASSIGN button, or edit the fields.
+
+### Afflicted extra (anonymous ambience/hazard)
+1. Add to room's `afflicted` array in `rooms.json`: `id`, `x`, `y`,
+   `behaviorLoop`, `afflictedSheet` (no `character` field), or place via the
+   `?` editor (drag auto-saves x/y).
 2. If new behavior needed: modify `src/entities/Afflicted.ts`.
 
 ---

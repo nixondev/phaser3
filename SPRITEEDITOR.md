@@ -11,6 +11,19 @@ Status: **IMPLEMENTED** (2026-07-03). Typecheck + production build pass;
 dev endpoints verified via HTTP round-trip. Remaining manual checks are the
 in-browser passes marked ⚠ in the task list (A4, B5, E5-part, F3-part).
 
+Post-v1 additions (see `EDITORGUIDE.md` § Sprite editor for usage):
+- 2026-07-17: **ASSIGN button** — give the open sheet to a cast member in
+  `characters.json` (see `CHARACTERS.md` §6).
+- 2026-07-18: **Box select** — SEL tool + CUT button; selection-aware
+  COPY/PASTE/NUDGE. Paste floats the region at its source coordinates,
+  selected for pixel nudging; stamps on click-away/tool/frame switch/SAVE
+  (skip-transparent composite). Lives in `PixelCanvas` (`selRect`/`floating`),
+  so the `#` tile editor can opt in later by adding the tool button.
+- 2026-07-19: **NEW / DUPE buttons** — create a blank sheet or fork the open
+  one under a new name, in-editor (via the existing save-sprite endpoint;
+  dropdown updates in place, new sheet opens immediately). This lifts the
+  v1 non-goal "no creating new sheets from the editor".
+
 ---
 
 ## 1. Goals

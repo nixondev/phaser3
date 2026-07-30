@@ -10,7 +10,7 @@ export const GAME_CONFIG = {
 } as const;
 
 export const PLAYER_CONFIG = {
-  SPEED: 320,
+  SPEED: 220,
   ANIM_FPS: 8,
 } as const;
 

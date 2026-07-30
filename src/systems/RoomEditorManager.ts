@@ -6,6 +6,7 @@ import { WeatherManager } from './WeatherManager';
 import { DEPTH, DARKNESS_CONFIG, GAME_CONFIG, LAYER_NAMES, LayerName, LAYER_CONFIG } from '@utils/Constants';
 import { DoorDefinition, InputState, InteractableDef } from '@/types';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
+import { buildEdgeShadows } from './EdgeShadows';
 
 /** Current editor selection, rendered as a thumbnail/swatch in the DOM panel. */
 export type EditorPreviewState =
@@ -38,7 +39,7 @@ export class RoomEditorManager {
   private toastText!: Phaser.GameObjects.Text;
   private toastTween?: Phaser.Tweens.Tween;
   private darknessHint!: Phaser.GameObjects.Rectangle;
-  private edgeShadows?: Phaser.GameObjects.RenderTexture;
+  private edgeShadows?: Phaser.GameObjects.RenderTexture[];
   private weatherManager!: WeatherManager;
 
   // Tile palette (P key) — rendered as a DOM canvas in EditorUI
@@ -403,7 +404,7 @@ export class RoomEditorManager {
       this.buildEdgeShadows();
       this.weatherManager.updateForRoom(roomId);
     } else {
-      this.edgeShadows?.destroy();
+      this.edgeShadows?.forEach(rt => rt.destroy());
       this.edgeShadows = undefined;
       this.weatherManager.destroy();
     }
@@ -1733,42 +1734,27 @@ export class RoomEditorManager {
   }
 
   private buildEdgeShadows(): void {
-    this.edgeShadows?.destroy();
+    this.edgeShadows?.forEach(rt => rt.destroy());
     this.edgeShadows = undefined;
 
     const map = this.roomManager.getMap();
     const collisionLayer = this.roomManager.getCollisionLayer();
     if (!map || !collisionLayer) return;
 
-    const TILE = GAME_CONFIG.TILE_SIZE;
-    const rt = this.scene.add.renderTexture(0, 0, map.width * TILE, map.height * TILE);
-    rt.setOrigin(0, 0).setDepth(DEPTH.GROUND + 0.5).setAlpha(0.6);
+    // Shared builder — the actual view previews exactly what the game renders.
+    const rts = buildEdgeShadows(this.scene, {
+      widthTiles: map.width,
+      heightTiles: map.height,
+      collisionData: collisionLayer.layer.data,
+      tilesets: map.tilesets,
+      colorCells: this.roomManager.getCollisionColorCells(),
+    });
+    this.edgeShadows = rts.length ? rts : undefined;
+  }
 
-    const layerData = collisionLayer.layer.data;
-    for (let ty = 0; ty < map.height; ty++) {
-      for (let tx = 0; tx < map.width; tx++) {
-        const tile = layerData[ty]?.[tx];
-        if (!tile || tile.index <= 0) continue;
-        let owningTs = map.tilesets[0];
-        for (const ts of map.tilesets) {
-          if (ts.firstgid <= tile.index) owningTs = ts;
-        }
-        if (!owningTs) continue;
-        const img = this.scene.make.image({ x: 0, y: 0, key: tilesetSpritesheetKey(owningTs.name), frame: tile.index - owningTs.firstgid, add: false });
-        img.setTint(0x000000).setOrigin(0, 0);
-        rt.draw(img, tx * TILE, ty * TILE);
-        img.destroy();
-      }
-    }
-
-    try {
-      rt.postFX.addShadow(3, -3, 0.006, 1, 0x000000, 15, 0.5);
-      rt.postFX.addBlur(100, 20, 20, 0.2, 0x000000, 5);
-    } catch (e) {
-      console.warn('[Editor] postFX unavailable, edge shadows will render without blur:', e);
-    }
-
-    this.edgeShadows = rt;
+  /** Live-rebuild after a shadow-settings change (no-op unless shadows are showing). */
+  public refreshEdgeShadows(): void {
+    if (this.edgeShadows || this.actualView) this.buildEdgeShadows();
   }
 
   /** Call when the active room changes so actual-view atmosphere and palette stay accurate. */
@@ -2171,7 +2157,7 @@ export class RoomEditorManager {
     this.doorHandles?.destroy();
     this.toastText?.destroy();
     this.darknessHint?.destroy();
-    this.edgeShadows?.destroy();
+    this.edgeShadows?.forEach(rt => rt.destroy());
     this.weatherManager?.destroy();
     this.pairPickerContainer?.destroy();
   }

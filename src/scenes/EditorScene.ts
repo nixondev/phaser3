@@ -96,6 +96,11 @@ export class EditorScene extends Phaser.Scene {
     this.loadRoomInternal(roomId);
   }
 
+  /** Used by EditorUI's shadow controls — rebuild edge shadows after a settings change. */
+  public refreshEdgeShadows(): void {
+    this.editorManager.refreshEdgeShadows();
+  }
+
   /** Used by DebugManager L key. */
   public reloadRoom(): void {
     const id = this.roomManager.getCurrentRoomId();

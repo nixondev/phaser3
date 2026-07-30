@@ -1,6 +1,15 @@
 import Phaser from 'phaser';
 
-export type PixelTool = 'pencil' | 'eraser' | 'eyedropper' | 'fill' | 'blur';
+export type PixelTool = 'pencil' | 'eraser' | 'eyedropper' | 'fill' | 'blur' | 'select';
+
+/** A rectangular pixel region on the clipboard. x/y = where it was taken from. */
+export interface RegionClip {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pixels: Uint32Array;
+}
 export type PenStyle = 'classic' | 'feltTip' | 'pencil' | 'marker' | 'spraypaint';
 
 export interface PixelCanvasConfig {
@@ -74,6 +83,17 @@ export class PixelCanvas {
   private undoStack: Uint32Array[] = [];
   private redoStack: Uint32Array[] = [];
   private static readonly MAX_HISTORY = 50;
+
+  // ── Box selection ──
+  /** Normalized inclusive selection rect in pixel coords, or null. */
+  private selRect: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  private selDragAnchor: { x: number; y: number } | null = null;
+  /**
+   * A region hovering above the canvas (after paste, or after the first nudge
+   * of a selection). Not part of `pixels` until stamped down. `lifted` floats
+   * pushed history when the pixels were cut out; pasted floats push at stamp.
+   */
+  private floating: { clip: RegionClip; lifted: boolean } | null = null;
 
   constructor(cfg: PixelCanvasConfig) {
     this.cfg = cfg;
@@ -175,6 +195,22 @@ export class PixelCanvas {
       }
     }
 
+    // Floating selection layer (paste / lifted region in flight)
+    if (this.floating) {
+      const f = this.floating.clip;
+      for (let j = 0; j < f.h; j++) {
+        for (let i = 0; i < f.w; i++) {
+          const x = f.x + i, y = f.y + j;
+          if (x < 0 || x >= size || y < 0 || y >= size) continue;
+          const argb = f.pixels[j * f.w + i];
+          const a = (argb >>> 24) & 0xff;
+          if (a === 0) continue;
+          g.fillStyle(argb & 0x00ffffff, a / 255);
+          g.fillRect(DRAW_X + x * DRAW_SCALE, DRAW_Y + y * DRAW_SCALE, DRAW_SCALE, DRAW_SCALE);
+        }
+      }
+    }
+
     // 8-pixel grid lines
     g.lineStyle(1, 0x555577, 0.35);
     for (let i = 0; i <= size; i += 8) {
@@ -183,6 +219,19 @@ export class PixelCanvas {
     }
     g.lineStyle(1, 0x4488cc, 1);
     g.strokeRect(this.containerX, this.containerY, this.containerSize, this.containerSize);
+
+    // Selection marquee
+    if (this.selRect) {
+      const r = this.selRect;
+      const mx = DRAW_X + r.x0 * DRAW_SCALE;
+      const my = DRAW_Y + r.y0 * DRAW_SCALE;
+      const mw = (r.x1 - r.x0 + 1) * DRAW_SCALE;
+      const mh = (r.y1 - r.y0 + 1) * DRAW_SCALE;
+      g.fillStyle(0xffdd44, this.floating ? 0.10 : 0.06);
+      g.fillRect(mx, my, mw, mh);
+      g.lineStyle(1, this.floating ? 0xffaa22 : 0xffdd44, 1);
+      g.strokeRect(mx, my, mw, mh);
+    }
   }
 
   // ─── Input ─────────────────────────────────────────────────────────────────
@@ -205,6 +254,22 @@ export class PixelCanvas {
         }
       }
       if (p.middleButtonDown()) { this.quickEyedrop(p.x, p.y); return; }
+      if (this.tool === 'select') {
+        if (p.rightButtonDown()) {
+          this.stampFloating();
+          this.selRect = null;
+          this.redraw();
+          this.cfg.onStatus?.('selection cleared');
+          return;
+        }
+        this.stampFloating();
+        this.selDragAnchor = this.toPixel(p.x, p.y);
+        this.selRect = { x0: this.selDragAnchor.x, y0: this.selDragAnchor.y, x1: this.selDragAnchor.x, y1: this.selDragAnchor.y };
+        this.isDrawing = true;
+        this.drawingPointerId = p.id;
+        this.redraw();
+        return;
+      }
       if (p.rightButtonDown())  {
         this.pushHistory();
         this.isDrawing = true;
@@ -230,6 +295,18 @@ export class PixelCanvas {
         this.pinchStartScale = 0;
       }
       if (!this.isDrawing || !p.isDown || this.drawingPointerId !== p.id) return;
+      if (this.tool === 'select') {
+        if (!this.selDragAnchor) return;
+        const cur = this.toPixel(p.x, p.y);
+        this.selRect = {
+          x0: Math.min(this.selDragAnchor.x, cur.x),
+          y0: Math.min(this.selDragAnchor.y, cur.y),
+          x1: Math.max(this.selDragAnchor.x, cur.x),
+          y1: Math.max(this.selDragAnchor.y, cur.y),
+        };
+        this.redraw();
+        return;
+      }
       if (p.rightButtonDown()) { this.quickErase(p.x, p.y); return; }
       this.applyTool(p.x, p.y);
     });
@@ -237,6 +314,11 @@ export class PixelCanvas {
       if (this.drawingPointerId === null || this.drawingPointerId === p.id) {
         this.isDrawing = false;
         this.drawingPointerId = null;
+        if (this.tool === 'select' && this.selDragAnchor) {
+          this.selDragAnchor = null;
+          const r = this.getSelectionRect();
+          if (r) this.cfg.onStatus?.(`selected ${r.w}×${r.h} at (${r.x},${r.y})`);
+        }
       }
       const pinch = this.getActiveTouchPair();
       if (!pinch) {
@@ -357,6 +439,9 @@ export class PixelCanvas {
   }
 
   private inDrawArea(sx: number, sy: number): boolean {
+    // The zoomed draw plane can extend (clipped, invisible) beneath other UI —
+    // only clicks inside the visible container are canvas clicks.
+    if (!this.inContainer(sx, sy)) return false;
     return sx >= this.cfg.x && sx < this.cfg.x + this.drawSize &&
            sy >= this.cfg.y && sy < this.cfg.y + this.drawSize;
   }
@@ -570,6 +655,134 @@ export class PixelCanvas {
     }
   }
 
+  // ─── Box selection & region clipboard ─────────────────────────────────────
+
+  /** Clamped (not wrapped) screen→pixel mapping for selection dragging. */
+  private toPixel(sx: number, sy: number): { x: number; y: number } {
+    const x = Phaser.Math.Clamp(Math.floor((sx - this.cfg.x) / this.cfg.scale), 0, this.size - 1);
+    const y = Phaser.Math.Clamp(Math.floor((sy - this.cfg.y) / this.cfg.scale), 0, this.size - 1);
+    return { x, y };
+  }
+
+  hasSelection(): boolean {
+    return this.selRect !== null;
+  }
+
+  getSelectionRect(): { x: number; y: number; w: number; h: number } | null {
+    if (!this.selRect) return null;
+    const r = this.selRect;
+    return { x: r.x0, y: r.y0, w: r.x1 - r.x0 + 1, h: r.y1 - r.y0 + 1 };
+  }
+
+  /** Stamp any floating region, then drop the marquee. */
+  clearSelection(): void {
+    this.stampFloating();
+    this.selRect = null;
+    this.redraw();
+  }
+
+  /** Copy the selected region (the floating buffer if one is in flight). */
+  copyRegion(): RegionClip | null {
+    if (this.floating) {
+      const f = this.floating.clip;
+      return { x: f.x, y: f.y, w: f.w, h: f.h, pixels: f.pixels.slice() };
+    }
+    const r = this.getSelectionRect();
+    if (!r) return null;
+    const pixels = new Uint32Array(r.w * r.h);
+    for (let j = 0; j < r.h; j++) {
+      for (let i = 0; i < r.w; i++) {
+        pixels[j * r.w + i] = this.px(r.x + i, r.y + j);
+      }
+    }
+    return { x: r.x, y: r.y, w: r.w, h: r.h, pixels };
+  }
+
+  /** Copy + clear the selected region (one undo step). A floating region is taken as-is. */
+  cutRegion(): RegionClip | null {
+    if (this.floating) {
+      const f = this.floating.clip;
+      const clip = { x: f.x, y: f.y, w: f.w, h: f.h, pixels: f.pixels.slice() };
+      // Lifted floats already cut their pixels out (history pushed at lift);
+      // pasted floats never touched the canvas. Either way, just drop it.
+      this.floating = null;
+      this.selRect = null;
+      this.redraw();
+      this.cfg.onChange?.();
+      return clip;
+    }
+    const clip = this.copyRegion();
+    const r = this.getSelectionRect();
+    if (!clip || !r) return null;
+    this.pushHistory();
+    for (let j = 0; j < r.h; j++) {
+      for (let i = 0; i < r.w; i++) {
+        this.setPx(r.x + i, r.y + j, 0);
+      }
+    }
+    this.redraw();
+    this.cfg.onChange?.();
+    return clip;
+  }
+
+  /**
+   * Paste a region as a floating layer at its recorded position and select
+   * it — nudge to place, click elsewhere / switch tool / switch frame to stamp.
+   */
+  pasteRegion(clip: RegionClip): void {
+    this.stampFloating();
+    this.floating = {
+      clip: { x: clip.x, y: clip.y, w: clip.w, h: clip.h, pixels: clip.pixels.slice() },
+      lifted: false,
+    };
+    this.selRect = { x0: clip.x, y0: clip.y, x1: clip.x + clip.w - 1, y1: clip.y + clip.h - 1 };
+    this.redraw();
+    this.cfg.onStatus?.(`pasted ${clip.w}×${clip.h} — nudge to place, click away to stamp`);
+  }
+
+  /**
+   * Move the selection one step; lifts it into a floating layer on first
+   * move (the whole lift→move→stamp is a single undo step). Returns false
+   * when there is no selection (caller falls back to whole-frame behavior).
+   */
+  nudgeSelection(dx: number, dy: number): boolean {
+    if (!this.floating) {
+      const clip = this.copyRegion();
+      const r = this.getSelectionRect();
+      if (!clip || !r) return false;
+      this.pushHistory();
+      for (let j = 0; j < r.h; j++) {
+        for (let i = 0; i < r.w; i++) {
+          this.setPx(r.x + i, r.y + j, 0);
+        }
+      }
+      this.floating = { clip, lifted: true };
+    }
+    const f = this.floating.clip;
+    f.x = Phaser.Math.Clamp(f.x + dx, -(f.w - 1), this.size - 1);
+    f.y = Phaser.Math.Clamp(f.y + dy, -(f.h - 1), this.size - 1);
+    this.selRect = { x0: f.x, y0: f.y, x1: f.x + f.w - 1, y1: f.y + f.h - 1 };
+    this.redraw();
+    return true;
+  }
+
+  /** Composite the floating layer down (transparent pixels don't punch holes). */
+  stampFloating(): void {
+    if (!this.floating) return;
+    const { clip, lifted } = this.floating;
+    if (!lifted) this.pushHistory(); // lifted floats pushed history when cut out
+    for (let j = 0; j < clip.h; j++) {
+      for (let i = 0; i < clip.w; i++) {
+        const argb = clip.pixels[j * clip.w + i];
+        if (((argb >>> 24) & 0xff) === 0) continue;
+        this.setPx(clip.x + i, clip.y + j, argb);
+      }
+    }
+    this.floating = null;
+    this.redraw();
+    this.cfg.onChange?.();
+  }
+
   // ─── History ──────────────────────────────────────────────────────────────
 
   /** Snapshot the current pixels before a mutation (stroke start, fill, paste…). */
@@ -585,6 +798,21 @@ export class PixelCanvas {
   }
 
   undo(): void {
+    // Undo while a region floats = cancel the float. Lifted regions restore
+    // to where they were cut from (via the snapshot pushed at lift time).
+    if (this.floating) {
+      const wasLifted = this.floating.lifted;
+      this.floating = null;
+      this.selRect = null;
+      if (wasLifted) {
+        const snap = this.undoStack.pop();
+        if (snap) this.pixels.set(snap);
+      }
+      this.redraw();
+      this.cfg.onChange?.();
+      this.cfg.onStatus?.('floating region cancelled');
+      return;
+    }
     const prev = this.undoStack.pop();
     if (!prev) {
       this.cfg.onStatus?.('nothing to undo');

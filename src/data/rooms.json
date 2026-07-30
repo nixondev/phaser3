@@ -1353,5 +1353,27 @@
       ]
     }
   },
-  "startRoom": "protag-house"
+  "startRoom": "protag-house",
+  "edgeShadows": {
+    "enabled": true,
+    "blurOn": true,
+    "shadowOn": true,
+    "borderOn": false,
+    "alpha": 1,
+    "blurQuality": 0,
+    "blurX": 14,
+    "blurY": 14,
+    "blurStrength": 0.3,
+    "blurSteps": 7,
+    "shadowX": 0,
+    "shadowY": 15,
+    "shadowDecay": 0.01,
+    "shadowPower": 0.75,
+    "shadowSamples": 6,
+    "shadowIntensity": 0.35,
+    "borderWidth": 1,
+    "borderJitter": 8,
+    "borderGrain": 20,
+    "borderAlpha": 1
+  }
 }

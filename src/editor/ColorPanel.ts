@@ -403,10 +403,33 @@ export class ColorPanel {
     this.scene.add.text(this.cfg.x, this.cfg.recentY, 'RECENT', {
       fontSize: '14px', color: '#556677', fontFamily: 'monospace',
     });
+    const SY = this.cfg.recentY + 16;
     for (let i = 0; i < ColorPanel.MAX_RECENT; i++) {
-      this.recentGfxList.push(this.scene.add.graphics());
+      const g = this.scene.add.graphics();
+      // Interactive exactly once — removeInteractive + setInteractive on the
+      // same frame (the old per-redraw rebind) is unreliable in Phaser and
+      // left random swatches dead. The handler reads the slot at click time.
+      const sx = this.cfg.x + i * (SWATCH + 2);
+      g.setInteractive(new Phaser.Geom.Rectangle(sx, SY, SWATCH, SWATCH), Phaser.Geom.Rectangle.Contains);
+      g.on('pointerdown', () => this.pickRecent(i));
+      this.recentGfxList.push(g);
     }
     this.redrawRecentColors();
+  }
+
+  private pickRecent(i: number): void {
+    const argb = this.recentColors[i];
+    if (argb === undefined) return;
+    this.color = argb;
+    if (this.hexInputEl) this.hexInputEl.value = this.colorToHex8(argb);
+    this.syncHsvFromColor(argb);
+    this.redrawColorPicker();
+    const matchIdx = PALETTE.indexOf(argb);
+    if (matchIdx >= 0) this.updateSwatchHighlight(matchIdx);
+    else { this.swatchHighlight?.destroy(); this.swatchHighlight = undefined; }
+    const hex = (argb & 0x00ffffff).toString(16).padStart(6, '0');
+    const a = ((argb >>> 24) & 0xff) / 255;
+    this.cfg.onStatus?.(`color: #${hex}  α:${Math.round(a * 100)}%`);
   }
 
   private addToRecent(color: number): void {
@@ -419,14 +442,13 @@ export class ColorPanel {
     this.redrawRecentColors();
   }
 
+  /** Repaint only — interactivity is bound once in buildRecentColors. */
   private redrawRecentColors(): void {
     const SY = this.cfg.recentY + 16;
     for (let i = 0; i < ColorPanel.MAX_RECENT; i++) {
       const g = this.recentGfxList[i];
       if (!g) continue;
       g.clear();
-      g.removeAllListeners();
-      g.removeInteractive();
       const sx = this.cfg.x + i * (SWATCH + 2);
       const argb = this.recentColors[i];
       if (argb === undefined) {
@@ -445,18 +467,6 @@ export class ColorPanel {
         }
         g.lineStyle(1, 0x334455, 1);
         g.strokeRect(sx, SY, SWATCH, SWATCH);
-        g.setInteractive(new Phaser.Geom.Rectangle(sx, SY, SWATCH, SWATCH), Phaser.Geom.Rectangle.Contains);
-        g.on('pointerdown', () => {
-          this.color = argb;
-          if (this.hexInputEl) this.hexInputEl.value = this.colorToHex8(argb);
-          this.syncHsvFromColor(argb);
-          this.redrawColorPicker();
-          const matchIdx = PALETTE.indexOf(argb);
-          if (matchIdx >= 0) this.updateSwatchHighlight(matchIdx);
-          else { this.swatchHighlight?.destroy(); this.swatchHighlight = undefined; }
-          const hex = (argb & 0x00ffffff).toString(16).padStart(6, '0');
-          this.cfg.onStatus?.(`color: #${hex}  α:${Math.round(a * 100)}%`);
-        });
       }
     }
   }

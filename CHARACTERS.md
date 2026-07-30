@@ -7,9 +7,10 @@ and an in-game **skin picker** for assigning spritesheets to characters.
 Companion docs: `CLAUDE.md` (architecture), `SPRITEEDITOR.md` (the `$` editor
 this feeds), `AUTHORING.md`, `WORDS.md`.
 
-Status: **Group A implemented** (2026-07-17) — registry, data migration, and
-engine rewiring are in; typecheck + production build pass. Groups B–D
-(cure-path consolidation, F4 picker, docs) pending. Manual pass A7 pending.
+Status: **Groups A–D implemented** (2026-07-17) — registry, data migration,
+engine rewiring, cure-path consolidation, `$`-editor ASSIGN picker, and docs
+are in; typecheck + production build pass; save-character endpoint verified
+live. Manual passes A7 (mostly covered in play), B3, C5 pending.
 
 Deviations from plan, group A:
 - The startup audit checks refs/rooms/npc ids synchronously; sheet-PNG
@@ -197,7 +198,7 @@ awareness). If adopted, a per-character or global `cureStyle` field decides
 | `src/scenes/PreloadScene.ts` | hardcoded variant arrays deleted. Prod: load every sheet referenced by registry + extra placements. Dev: additionally fetch `/__editor/list-sprites` and load **all** 256×256 sheets (so the picker and freshly painted sheets need no code edits). |
 | `src/scenes/SpriteEditorScene.ts` | preview anims optionally reuse the helper (keep `spriteedit-` prefix) |
 | `src/types/index.ts` | `CharacterDef`, placement types; dead fields removed |
-| `src/systems/DebugManager.ts` | C routes through `applyCure`; F4 picker (§6) |
+| `src/systems/DebugManager.ts` | C cure-all routes through `applyCure` (live host) or state-level parity path (`?` editor host) |
 
 Note: `Afflicted` line count shrinks; `Player.ts` loses all three
 `tk === 'player'` branches. UIScene avatars already render from
@@ -205,33 +206,33 @@ Note: `Afflicted` line count shrinks; `Player.ts` loses all three
 
 ---
 
-## 6. F4 skin picker (dev tool — the test drive)
+## 6. Character assignment (ASSIGN button, `$` sprite editor)
 
-Debug overlay on **F4** (fits F1/F3 family; letter keys collide with
-movement):
+*(Redesigned during implementation: the original plan put a live skin picker
+on an in-game debug key. Direction call: debug/authoring tools live in the
+standalone editors with visible buttons, not in-game keys or chords. The
+in-game piece that survived is Ctrl+Shift+C cure-all — §4.)*
 
-- Lists every loaded 256×256 sheet with a live idle-frame thumbnail
-  (dev loads all sheets per §5, so the list is complete and synchronous).
-- **Target = active character** by default; while open, clicking an
-  afflicted or parked body in the room retargets the picker to them.
-- Apply (click/Enter): live swap — `ensureCharacterAnims` + `setSheet`, and
-  update the roster member's `textureKey` in `RoomStateManager` so it
-  survives room transitions, character switches, and the HUD avatar row.
-  Session-only until saved.
-- **SAVE**: persists the assignment —
-  - cast target → `POST /__editor/save-character` patches `sheet` (or
-    `afflictedSheet` when the target is currently afflicted) in
-    `characters.json`;
-  - extra target → existing `save-object` (extended) patches
-    `afflictedSheet` on the placement in `rooms.json`.
-- No prefix policing: any sheet can be test-driven on anyone (that's the
-  point of creation mode). Save writes whatever was chosen.
+- The `$` sprite editor has an **ASSIGN** button (left column, under NUDGE).
+  It opens a modal list of every cast member from `characters.json`, one row
+  per slot: `<name> (slug) — human` and `— afflicted` (protagonist: human
+  only), each showing the slot's currently assigned sheet.
+- Clicking a row assigns the **currently open sheet** to that slot via
+  `POST /__editor/save-character` and mirrors the change into the bundled
+  registry so the picker stays accurate within the session.
+- The game shows the change on the next full reload (same reload-to-see
+  workflow as sprite SAVE). No live in-game swapping.
+- ESC closes the picker (guarded ahead of the editor's exit-to-menu ESC).
+- No prefix policing: any 256×256 sheet can be assigned to any slot.
+- Extras (inline `afflictedSheet` on rooms.json placements) are edited as
+  data / via the `?` editor snippet, not through this picker.
 
-### New dev endpoint (`vite.config.ts`, `editorSavePlugin`)
+### Dev endpoint (`vite.config.ts`, `editorSavePlugin`)
 
-`POST /__editor/save-character?id=<slug>` — body `{ field, value }`,
-`field ∈ {sheet, afflictedSheet}`; validates slug against registry file,
-atomic tmp+rename write of `characters.json`. Add to the startup hint line.
+`POST /__editor/save-character` — body `{ id, field, value }`,
+`field ∈ {sheet, afflictedSheet}`; validates the character exists, the value
+against the sprite-name regex, and that `<value>.png` exists in the sprites
+dir; atomic tmp+rename write of `characters.json`. In the startup hint line.
 
 ---
 
@@ -259,29 +260,35 @@ Ordered; each group is a commit. Per project testing policy: verify with
       still works, title-screen extras still wander.
 
 ### B. Cure path consolidation
-- [ ] B1. `applyCure(afflicted, item, source)`; collision + interact paths
+- [x] B1. `applyCure(afflicted, item, source)`; collision + interact paths
       call it.
-- [ ] B2. Debug C routes through `applyCure` (doors + held drops now fire).
-- [ ] B3. ⚠ MANUAL: C in city-street cures both cast members and unlocks
-      their house doors.
+- [x] B2. Debug C routes through `applyCure` (doors + held drops now fire).
+- [ ] B3. ⚠ MANUAL: in the `?` editor (DebugManager's only host — there is
+      no in-game debug HUD), warp to city-street, F1 then C: both cast
+      members become cured in RSM and their house doors unlock; then start
+      the game and confirm they're standing in their houses.
 
-### C. F4 skin picker
-- [ ] C1. `/__editor/save-character` endpoint (+ `save-object` accepts
-      `afflictedSheet` for extras).
-- [ ] C2. Picker overlay: sheet list + thumbnails, click-to-retarget,
-      live apply (RSM write-through).
-- [ ] C3. SAVE wiring per target kind; status feedback; non-dev fallback
-      message ("save only available in dev mode").
-- [ ] C4. ⚠ MANUAL: paint a scratch sheet in `$`, save, reload, F4-apply to
-      protag, walk through a door and switch characters (skin persists),
-      SAVE, reload page, skin is the new default.
+### C. Character assignment (redesigned — see §6)
+- [x] C1. `/__editor/save-character` endpoint. Verified live: no-op write ok;
+      invalid field / missing sheet PNG / unknown character all 400.
+- [x] C2. ASSIGN button + modal cast list in `$` sprite editor; per-slot
+      current-sheet display; ESC-close guard ahead of editor exit.
+- [x] C3. Assignment POST + `applySheetAssignment` local mirror; status
+      feedback; non-dev fallback message.
+- [x] C4. In-game Ctrl+Shift+C cure-all (sibling of Ctrl+Shift+/ unlock-all,
+      same TODO-remove-before-ship block) routing through `applyCure`.
+- [ ] C5. ⚠ MANUAL: paint a scratch sheet in `$`, SAVE, ASSIGN → kai (human),
+      reload, cure+recover Kai in game: he wears the new sheet at home and
+      as the playable character.
 
 ### D. Documentation
-- [ ] D1. `CLAUDE.md`: characters.json in Key Files + state section, F4 in
-      debug table, endpoint list, Adding Content → "Character" recipe.
-- [ ] D2. `AUTHORING.md`: authoring a cast member (registry entry +
-      placement + words namespaces).
-- [ ] D3. Update this file's status line.
+- [x] D1. `CLAUDE.md`: characters.json/registry/animHelpers in Key Files,
+      home rule + applyCure notes, debug section rewritten (editors host all
+      tooling; two in-game chords), endpoint list, Adding Content →
+      "Character" + "Extra" recipes.
+- [x] D2. `AUTHORING.md`: Afflicted/NPC section rewritten for the
+      registry/placement split; duplicate-entry guidance removed.
+- [x] D3. Status line updated; §6 rewritten to match the built design.
 
 ### Deferred / v2 (do not build now)
 - Bait curing (`cureStyle`) — socket exists via `applyCure` source param.
@@ -297,7 +304,7 @@ Ordered; each group is a commit. Per project testing policy: verify with
    deleting either of the old duplicate entries is impossible because they
    no longer exist.
 2. The protagonist's skin is a data field; changing `player`'s `sheet` in
-   `characters.json` (by hand or via F4 SAVE) changes the game with no code
+   `characters.json` (by hand or via the `$` editor's ASSIGN) changes the game with no code
    edit.
 3. Full cure→home→recovery progression behaves exactly as before the
    refactor (A7 pass).

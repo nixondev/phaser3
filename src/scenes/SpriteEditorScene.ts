@@ -5,8 +5,9 @@ import { MusicManager } from '@systems/MusicManager';
 import { HtmlOverlay } from '@/editor/htmlOverlay';
 import { ColorPanel } from '@/editor/ColorPanel';
 import { EditorButtons } from '@/editor/EditorButtons';
-import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle } from '@/editor/PixelCanvas';
-import { collectReferencedSheets, getCharacter } from '@systems/CharacterRegistry';
+import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle, RegionClip } from '@/editor/PixelCanvas';
+import { collectReferencedSheets, getCharacter, allCharacters, applySheetAssignment } from '@systems/CharacterRegistry';
+import { drawCharacterShadow, CHARACTER_SHADOW_FEET_OFFSET } from '@entities/Entity';
 
 const FRAME     = 64;    // frame size in px
 const SHEET_PX  = 256;   // sheet is 256×256
@@ -38,6 +39,7 @@ const DEFAULT_UI_DEPTH = 3;
 const PREV_X = 940, PREV_Y = 100;
 const PREV_W = 330, PREV_H = 300;
 const PREV_SPRITE_SCALE = 3;             // 64 → 192px character
+const PREV_SPRITE_SCALE_ACTUAL = 1;      // matches in-game ENTITY_WORLD_SCALE (native 64px)
 const AUTO_CYCLE_MS = 1200;
 const PREV_CTRL_Y = PREV_Y + PREV_H + 12;            // 412
 
@@ -78,7 +80,10 @@ export class SpriteEditorScene extends Phaser.Scene {
   private dirty = false;
   private pendingSwitch?: string;
   private pendingSwitchAt = 0;
-  private clipboard: Uint32Array | null = null;
+  private clipboard:
+    | { kind: 'frame'; pixels: Uint32Array }
+    | { kind: 'region'; clip: RegionClip }
+    | null = null;
   private onionOn = false;
 
   private dropdownEl?: HTMLSelectElement;
@@ -100,12 +105,18 @@ export class SpriteEditorScene extends Phaser.Scene {
   private dirtyMark!: Phaser.GameObjects.Text;
   private saveBtnTint?: (col?: number) => void;
   private pendingExitAt = 0;
+  private assignContainer?: Phaser.GameObjects.Container;
 
   // preview state
   private previewSprite!: Phaser.GameObjects.Sprite;
+  private previewShadow!: Phaser.GameObjects.Graphics;
   private previewBorder!: Phaser.GameObjects.Graphics;
   private previewBg!: Phaser.GameObjects.Graphics;
   private previewBgIdx = 0;
+  private previewPaused = false;
+  private pauseBtnGfx!: Phaser.GameObjects.Graphics;
+  private previewActualSize = false;
+  private actualSizeBtnGfx!: Phaser.GameObjects.Graphics;
   private previewHint!: Phaser.GameObjects.Text;
   private previewLabel!: Phaser.GameObjects.Text;
   private fpsLabel!: Phaser.GameObjects.Text;
@@ -237,6 +248,10 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.fpsLabel.setText(`fps ${this.fps}`);
     this.previewSprite.anims.stop();
     this.buildAnims(this.fps);
+    if (this.previewPaused) {
+      this.previewSprite.setFrame(this.selectedFrame);
+      return;
+    }
     this.previewSprite.play(`spriteedit-walk-${this.previewDir}`, true);
   }
 
@@ -300,6 +315,83 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.dropdownEl = el;
   }
 
+  /** Insert a freshly created sheet into the dropdown, keeping it sorted. */
+  private addSheetOption(name: string): void {
+    if (!this.dropdownEl) return;
+    const names = Array.from(this.dropdownEl.options).map(o => o.value);
+    if (names.includes(name)) return;
+    names.push(name);
+    names.sort();
+    this.dropdownEl.innerHTML = '';
+    for (const n of names) {
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.text = n;
+      this.dropdownEl.appendChild(opt);
+    }
+  }
+
+  /**
+   * NEW / DUPE: write a fresh 256×256 PNG to disk via the save-sprite
+   * endpoint and open it. DUPE forks the open sheet's current (even
+   * unsaved) state; the original file on disk is left untouched.
+   */
+  private async createSheet(duplicate: boolean): Promise<void> {
+    if (!import.meta.env.DEV) {
+      this.statusText.setText('sheet creation only available in dev mode');
+      return;
+    }
+    if (duplicate && !this.currentSheet) {
+      this.statusText.setText('no sheet loaded to duplicate');
+      return;
+    }
+    if (!duplicate && this.dirty) {
+      this.statusText.setText('unsaved changes — SAVE (or discard) before creating a new sheet');
+      return;
+    }
+    const name = (window.prompt(
+      duplicate ? `duplicate "${this.currentSheet}" as (letters, digits, dashes):` : 'new sheet name (letters, digits, dashes):',
+    ) ?? '').trim();
+    if (!name) return;
+    if (!/^[a-z0-9][a-z0-9-]*$/i.test(name)) {
+      this.statusText.setText('invalid name — letters, digits, dashes only');
+      return;
+    }
+    if (this.dropdownEl && Array.from(this.dropdownEl.options).some(o => o.value === name)) {
+      this.statusText.setText(`sheet "${name}" already exists`);
+      return;
+    }
+
+    this.canvas.stampFloating();
+    const cv = document.createElement('canvas');
+    cv.width = SHEET_PX;
+    cv.height = SHEET_PX;
+    if (duplicate) cv.getContext('2d')!.drawImage(this.workTex.canvas, 0, 0);
+
+    const blob = await new Promise<Blob | null>(res => cv.toBlob(res, 'image/png'));
+    if (!blob) {
+      this.statusText.setText('png encode failed');
+      return;
+    }
+    try {
+      const resp = await fetch(`/__editor/save-sprite?sheet=${encodeURIComponent(name)}`, {
+        method: 'POST',
+        body: blob,
+      });
+      if (!resp.ok) {
+        this.statusText.setText(`create failed: ${resp.status}`);
+        return;
+      }
+    } catch (e) {
+      this.statusText.setText(`create failed: ${String(e)}`);
+      return;
+    }
+
+    this.addSheetOption(name);
+    await this.loadSheet(name);
+    this.statusText.setText(`${duplicate ? 'duplicated to' : 'created'} ${name}.png ✓ — ASSIGN to a character when ready`);
+  }
+
   private trySelectSheet(name: string): void {
     if (name === this.currentSheet) return;
     const now = this.time.now;
@@ -315,6 +407,9 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private async loadSheet(name: string): Promise<void> {
+    // Stamp any floating region into the outgoing sheet before the work
+    // texture is rebuilt — a float must never land on the incoming sheet.
+    this.canvas?.stampFloating();
     this.statusText?.setText(`loading ${name}…`);
 
     let srcKey = name;
@@ -406,6 +501,8 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private selectFrame(i: number): void {
+    // Stamp any floating region into the outgoing frame first (syncs via onChange)
+    this.canvas?.stampFloating();
     this.selectedFrame = ((i % SHEET_FRAMES) + SHEET_FRAMES) % SHEET_FRAMES;
     const col = this.selectedFrame % SHEET_COLS;
     const row = Math.floor(this.selectedFrame / SHEET_COLS);
@@ -424,6 +521,11 @@ export class SpriteEditorScene extends Phaser.Scene {
 
     // pin the preview to the row being edited (until the pane is next hovered)
     this.pinnedDir = DIRS[row];
+
+    if (this.previewPaused) {
+      this.previewSprite?.setFrame(this.selectedFrame);
+      this.previewLabel?.setText(`paused — frame ${this.selectedFrame}`);
+    }
   }
 
   /** Writes the edit buffer into the work texture at the selected frame. */
@@ -490,6 +592,12 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.previewBorder = this.add.graphics();
     this.drawPreviewBorder(false);
 
+    // Contact shadow beneath the character — same look as in-game, so the
+    // preview reads the way the sprite will on the floor.
+    this.previewShadow = this.add.graphics();
+    drawCharacterShadow(this.previewShadow);
+    this.updatePreviewShadow();
+
     this.previewSprite = this.add.sprite(PREV_X + PREV_W / 2, PREV_Y + PREV_H / 2, WORK_KEY, 0)
       .setScale(PREV_SPRITE_SCALE);
 
@@ -508,6 +616,24 @@ export class SpriteEditorScene extends Phaser.Scene {
       fontSize: '16px', color: '#88aacc', fontFamily: 'monospace',
     }).setOrigin(0, 0.5);
     this.btn.make('+', PREV_X + 296, FY, 24, 24, 0x1c3c6e, () => this.setFps(this.fps + 1));
+
+    // pause — lock the preview to the selected frame (edits stay live)
+    this.pauseBtnGfx = this.add.graphics();
+    this.btn.draw(this.pauseBtnGfx, PREV_X + 330, FY, 40, 24, false);
+    this.add.text(PREV_X + 350, FY + 12, '⏸', {
+      fontSize: '16px', color: '#aaccff', fontFamily: 'monospace',
+    }).setOrigin(0.5).setDepth(2);
+    this.btn.bind(this.pauseBtnGfx, PREV_X + 330, FY, 40, 24, () => this.togglePreviewPause());
+
+    // actual-size toggle — matches the in-game ENTITY_WORLD_SCALE (native 64px)
+    // vs the enlarged 3x default used for painting/preview clarity.
+    const asx = PREV_X + PREV_W - 56, asy = PREV_Y + 4;
+    this.actualSizeBtnGfx = this.add.graphics();
+    this.btn.draw(this.actualSizeBtnGfx, asx, asy, 24, 24, this.previewActualSize);
+    this.add.text(asx + 12, asy + 12, '1:1', {
+      fontSize: '11px', color: '#aaccff', fontFamily: 'monospace',
+    }).setOrigin(0.5).setDepth(2);
+    this.btn.bind(this.actualSizeBtnGfx, asx, asy, 24, 24, () => this.toggleActualSize());
 
     // backdrop cycle — light sprites are invisible on the default dark pane
     const bgBtn = this.add.graphics();
@@ -544,6 +670,41 @@ export class SpriteEditorScene extends Phaser.Scene {
     }
   }
 
+  /** Toggle the preview sprite between the enlarged 3x view and true in-game (1x, native 64px) size. */
+  private toggleActualSize(): void {
+    this.previewActualSize = !this.previewActualSize;
+    const asx = PREV_X + PREV_W - 56, asy = PREV_Y + 4;
+    this.btn.draw(this.actualSizeBtnGfx, asx, asy, 24, 24, this.previewActualSize);
+    this.previewSprite.setScale(this.previewActualSize ? PREV_SPRITE_SCALE_ACTUAL : PREV_SPRITE_SCALE);
+    this.updatePreviewShadow();
+    this.statusText?.setText(this.previewActualSize ? 'preview: actual size (1x)' : 'preview: enlarged (3x)');
+  }
+
+  /** Size + park the contact shadow under the (stationary) preview sprite for the current zoom. */
+  private updatePreviewShadow(): void {
+    const scale = this.previewActualSize ? PREV_SPRITE_SCALE_ACTUAL : PREV_SPRITE_SCALE;
+    this.previewShadow.setScale(scale);
+    this.previewShadow.setPosition(
+      PREV_X + PREV_W / 2,
+      PREV_Y + PREV_H / 2 + CHARACTER_SHADOW_FEET_OFFSET * scale,
+    );
+  }
+
+  /** Pause locks the preview to the currently selected frame (still live-updating with edits). */
+  private togglePreviewPause(): void {
+    this.previewPaused = !this.previewPaused;
+    this.btn.draw(this.pauseBtnGfx, PREV_X + 330, PREV_CTRL_Y, 40, 24, this.previewPaused);
+    if (this.previewPaused) {
+      this.previewSprite.anims.stop();
+      this.previewSprite.setPosition(PREV_X + PREV_W / 2, PREV_Y + PREV_H / 2);
+      this.previewSprite.setFrame(this.selectedFrame);
+      this.previewLabel.setText(`paused — frame ${this.selectedFrame}`);
+    } else {
+      this.previewSprite.play(`spriteedit-walk-${this.previewDir}`, true);
+      this.previewLabel.setText(`auto — ${this.previewDir}`);
+    }
+  }
+
   private drawPreviewBorder(active: boolean): void {
     const g = this.previewBorder;
     g.clear();
@@ -555,6 +716,10 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.keys = this.input.keyboard!.addKeys('W,A,S,D,UP,LEFT,DOWN,RIGHT') as Record<string, Phaser.Input.Keyboard.Key>;
 
     this.input.keyboard!.on('keydown-ESC', () => {
+      if (this.assignContainer) {
+        this.closeAssignPicker();
+        return;
+      }
       const now = this.time.now;
       if (this.dirty && !(this.pendingExitAt > 0 && now - this.pendingExitAt < 3000)) {
         this.pendingExitAt = now;
@@ -582,8 +747,104 @@ export class SpriteEditorScene extends Phaser.Scene {
     });
   }
 
+  // ─── Character assignment picker (ASSIGN button) ─────────────────────────
+  // Assign the currently open sheet to a cast member's human or afflicted
+  // slot in characters.json. The game reflects it on next full reload.
+
+  private toggleAssignPicker(): void {
+    if (this.assignContainer) {
+      this.closeAssignPicker();
+      return;
+    }
+    if (!this.currentSheet) {
+      this.statusText.setText('no sheet loaded');
+      return;
+    }
+
+    const rows: { id: string; field: 'sheet' | 'afflictedSheet'; label: string }[] = [];
+    for (const [id, def] of Object.entries(allCharacters())) {
+      rows.push({ id, field: 'sheet', label: `${def.name} (${id}) — human` });
+      if (id !== 'player') {
+        rows.push({ id, field: 'afflictedSheet', label: `${def.name} (${id}) — afflicted` });
+      }
+    }
+
+    const W = 640;
+    const rowH = 34;
+    const H = 104 + rows.length * rowH;
+    const c = this.add.container(
+      GAME_CONFIG.WIDTH / 2 - W / 2,
+      GAME_CONFIG.HEIGHT / 2 - H / 2,
+    ).setDepth(2000);
+
+    const bg = this.add.rectangle(0, 0, W, H, 0x0d0d18, 0.96)
+      .setOrigin(0, 0).setStrokeStyle(2, 0x4499ff);
+    bg.setInteractive(); // swallow clicks under the panel
+    c.add(bg);
+    c.add(this.add.text(W / 2, 14, `ASSIGN  ${this.currentSheet}  →`, {
+      fontSize: '20px', color: '#aaccff', fontFamily: 'monospace', fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    c.add(this.add.text(W / 2, 42, 'click a slot — writes characters.json; reload the game to see it', {
+      fontSize: '14px', color: '#667799', fontFamily: 'monospace',
+    }).setOrigin(0.5, 0));
+
+    rows.forEach((row, i) => {
+      const y = 74 + i * rowH;
+      const current = allCharacters()[row.id]?.[row.field];
+      const already = current === this.currentSheet;
+      const rowBg = this.add.rectangle(12, y, W - 24, rowH - 6, 0x1a1a2e, 1)
+        .setOrigin(0, 0).setStrokeStyle(1, 0x333355);
+      rowBg.setInteractive({ useHandCursor: true });
+      rowBg.on('pointerover', () => rowBg.setFillStyle(0x24365a, 1));
+      rowBg.on('pointerout', () => rowBg.setFillStyle(0x1a1a2e, 1));
+      rowBg.on('pointerdown', () => void this.assignSheet(row.id, row.field));
+      c.add(rowBg);
+      c.add(this.add.text(24, y + 5, row.label, {
+        fontSize: '18px', color: already ? '#88dd88' : '#ccccdd', fontFamily: 'monospace',
+      }));
+      c.add(this.add.text(W - 24, y + 8, already ? '● current' : (current ?? '—'), {
+        fontSize: '14px', color: already ? '#88dd88' : '#556677', fontFamily: 'monospace',
+      }).setOrigin(1, 0));
+    });
+
+    c.add(this.add.text(W / 2, H - 28, 'ESC — close', {
+      fontSize: '14px', color: '#556677', fontFamily: 'monospace',
+    }).setOrigin(0.5, 0));
+    this.assignContainer = c;
+  }
+
+  private closeAssignPicker(): void {
+    this.assignContainer?.destroy();
+    this.assignContainer = undefined;
+  }
+
+  private async assignSheet(id: string, field: 'sheet' | 'afflictedSheet'): Promise<void> {
+    if (!import.meta.env.DEV) {
+      this.statusText.setText('assignment only available in dev mode');
+      return;
+    }
+    try {
+      const resp = await fetch('/__editor/save-character', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, field, value: this.currentSheet }),
+      });
+      if (resp.ok) {
+        applySheetAssignment(id, field, this.currentSheet);
+        this.statusText.setText(`assigned ${this.currentSheet} → ${id} (${field}) ✓  reload the game to see it`);
+        this.closeAssignPicker();
+      } else {
+        const err = await resp.json().catch(() => ({} as { error?: string }));
+        this.statusText.setText(`assign failed: ${(err as { error?: string }).error ?? resp.status}`);
+      }
+    } catch (e) {
+      this.statusText.setText(`assign failed: ${String(e)}`);
+    }
+  }
+
   update(_time: number, delta: number): void {
     if (!this.previewSprite) return;
+    if (this.previewPaused) return; // locked to the selected frame — no auto/drive
 
     const p = this.input.activePointer;
     const inPane = !this.canvas.drawing &&
@@ -656,6 +917,7 @@ export class SpriteEditorScene extends Phaser.Scene {
       { tool: 'eyedropper', label: 'EYE' },
       { tool: 'fill',       label: 'FILL' },
       { tool: 'blur',       label: 'BLUR' },
+      { tool: 'select',     label: 'SEL' },
     ];
 
     tools.forEach(({ tool, label }, i) => {
@@ -666,6 +928,7 @@ export class SpriteEditorScene extends Phaser.Scene {
         fontSize: '18px', color: '#aaccff', fontFamily: 'monospace',
       }).setOrigin(0.5).setDepth(2);
       this.btn.bind(g, bx, TOOLS_Y, BW, BH, () => {
+        if (this.canvas.tool === 'select' && tool !== 'select') this.canvas.stampFloating();
         this.canvas.tool = tool;
         this.refreshToolButtons();
       });
@@ -741,6 +1004,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     });
 
     this.btn.make('CLEAR', leftBlockX, leftMirrorY, BW, BH, 0x6e1c1c, () => {
+      this.canvas.clearSelection();
       this.canvas.pushHistory();
       this.canvas.pixels.fill(0);
       this.canvas.redraw();
@@ -749,8 +1013,14 @@ export class SpriteEditorScene extends Phaser.Scene {
     });
 
     this.btn.make('COPY', bx(0), UTILS_Y, BW, BH, 0x1c3c6e, () => {
-      this.clipboard = this.canvas.pixels.slice();
-      this.statusText.setText(`copied frame ${this.selectedFrame}`);
+      const region = this.canvas.copyRegion();
+      if (region) {
+        this.clipboard = { kind: 'region', clip: region };
+        this.statusText.setText(`copied ${region.w}×${region.h} region`);
+      } else {
+        this.clipboard = { kind: 'frame', pixels: this.canvas.pixels.slice() };
+        this.statusText.setText(`copied frame ${this.selectedFrame}`);
+      }
     });
     this.btn.make('PASTE', bx(1), UTILS_Y, BW, BH, 0x1c3c6e, () => this.pasteClipboard(false));
     this.btn.make('PASTE⇄', bx(2), UTILS_Y, BW, BH, 0x1c3c6e, () => this.pasteClipboard(true));
@@ -767,6 +1037,17 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.statusText.setText(`mirror ${this.canvas.mirrorX ? 'on' : 'off'}`);
     });
 
+    // Region cut — pairs with the SEL tool; COPY/PASTE are selection-aware
+    this.btn.make('CUT', mx + BW + GAP, leftMirrorY, BW, BH, 0x6e4c1c, () => {
+      const clip = this.canvas.cutRegion();
+      if (!clip) {
+        this.statusText.setText('no selection — use the SEL tool first');
+        return;
+      }
+      this.clipboard = { kind: 'region', clip };
+      this.statusText.setText(`cut ${clip.w}×${clip.h} region`);
+    });
+
     this.add.text(leftBlockX, leftNudgeY - 18, 'NUDGE', {
       fontSize: '15px', color: '#667788', fontFamily: 'monospace',
     });
@@ -774,6 +1055,21 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.btn.make('↑', leftBlockX + (LBW + LGAP) * 1, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(0, -1));
     this.btn.make('↓', leftBlockX + (LBW + LGAP) * 2, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(0, 1));
     this.btn.make('→', leftBlockX + (LBW + LGAP) * 3, leftNudgeY, LBW, BH, 0x2f4f5f, () => this.nudgeFrame(1, 0));
+
+    // Character assignment — give the open sheet to a cast member (characters.json)
+    const leftAssignY = leftNudgeY + 52;
+    this.add.text(leftBlockX, leftAssignY - 18, 'CHARACTER', {
+      fontSize: '15px', color: '#667788', fontFamily: 'monospace',
+    });
+    this.btn.make('ASSIGN', leftBlockX, leftAssignY, BW, BH, 0x3c2a6e, () => this.toggleAssignPicker());
+
+    // Sheet creation — a blank sheet, or fork the open sheet under a new name
+    const leftSheetY = leftAssignY + 52;
+    this.add.text(leftBlockX, leftSheetY - 18, 'SHEET', {
+      fontSize: '15px', color: '#667788', fontFamily: 'monospace',
+    });
+    this.btn.make('NEW', leftBlockX, leftSheetY, BW, BH, 0x1c5c3c, () => void this.createSheet(false));
+    this.btn.make('DUPE', leftBlockX + BW + GAP, leftSheetY, BW, BH, 0x1c5c3c, () => void this.createSheet(true));
 
     this.btn.make('UNDO', bx(4), UTILS_Y, BW, BH, 0x2f4f5f, () => this.canvas.undo());
     this.btn.make('REDO', bx(5), UTILS_Y, BW, BH, 0x2f4f5f, () => this.canvas.redo());
@@ -796,15 +1092,37 @@ export class SpriteEditorScene extends Phaser.Scene {
 
   private pasteClipboard(flipped: boolean): void {
     if (!this.clipboard) { this.statusText.setText('clipboard empty'); return; }
+
+    // Region paste: floats at its original coordinates, selected for nudging.
+    if (this.clipboard.kind === 'region') {
+      const src = this.clipboard.clip;
+      let clip = src;
+      if (flipped) {
+        const pixels = new Uint32Array(src.w * src.h);
+        for (let j = 0; j < src.h; j++) {
+          for (let i = 0; i < src.w; i++) {
+            pixels[j * src.w + i] = src.pixels[j * src.w + (src.w - 1 - i)];
+          }
+        }
+        clip = { ...src, pixels };
+      }
+      this.canvas.tool = 'select';
+      this.refreshToolButtons();
+      this.canvas.pasteRegion(clip);
+      return;
+    }
+
+    const framePixels = this.clipboard.pixels;
+    this.canvas.stampFloating();
     this.canvas.pushHistory();
     if (flipped) {
       for (let y = 0; y < FRAME; y++) {
         for (let x = 0; x < FRAME; x++) {
-          this.canvas.pixels[y * FRAME + x] = this.clipboard[y * FRAME + (FRAME - 1 - x)];
+          this.canvas.pixels[y * FRAME + x] = framePixels[y * FRAME + (FRAME - 1 - x)];
         }
       }
     } else {
-      this.canvas.pixels.set(this.clipboard);
+      this.canvas.pixels.set(framePixels);
     }
     this.canvas.redraw();
     this.syncFrameToTexture();
@@ -812,6 +1130,11 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private nudgeFrame(dx: number, dy: number): void {
+    if (this.canvas.nudgeSelection(dx, dy)) {
+      const r = this.canvas.getSelectionRect();
+      if (r) this.statusText.setText(`selection at (${r.x},${r.y}) — click away to stamp`);
+      return;
+    }
     this.canvas.pushHistory();
     const next = this.canvas.pixels.slice();
     for (let y = 0; y < FRAME; y++) {
@@ -828,6 +1151,7 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private flipFrameHorizontal(): void {
+    this.canvas.stampFloating();
     this.canvas.pushHistory();
     const next = this.canvas.pixels.slice();
     for (let y = 0; y < FRAME; y++) {
@@ -921,6 +1245,8 @@ export class SpriteEditorScene extends Phaser.Scene {
   // ─── Save ──────────────────────────────────────────────────────────────────
 
   private saveSheet(): void {
+    // Commit any floating region so what's saved is what's on screen
+    this.canvas.stampFloating();
     if (!import.meta.env.DEV) {
       this.statusText.setText('save only available in dev mode');
       return;

@@ -2,14 +2,18 @@
   "characters": {
     "player": {
       "name": "You",
-      "sheet": "player-good"
+      "sheet": "player-2"
     },
     "kai": {
       "name": "Kai",
       "role": "Former Lab Technician",
       "sheet": "player-ranger",
       "afflictedSheet": "afflicted-walker",
-      "home": { "room": "house-b", "x": 576, "y": 320 },
+      "home": {
+        "room": "house-b",
+        "x": 576,
+        "y": 320
+      },
       "curedClue": "...they look up and mumble something about the north block... the smell of chemicals... a lab coat...",
       "backstory": [
         "words:dialog/kai/backstory-1",
@@ -35,7 +39,11 @@
       "role": "Local Shopkeeper",
       "sheet": "player-rogue",
       "afflictedSheet": "afflicted-walker",
-      "home": { "room": "house-c", "x": 640, "y": 640 },
+      "home": {
+        "room": "house-c",
+        "x": 640,
+        "y": 640
+      },
       "curedClue": "...they whisper about the community room... counting shelves... the logbook...",
       "backstory": [
         "words:dialog/maren/backstory-1",

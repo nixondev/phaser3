@@ -5,6 +5,8 @@ import { DEPTH, GAME_CONFIG, INTERACT_CONFIG, USE_MIDI_MUSIC, AUDIO_CONFIG } fro
 import { InputState } from '@/types';
 import { MusicManager } from './MusicManager';
 import { AudioManager } from './AudioManager';
+import { Afflicted } from '@entities/Afflicted';
+import { getCharacter } from './CharacterRegistry';
 
 export class DebugManager {
   private scene: Phaser.Scene;
@@ -243,12 +245,54 @@ export class DebugManager {
       console.log('All doors in room unlocked');
     }
 
-    // Cure all afflicted in room (C)
+    // Cure all afflicted in room (C) — same world state as real cures
+    // (home doors unlock, held items drop), minus the narrative dialog.
     if (Phaser.Input.Keyboard.JustDown(this.keys.C)) {
-      const room = this.roomManager.getCurrentRoomDef();
-      room.afflicted?.forEach(aff => this.stateManager.cureResident(aff.id));
-      (this.scene as any).reloadRoom(); // Reload to reflect visual changes
-      console.log('All residents in room cured');
+      const gs = this.scene as any;
+      let count = 0;
+
+      if (typeof gs.applyCure === 'function') {
+        // Live host (GameScene): route through the real cure path.
+        const group = gs.afflictedGroup as Phaser.GameObjects.Group;
+        for (const child of [...group.getChildren()]) {
+          const a = child as Afflicted;
+          if (!a.active) continue;
+          const status = a.getStatus();
+          if (status === 'cured' || status === 'recovered') continue;
+          gs.applyCure(a, null, 'debug');
+          count++;
+        }
+      } else {
+        // State-only host (? editor): apply the same effects directly to RSM.
+        const room = this.roomManager.getCurrentRoomDef();
+        for (const p of room.afflicted ?? []) {
+          const stateId = p.character ?? p.id;
+          if (this.stateManager.isResidentCured(stateId)) continue;
+          this.stateManager.cureResident(stateId);
+          const home = p.character ? getCharacter(p.character)?.home : undefined;
+          if (home) this.unlockDoorsToRoom(home.room);
+          for (const item of p.holds ?? []) {
+            this.stateManager.addDroppedItem(room.id, {
+              item,
+              x: p.x,
+              y: p.y + 8,
+              instanceId: `holds-${item.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            });
+          }
+          count++;
+        }
+        if (typeof gs.reloadRoom === 'function') gs.reloadRoom();
+      }
+      console.log(`Debug cure: ${count} afflicted cured in room`);
+    }
+  }
+
+  /** Mirror of GameScene.unlockDoorsToRoom for the state-only debug host. */
+  private unlockDoorsToRoom(targetRoomId: string): void {
+    for (const room of Object.values(RoomManager.getRoomsData().rooms)) {
+      for (const door of room.doors) {
+        if (door.targetRoom === targetRoomId) this.stateManager.unlockDoor(door.id);
+      }
     }
   }
   

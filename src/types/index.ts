@@ -255,10 +255,50 @@ export interface RoomDefinition {
   tilesets?: string[];
 }
 
+/**
+ * Global edge-shadow look — rooms.json top-level `edgeShadows`.
+ * Two optional postFX passes over the black collision silhouette:
+ * a directional drop shadow (offset = light direction) and a blur.
+ */
+export interface EdgeShadowSettings {
+  enabled: boolean;
+  /** RenderTexture alpha, 0..1. */
+  alpha: number;
+
+  blurOn: boolean;
+  /** Phaser blur quality: 0 low / 1 medium / 2 high. */
+  blurQuality: number;
+  blurX: number;
+  blurY: number;
+  blurStrength: number;
+  blurSteps: number;
+
+  shadowOn: boolean;
+  /** Direction offset in pixels — where the silhouette is thrown. */
+  shadowX: number;
+  shadowY: number;
+  shadowDecay: number;
+  shadowPower: number;
+  /** 1–12 shadow samples. */
+  shadowSamples: number;
+  shadowIntensity: number;
+
+  /** Rough border: a crisp jagged rim hugging collision boundaries (own RT, never blurred). */
+  borderOn: boolean;
+  /** Base rim thickness in px. */
+  borderWidth: number;
+  /** Extra random depth per tooth in px (roughness amplitude). */
+  borderJitter: number;
+  /** Tooth size in px along the edge (grain of the roughness). */
+  borderGrain: number;
+  borderAlpha: number;
+}
+
 export interface RoomsData {
   rooms: Record<string, RoomDefinition>;
   startRoom: string;
   baseTilesets?: string[];
+  edgeShadows?: Partial<EdgeShadowSettings>;
 }
 
 export interface InputState {

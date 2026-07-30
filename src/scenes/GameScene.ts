@@ -21,6 +21,7 @@ import { selectThought, selectNotifiableThought } from '@systems/ThoughtManager'
 import { selectConversation, selectNotifiableConversation } from '@systems/ConversationManager';
 import { auditFlags } from '@systems/FlagAudit';
 import { getCharacter, allCharacters, auditCharacters } from '@systems/CharacterRegistry';
+import { buildEdgeShadows } from '@systems/EdgeShadows';
 import { resolveText } from '@systems/Words';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
@@ -87,14 +88,15 @@ export class GameScene extends Phaser.Scene {
   // Transient — cleared on room entry; gives repeat:'notify' its per-visit re-light
   private visitNotified: Set<string> = new Set();
 
-  private edgeShadows?: Phaser.GameObjects.RenderTexture;
+  private edgeShadows?: Phaser.GameObjects.RenderTexture[];
 
   private weatherManager!: WeatherManager;
 
-  // TODO: remove before ship — Ctrl+Shift+/ unlock-all debug keys
+  // TODO: remove before ship — Ctrl+Shift+/ unlock-all / Ctrl+Shift+C cure-all debug keys
   private dbgCtrlKey?: Phaser.Input.Keyboard.Key;
   private dbgShiftKey?: Phaser.Input.Keyboard.Key;
   private dbgSlashKey?: Phaser.Input.Keyboard.Key;
+  private dbgCureKey?: Phaser.Input.Keyboard.Key;
 
   constructor() {
     super(SCENES.GAME);
@@ -118,6 +120,7 @@ export class GameScene extends Phaser.Scene {
     this.dbgCtrlKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL);
     this.dbgShiftKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
     this.dbgSlashKey = kb.addKey(Phaser.Input.Keyboard.KeyCodes.FORWARD_SLASH);
+    this.dbgCureKey  = kb.addKey(Phaser.Input.Keyboard.KeyCodes.C);
     this.roomManager = new RoomManager(this);
     this.transitionManager = new TransitionManager(this);
     this.rsm = RoomStateManager.getInstance();
@@ -352,6 +355,21 @@ export class GameScene extends Phaser.Scene {
       this.openDialog(`[DEBUG] All ${count} doors unlocked.`, 'system');
     }
 
+    // TODO: remove before ship — Ctrl+Shift+C cures every afflicted in the room
+    if (this.dbgCureKey && Phaser.Input.Keyboard.JustDown(this.dbgCureKey) &&
+        this.dbgCtrlKey?.isDown && this.dbgShiftKey?.isDown) {
+      let cured = 0;
+      for (const child of [...this.afflictedGroup.getChildren()]) {
+        const a = child as Afflicted;
+        if (!a.active) continue;
+        const status = a.getStatus();
+        if (status === 'cured' || status === 'recovered') continue;
+        this.applyCure(a, null, 'debug');
+        cured++;
+      }
+      this.openDialog(`[DEBUG] ${cured} afflicted cured.`, 'system');
+    }
+
     this.weatherManager.update(delta);
     const cam = this.cameras.main;
     this.darknessOverlay.update(
@@ -527,6 +545,38 @@ export class GameScene extends Phaser.Scene {
     this.playerAfflictedCollider = this.physics.add.overlap(this.player, this.afflictedGroup, this.handleAfflictedCollision, undefined, this);
   }
 
+  /**
+   * The single cure entry point — every trigger (touch today; bait/interact
+   * later; Debug C) routes through here so the world-state effect is
+   * identical regardless of how the cure was delivered. `cureSlot` is the
+   * inventory slot to consume, or null when no item is spent (debug).
+   */
+  public applyCure(afflicted: Afflicted, cureSlot: number | null, source: 'touch' | 'interact' | 'debug'): void {
+    this.cureCooldown = true;
+    this.time.delayedCall(500, () => { this.cureCooldown = false; });
+
+    const item = cureSlot !== null ? this.rsm.getSlot(cureSlot) : null;
+    if (cureSlot !== null) this.rsm.removeFromInventory(cureSlot);
+
+    this.rsm.cureResident(afflicted.getId());
+    afflicted.setStatus('cured');
+    const homeRoom = afflicted.getHomeRoom();
+    if (homeRoom) this.unlockDoorsToRoom(homeRoom);
+    this.cameras.main.shake(200, 0.006);
+    this.emitInventoryChanged();
+    this.dropHeldItems(afflicted);
+
+    // Debug cures skip the narrative beat — world state only.
+    if (source === 'debug') return;
+
+    const itemName = item?.name ?? 'cure';
+    const clue = afflicted.getCuredClue();
+    const msg = clue
+      ? `The ${itemName} shattered on impact.\n${afflicted.getName()} slumps against the wall.\n\n${clue}`
+      : `The ${itemName} shattered on impact.\n${afflicted.getName()} seems to be calming down.\nThey seem to need some time alone.`;
+    this.openDialog(msg, 'narrative');
+  }
+
   private handleAfflictedCollision(_player: any, afflictedObject: any): void {
     if (this.isTransitioning || this.cureCooldown) return;
     const afflicted = afflictedObject as Afflicted;
@@ -538,23 +588,7 @@ export class GameScene extends Phaser.Scene {
     const cureSlot = inventory.findIndex(item => item?.category === 'cure' &&
       (!item.useTarget || item.useTarget === afflicted.getId()));
     if (cureSlot !== -1) {
-      this.cureCooldown = true;
-      this.time.delayedCall(500, () => { this.cureCooldown = false; });
-      const item = inventory[cureSlot]!;
-      this.rsm.removeFromInventory(cureSlot);
-      this.rsm.cureResident(afflicted.getId());
-      afflicted.setStatus('cured');
-      const homeRoom = afflicted.getHomeRoom();
-      if (homeRoom) this.unlockDoorsToRoom(homeRoom);
-      this.cameras.main.shake(200, 0.006);
-      this.emitInventoryChanged();
-      this.dropHeldItems(afflicted);
-      const clue = afflicted.getCuredClue();
-      const msg = clue
-        ? `The ${item.name} shattered on impact.\n${afflicted.getName()} slumps against the wall.\n\n${clue}`
-        : `The ${item.name} shattered on impact.\n${afflicted.getName()} seems to be calming down.\nThey seem to need some time alone.`;
-      this.openDialog(msg, 'narrative');
-
+      this.applyCure(afflicted, cureSlot, 'touch');
       return;
     }
 
@@ -1256,56 +1290,29 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildEdgeShadows(): void {
-    if (this.edgeShadows) {
-      this.edgeShadows.destroy();
-      this.edgeShadows = undefined;
-    }
+    this.edgeShadows?.forEach(rt => rt.destroy());
+    this.edgeShadows = undefined;
 
     const map = this.roomManager.getMap();
     const collisionLayer = this.roomManager.getCollisionLayer();
     if (!map || !collisionLayer) return;
 
-    const TILE = GAME_CONFIG.TILE_SIZE;
-    const roomW = map.width * TILE;
-    const roomH = map.height * TILE;
-
-    const rt = this.add.renderTexture(0, 0, roomW, roomH);
-    rt.setOrigin(0, 0);
-    rt.setDepth(DEPTH.GROUND + 0.5);
-    rt.setAlpha(0.6);
-
-    const layerData = collisionLayer.layer.data;
-    const tilesets = map.tilesets;
-    for (let ty = 0; ty < map.height; ty++) {
-      for (let tx = 0; tx < map.width; tx++) {
-        const tile = layerData[ty]?.[tx];
-        if (!tile || tile.index <= 0) continue;
-        let owningTs = tilesets[0];
-        for (const ts of tilesets) {
-          if (ts.firstgid <= tile.index) owningTs = ts;
-        }
-        if (!owningTs) continue;
-        const key = tilesetSpritesheetKey(owningTs.name);
-        const frame = tile.index - owningTs.firstgid;
-        const img = this.make.image({ x: 0, y: 0, key, frame, add: false });
-        img.setTint(0x000000).setOrigin(0, 0);
-        rt.draw(img, tx * TILE, ty * TILE);
-        img.destroy();
-      }
-    }
-
-    // A shadow effect with x, y offset provides the "3D" directional look
-    // x=8, y=8 makes it cast towards the bottom-right (more prominent left/top edges)
-    // postFX requires WebGL with full shader support — Chromecast GPU may not compile these.
-    // Catch so the base black-silhouette RT still renders even if the shadow pass fails.
+    // Shadows are decoration — never let them abort room creation. This runs
+    // during create(), so an exception here would leave the room half-built
+    // and looking like it failed to load.
     try {
-//       rt.postFX.addShadow(-120, 30, .08, 1, 0x000000, 3, 1);
-      rt.postFX.addBlur(1, 20, 20, 1, 0xFFFFFF, 5);
+      const rts = buildEdgeShadows(this, {
+        widthTiles: map.width,
+        heightTiles: map.height,
+        collisionData: collisionLayer.layer.data,
+        tilesets: map.tilesets,
+        colorCells: this.roomManager.getCollisionColorCells(),
+      });
+      this.edgeShadows = rts.length ? rts : undefined;
     } catch (e) {
-      console.warn('[GameScene] postFX unavailable (limited GPU?), shadow will render without blur:', e);
+      console.warn('[GameScene] edge shadows failed to build; room loads without them:', e);
+      this.edgeShadows = undefined;
     }
-
-    this.edgeShadows = rt;
   }
 
   private createWorldItemSprites(): void {

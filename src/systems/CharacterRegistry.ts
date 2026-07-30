@@ -24,6 +24,16 @@ export function allCharacters(): Record<string, CharacterDef> {
 }
 
 /**
+ * Mirror a successful /__editor/save-character write into the bundled
+ * registry so editor UI shows current values without a page reload.
+ * (The game itself picks the change up on next full reload.)
+ */
+export function applySheetAssignment(id: string, field: 'sheet' | 'afflictedSheet', value: string): void {
+  const c = characters[id];
+  if (c) c[field] = value;
+}
+
+/**
  * Every spritesheet basename the game references: cast sheets (human +
  * afflicted) plus inline extra sheets on room placements. PreloadScene loads
  * exactly this set in production.

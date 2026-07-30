@@ -325,11 +325,35 @@ the 4 walk frames, idle = first frame of each row).
    character around inside it — exactly the movement/facing logic the game
    uses. Release keys to see idle; move the mouse out and it re-centers and
    resumes auto-cycling through all four directions. The **fps −/+** stepper
-   changes preview speed only (never saved).
+   changes preview speed only (never saved). **⏸** locks the preview to the
+   currently selected frame (still live as you paint). **1:1** toggles the
+   sprite between the enlarged 3x default and true in-game size (native
+   64px, matching `ENTITY_WORLD_SCALE`) — useful for judging how a design
+   actually reads at play size.
 5. Frame utilities: **COPY / PASTE** a frame buffer, **FLIP** (mirror
    horizontally — e.g. build the left row from the right row), **ONION**
    (ghost the rest of the current row: blue = earlier frames, red = later).
-6. **SAVE** writes the sheet back to `public/assets/sprites/<name>.png`
+6. **Box select (SEL tool)** — drag a rectangle on the canvas:
+   - **COPY** copies the region (with a selection active, COPY/PASTE work on
+     the region instead of the whole frame); **CUT** (next to MIRROR) copies
+     and clears it.
+   - **PASTE** drops the region as a *floating* layer at the coordinates it
+     was taken from — switch frames first to carry a limb across the walk
+     cycle. The pasted region stays selected: **NUDGE arrows move it** one
+     pixel at a time.
+   - The float stamps down when you click elsewhere, switch tool/frame, or
+     SAVE. Transparent pixels don't punch holes when stamping. Right-click
+     clears the selection; Ctrl+Z cancels a floating region.
+   - NUDGE with a selection moves just the selection (lifting it off the
+     background); with no selection it shifts the whole frame as before.
+7. **ASSIGN** opens the character list — give the open sheet to a cast
+   member's human or afflicted slot (writes `characters.json`; reload the
+   game to see it).
+8. **NEW / DUPE** create a sheet without leaving the editor (dev only):
+   NEW writes a blank 256×256 PNG, DUPE forks the open sheet's current
+   state under a new name (original file untouched). Both prompt for a
+   name, then open the new sheet ready to paint and ASSIGN.
+8. **SAVE** writes the sheet back to `public/assets/sprites/<name>.png`
    (dev server only). Reload the page to see it in-game. Git is the undo.
 
 ---

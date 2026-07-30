@@ -149,6 +149,7 @@ function editorSavePlugin(): Plugin {
   const tilemapsDir = path.join(projectRoot, 'public/assets/tilemaps');
   const spritesDir = path.join(projectRoot, 'public/assets/sprites');
   const roomsJsonPath = path.join(projectRoot, 'src/data/rooms.json');
+  const charactersJsonPath = path.join(projectRoot, 'src/data/characters.json');
 
   return {
     name: 'warden-editor-save',
@@ -464,9 +465,68 @@ function editorSavePlugin(): Plugin {
         }
       });
 
+      // ? editor: global edge-shadow settings — rooms.json top-level `edgeShadows`.
+      server.middlewares.use('/__editor/save-shadows', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const body = await readJsonBody(req) as Record<string, unknown>;
+          const FLAGS = ['enabled', 'blurOn', 'shadowOn', 'borderOn'];
+          const NUMBERS = ['alpha', 'blurQuality', 'blurX', 'blurY', 'blurStrength', 'blurSteps',
+                           'shadowX', 'shadowY', 'shadowDecay', 'shadowPower', 'shadowSamples', 'shadowIntensity',
+                           'borderWidth', 'borderJitter', 'borderGrain', 'borderAlpha'];
+          const settings: Record<string, boolean | number> = {};
+          for (const k of FLAGS) {
+            if (typeof body[k] !== 'boolean') { send(res, 400, { error: `invalid ${k}` }); return; }
+            settings[k] = body[k] as boolean;
+          }
+          for (const k of NUMBERS) {
+            const v = body[k];
+            if (typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v) > 1000) {
+              send(res, 400, { error: `invalid ${k}` }); return;
+            }
+            settings[k] = v;
+          }
+          const raw = await fsp.readFile(roomsJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          data.edgeShadows = settings;
+          const tmp = `${roomsJsonPath}.tmp`;
+          await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          await fsp.rename(tmp, roomsJsonPath);
+          send(res, 200, { ok: true, edgeShadows: data.edgeShadows });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
+      // Sprite editor: assign a spritesheet to a character in characters.json.
+      server.middlewares.use('/__editor/save-character', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const body = await readJsonBody(req) as { id?: string; field?: string; value?: string };
+          const { id, field, value } = body;
+          if (!id || typeof id !== 'string') { send(res, 400, { error: 'invalid id' }); return; }
+          if (field !== 'sheet' && field !== 'afflictedSheet') { send(res, 400, { error: 'invalid field' }); return; }
+          if (!value || !SPRITE_NAME_RE.test(value)) { send(res, 400, { error: 'invalid sheet value' }); return; }
+          if (!fs.existsSync(path.join(spritesDir, `${value}.png`))) {
+            send(res, 400, { error: `sheet ${value}.png not found on disk` }); return;
+          }
+          const raw = await fsp.readFile(charactersJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          const character = data?.characters?.[id];
+          if (!character) { send(res, 404, { error: `character ${id} not found` }); return; }
+          character[field] = value;
+          const tmp = `${charactersJsonPath}.tmp`;
+          await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          await fsp.rename(tmp, charactersJsonPath);
+          send(res, 200, { ok: true, id, field, value });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/list-sprites, /__editor/save-sprite');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/save-character');
       }
     }
   };

@@ -308,6 +308,18 @@ export class RoomManager {
     return this.colorCollisionBodies;
   }
 
+  /** Tile coords of color cells on the Collision layer (they block, so they shadow). */
+  getCollisionColorCells(): { x: number; y: number }[] {
+    const cells = this.colorTiles.get(LAYER_NAMES.COLLISION);
+    if (!cells) return [];
+    const out: { x: number; y: number }[] = [];
+    for (const key of cells.keys()) {
+      const ci = key.indexOf(',');
+      out.push({ x: parseInt(key, 10), y: parseInt(key.slice(ci + 1), 10) });
+    }
+    return out;
+  }
+
   getColorTile(layerName: string, tileX: number, tileY: number): number | undefined {
     return this.colorTiles.get(layerName)?.get(`${tileX},${tileY}`);
   }

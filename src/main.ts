@@ -25,6 +25,22 @@ const config: Phaser.Types.Core.GameConfig = {
 //   pixelArt: true,
 //   antialias: true,
 //   roundPixels: true,
+  // Cap the step so the same build behaves the same on a 60Hz vs a 144Hz
+  // monitor, and to bound GPU load on high-refresh displays.
+  //
+  // The limiter is driven by requestAnimationFrame (display refresh) and only
+  // steps once accumulated delta crosses 1000/limit, so it can ONLY hit
+  // integer divisors of the refresh rate. On a 144Hz panel, limit:60 quantizes
+  // to 144/3 = 48fps. 72 = 144/2 lands cleanly and stays above 60. On a 60Hz
+  // panel this is a no-op (60 < 72, so every frame runs). See TimeStep.js.
+  //
+  // NOTE: this bounds but does not FIX frame-counted logic (lockedDoorCooldown,
+  // inventory key-repeat) — those should be converted to delta-based time to be
+  // truly refresh-independent.
+  fps: {
+    limit: 72,
+    target: 72,
+  },
   physics: {
     default: 'arcade',
     arcade: {
@@ -49,6 +65,10 @@ function startGame(): Phaser.Game {
     (window as any).__warden = handle;
     void import('@systems/ConversationManager').then(m => { handle.cm = m; });
     void import('@systems/Words').then(m => { handle.words = m; });
+    void import('@systems/PerfMonitor').then(({ PerfMonitor }) => {
+      handle.perf = new PerfMonitor(game);
+      console.log('[perf] overlay on. __warden.perf.report() / .textures() / .toggle()');
+    });
   }
   return game;
 }
