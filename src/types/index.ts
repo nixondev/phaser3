@@ -299,6 +299,8 @@ export interface RoomsData {
   startRoom: string;
   baseTilesets?: string[];
   edgeShadows?: Partial<EdgeShadowSettings>;
+  /** Global character-sprite render scale (visual only) — see SpriteScale.ts. */
+  spriteScale?: number;
 }
 
 export interface InputState {

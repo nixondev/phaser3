@@ -3,16 +3,24 @@ import { Direction } from './Direction';
 import { DEPTH, PLAYER_CONFIG } from '@utils/Constants';
 import { InputState } from '@/types';
 import { ensureCharacterAnims } from './animHelpers';
+import { getSpriteScale } from '@systems/SpriteScale';
 
 export class Player extends Entity {
   constructor(scene: Phaser.Scene, x: number, y: number, sheetKey: string) {
-    super(scene, x, y, sheetKey, 0);
-    this.setDepth(DEPTH.PLAYER);
-    this.setScale(1.0);
+    super(scene, x, y, sheetKey, 0); // Entity applies the global sprite scale
 
+    this.setDepth(DEPTH.PLAYER);
+
+    // The body stays BODY_W×BODY_H WORLD pixels at any sprite scale (the SIZE
+    // slider must never change what fits through a corridor), but it anchors
+    // to the SCALED art: bottom edge on the drawn feet line (source y=62),
+    // centred horizontally. Arcade multiplies size and offset by scale and
+    // positions via scale×(offset−origin), hence the /s solves.
+    const BODY_W = 28, BODY_H = 42, FEET_Y = 62;
+    const s = getSpriteScale();
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(28, 24);
-    body.setOffset(18, 38);
+    body.setSize(BODY_W / s, BODY_H / s);
+    body.setOffset(32 - (BODY_W / 2) / s, FEET_Y - BODY_H / s);
     body.setCollideWorldBounds(true);
 
     ensureCharacterAnims(scene, sheetKey);

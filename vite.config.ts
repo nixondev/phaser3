@@ -561,6 +561,27 @@ function editorSavePlugin(): Plugin {
         }
       });
 
+      // $ editor: global character-sprite render scale — rooms.json top-level `spriteScale`.
+      server.middlewares.use('/__editor/save-sprite-scale', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const body = await readJsonBody(req) as { spriteScale?: unknown };
+          const v = body.spriteScale;
+          if (typeof v !== 'number' || !Number.isFinite(v) || v < 0.5 || v > 2) {
+            send(res, 400, { error: 'invalid spriteScale (0.5–2)' }); return;
+          }
+          const raw = await fsp.readFile(roomsJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          data.spriteScale = Math.round(v * 100) / 100;
+          const tmp = `${roomsJsonPath}.tmp`;
+          await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          await fsp.rename(tmp, roomsJsonPath);
+          send(res, 200, { ok: true, spriteScale: data.spriteScale });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
       // Sprite editor: assign a spritesheet to a character in characters.json.
       server.middlewares.use('/__editor/save-character', async (req, res, next) => {
         if (req.method !== 'POST') { next(); return; }
@@ -589,7 +610,7 @@ function editorSavePlugin(): Plugin {
 
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/shade-sprite, /__editor/save-character');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/shade-sprite, /__editor/save-character, /__editor/save-sprite-scale');
       }
     }
   };

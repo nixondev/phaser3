@@ -225,7 +225,11 @@ Rooms in `src/data/rooms.json`. Every tilemap: three layers `Ground`, `Collision
 the collision edge-shadow look, shared by game / `?`-editor actual view / title
 screen via `src/systems/EdgeShadows.ts` (one builder; also shadows
 color-collision cells). Tunable live in the `?` editor's left-panel Shadows
-section (persists via `/__editor/save-shadows`).
+section (persists via `/__editor/save-shadows`). Also global: `spriteScale` —
+render size of ALL character sprites (Player/Afflicted/parked bodies; items
+and tiles untouched). Visual only: entity bodies divide setSize/setOffset by
+it so collision never changes. Tuned via the `$` editor's SIZE slider (live
+in the 1:1 preview; game reads it at entity construction → reload to apply).
 
 **Dev note:** Adding a new `rooms.json` field requires server restart + hard browser refresh. Changing existing values hot-reloads.
 
@@ -431,6 +435,7 @@ Resize and drag (Select mode) shift all fields (doors, interactables, afflicted)
 - POST /__editor/save-sprite?sheet=<name> -> writes public/assets/sprites/<name>.png (sprite editor SAVE)
 - POST /__editor/shade-sprite?sheet=<name> -> writes public/assets/sprites/<name>-shaded.png via scripts/lib/shade.cjs (sprite editor SHADE)
 - POST /__editor/save-character {id, field: sheet|afflictedSheet, value} -> patches src/data/characters.json (sprite editor ASSIGN)
+- POST /__editor/save-sprite-scale {spriteScale} -> writes rooms.json top-level spriteScale ($ editor SIZE slider; global character size, visual only — bodies compensate)
 - POST /__editor/save-shadows {enabled, alpha, blur} -> writes rooms.json top-level edgeShadows (? editor Shadows panel)
 ---
 

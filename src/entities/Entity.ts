@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Direction } from './Direction';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
+import { getSpriteScale } from '@systems/SpriteScale';
 
 /** Soft contact shadow drawn beneath every sprite-driven character. */
 export const CHARACTER_SHADOW_FEET_OFFSET = 30; // px below sprite centre — sits at the feet (body bottom)
@@ -29,13 +30,17 @@ export class Entity extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this);
     this.setDepth(DEPTH.ENTITIES);
 
-    // Scale down from upscaled asset size to logical game size, then apply entity scale
-    this.setScale(GAME_CONFIG.ENTITY_WORLD_SCALE);
+    // Base world scale × the global sprite-size setting (rooms.json
+    // `spriteScale`, $ editor SIZE slider). Visual only — subclasses divide
+    // their body setSize/setOffset by the same factor to keep physics fixed.
+    this.setScale(GAME_CONFIG.ENTITY_WORLD_SCALE * getSpriteScale());
 
     // Concentric ellipses give a soft edge without a blur pass. Drawn once at
     // the origin; repositioned/depth-synced under the sprite each frame.
+    // Shadow tracks the sprite's size so bigger characters ground properly.
     this.shadow = scene.add.graphics();
     drawCharacterShadow(this.shadow);
+    this.shadow.setScale(getSpriteScale());
 
     // Sync on POST_UPDATE, not preUpdate: arcade physics writes the body's
     // position back onto the sprite during POST_UPDATE, so anything reading
@@ -49,7 +54,7 @@ export class Entity extends Phaser.Physics.Arcade.Sprite {
 
   private syncShadow(): void {
     // Track the sprite, tuck just under its depth, and mirror its visibility.
-    this.shadow.setPosition(this.x, this.y + CHARACTER_SHADOW_FEET_OFFSET);
+    this.shadow.setPosition(this.x, this.y + CHARACTER_SHADOW_FEET_OFFSET * getSpriteScale());
     this.shadow.setDepth(this.depth - 0.5);
     this.shadow.setVisible(this.visible);
   }

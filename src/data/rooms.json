@@ -1354,6 +1354,7 @@
     }
   },
   "startRoom": "protag-house",
+  "spriteScale": 1.25,
   "edgeShadows": {
     "enabled": true,
     "blurOn": true,

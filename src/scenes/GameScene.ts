@@ -22,6 +22,7 @@ import { selectConversation, selectNotifiableConversation } from '@systems/Conve
 import { auditFlags } from '@systems/FlagAudit';
 import { getCharacter, allCharacters, auditCharacters } from '@systems/CharacterRegistry';
 import { buildEdgeShadows } from '@systems/EdgeShadows';
+import { getSpriteScale } from '@systems/SpriteScale';
 import { resolveText } from '@systems/Words';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
@@ -1283,7 +1284,7 @@ export class GameScene extends Phaser.Scene {
       if (char.roomId !== currentRoomId) continue;
 
       const sprite = this.add.sprite(char.x, char.y, char.textureKey, 0)
-        .setScale(1.0)
+        .setScale(getSpriteScale())
         .setDepth(DEPTH.ENTITIES);
       this.parkedBodies.set(char.id, sprite);
     }

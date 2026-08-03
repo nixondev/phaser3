@@ -8,6 +8,7 @@ import { EditorButtons } from '@/editor/EditorButtons';
 import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle, RegionClip } from '@/editor/PixelCanvas';
 import { collectReferencedSheets, getCharacter, allCharacters, applySheetAssignment } from '@systems/CharacterRegistry';
 import { drawCharacterShadow, CHARACTER_SHADOW_FEET_OFFSET } from '@entities/Entity';
+import { getSpriteScale, setSpriteScale } from '@systems/SpriteScale';
 // Same module the dev server and the bake-depth CLI run — see shade.mjs.
 import { shadeSheet, DEFAULTS as SHADE_DEFAULTS } from '../../scripts/lib/shade.mjs';
 
@@ -973,6 +974,42 @@ export class SpriteEditorScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(2);
     this.btn.bind(this.pauseBtnGfx, PREV_X + 330, FY, 40, 24, () => this.togglePreviewPause());
 
+    // SIZE — the global in-game character scale (rooms.json `spriteScale`).
+    // Live in the 1:1 preview; persisted on release via save-sprite-scale.
+    const SY = PREV_CTRL_Y + 32;
+    this.add.text(PREV_X, SY, 'SIZE', {
+      fontSize: '13px', color: '#667788', fontFamily: 'monospace',
+    });
+    const sizeLabel = this.add.text(PREV_X + 226, SY, `×${getSpriteScale().toFixed(2)}`, {
+      fontSize: '13px', color: '#c8963c', fontFamily: 'monospace',
+    });
+    const sizeEl = document.createElement('input');
+    sizeEl.type = 'range';
+    sizeEl.min = '0.75'; sizeEl.max = '1.75'; sizeEl.step = '0.05';
+    sizeEl.value = String(getSpriteScale());
+    sizeEl.title = 'in-game size of ALL character sprites (visual only — collision unchanged)';
+    sizeEl.style.cssText = 'position:fixed;z-index:1000;cursor:pointer;accent-color:#c8963c;background:transparent';
+    sizeEl.addEventListener('input', () => {
+      setSpriteScale(Number(sizeEl.value));
+      sizeLabel.setText(`×${getSpriteScale().toFixed(2)}`);
+      if (this.previewActualSize) {
+        this.previewSprite.setScale(PREV_SPRITE_SCALE_ACTUAL * getSpriteScale());
+        this.updatePreviewShadow();
+      }
+    });
+    sizeEl.addEventListener('change', () => {
+      if (!import.meta.env.DEV) { this.statusText?.setText('sprite scale: dev mode only'); return; }
+      void fetch('/__editor/save-sprite-scale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spriteScale: getSpriteScale() }),
+      }).then(r => this.statusText?.setText(r.ok
+        ? `sprite scale ×${getSpriteScale().toFixed(2)} saved — reload the game to apply`
+        : `sprite scale save failed: ${r.status}`))
+        .catch(e => this.statusText?.setText(`sprite scale save error: ${String(e)}`));
+    });
+    this.overlay.add(sizeEl, PREV_X + 50, SY, 168, 14);
+
     // actual-size toggle — matches the in-game ENTITY_WORLD_SCALE (native 64px)
     // vs the enlarged 3x default used for painting/preview clarity.
     const asx = PREV_X + PREV_W - 56, asy = PREV_Y + 4;
@@ -1018,19 +1055,25 @@ export class SpriteEditorScene extends Phaser.Scene {
     }
   }
 
-  /** Toggle the preview sprite between the enlarged 3x view and true in-game (1x, native 64px) size. */
+  /**
+   * Toggle the preview between the enlarged 3x painting view and TRUE in-game
+   * size — including the global SIZE slider, so 1:1 is what the game renders.
+   */
   private toggleActualSize(): void {
     this.previewActualSize = !this.previewActualSize;
     const asx = PREV_X + PREV_W - 56, asy = PREV_Y + 4;
     this.btn.draw(this.actualSizeBtnGfx, asx, asy, 24, 24, this.previewActualSize);
-    this.previewSprite.setScale(this.previewActualSize ? PREV_SPRITE_SCALE_ACTUAL : PREV_SPRITE_SCALE);
+    this.previewSprite.setScale(
+      this.previewActualSize ? PREV_SPRITE_SCALE_ACTUAL * getSpriteScale() : PREV_SPRITE_SCALE);
     this.updatePreviewShadow();
-    this.statusText?.setText(this.previewActualSize ? 'preview: actual size (1x)' : 'preview: enlarged (3x)');
+    this.statusText?.setText(this.previewActualSize
+      ? `preview: actual in-game size (×${getSpriteScale().toFixed(2)})` : 'preview: enlarged (3x)');
   }
 
   /** Size + park the contact shadow under the (stationary) preview sprite for the current zoom. */
   private updatePreviewShadow(): void {
-    const scale = this.previewActualSize ? PREV_SPRITE_SCALE_ACTUAL : PREV_SPRITE_SCALE;
+    const scale = this.previewActualSize
+      ? PREV_SPRITE_SCALE_ACTUAL * getSpriteScale() : PREV_SPRITE_SCALE;
     this.previewShadow.setScale(scale);
     this.previewShadow.setPosition(
       PREV_X + PREV_W / 2,

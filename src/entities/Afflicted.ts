@@ -5,6 +5,7 @@ import { AfflictedPlacement, AfflictedStatus, BehaviorLoop, CharacterDef, ItemDe
 import { MusicManager } from '@systems/MusicManager';
 import { Direction } from './Direction';
 import { ensureCharacterAnims } from './animHelpers';
+import { getSpriteScale } from '@systems/SpriteScale';
 
 const WANDER_SPEED      = 80;
 const WANDER_PAUSE_MIN  = 1500;
@@ -61,8 +62,10 @@ export class Afflicted extends Entity {
     const afflictedSheet = character?.afflictedSheet ?? def.afflictedSheet ?? 'afflicted-walker';
     super(scene, def.x, def.y, afflictedSheet, 0);
 
-    this.baseScale = 1.0;
-    this.setScale(this.baseScale);
+    // baseScale is the tween-neutral scale every visual effect returns to —
+    // it carries the global sprite-size setting (Entity already applied it,
+    // but the breathing/agitation tweens need the number to come home to).
+    this.baseScale = this.scale;
 
     // Cast members are keyed by their character slug in all persistent state;
     // extras fall back to the placement id.
@@ -102,9 +105,13 @@ export class Afflicted extends Entity {
     }
 
     this.setDepth(DEPTH.ENTITIES);
+    // Same rule as Player: body fixed in world px, bottom edge anchored to
+    // the scaled sprite's feet line (source y=62), centred horizontally.
+    const BODY_W = 28, BODY_H = 42, FEET_Y = 62;
+    const s = getSpriteScale();
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setSize(28, 24);
-    body.setOffset(18, 38);
+    body.setSize(BODY_W / s, BODY_H / s);
+    body.setOffset(32 - (BODY_W / 2) / s, FEET_Y - BODY_H / s);
     body.setCollideWorldBounds(true);
 
     ensureCharacterAnims(scene, afflictedSheet);
