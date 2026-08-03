@@ -110,6 +110,9 @@ export class PreloadScene extends Phaser.Scene {
         let queued = 0;
         for (const s of data.sprites) {
           if (s.width !== 256 || s.height !== 256) continue;
+          // `<sheet>_n.png` normal maps match a sheet's dimensions but are
+          // data, not wearable art — keep them out of the skin picker.
+          if (s.name.endsWith('_n')) continue;
           if (this.textures.exists(s.name)) continue;
           this.load.spritesheet(s.name, `assets/sprites/${s.name}.png`, {
             frameWidth: 64,

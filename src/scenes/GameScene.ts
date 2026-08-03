@@ -204,7 +204,7 @@ export class GameScene extends Phaser.Scene {
     this.emitFullState(roomDef.name);
     if (import.meta.env.DEV) {
       auditFlags();
-      auditCharacters();
+      auditCharacters(this.textures);
     }
     debug('GameScene created, starting in room:', startRoom);
   }

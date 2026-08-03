@@ -1,4 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
+import { createRequire } from 'module';
 import path from 'path';
 import fs from 'fs';
 import fsp from 'fs/promises';
@@ -465,6 +466,68 @@ function editorSavePlugin(): Plugin {
         }
       });
 
+      // $ editor: SHADE button — write <sheet>-shaded.png beside the original.
+      // Runs the same scripts/lib/shade.cjs the `npm run bake-depth` CLI uses,
+      // so the button and the command line can't drift apart. Loaded lazily so
+      // editing the shader doesn't need a dev-server restart.
+      server.middlewares.use('/__editor/shade-sprite', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const url = new URL(req.url ?? '', 'http://localhost');
+          const sheet = url.searchParams.get('sheet') ?? '';
+          if (!SPRITE_NAME_RE.test(sheet)) { send(res, 400, { error: 'invalid sheet name' }); return; }
+
+          // Cache-bust so editing the shader takes effect without a restart.
+          // Built as an opaque URL string so the bundler treats it as a plain
+          // dynamic import rather than trying to glob-match the template.
+          const shadeUrl =
+            `${new URL('./scripts/lib/shade.mjs', import.meta.url).href}?t=${Date.now()}`;
+          const { shadeSheet, isDerivedSheet, SHADED_SUFFIX, DEFAULTS } =
+            await import(/* @vite-ignore */ shadeUrl);
+          const req2 = createRequire(import.meta.url);
+          delete req2.cache[req2.resolve('./scripts/lib/png.cjs')];
+          const { encodePNG, decodePNG } = req2('./scripts/lib/png.cjs');
+
+          if (isDerivedSheet(sheet)) {
+            send(res, 400, { error: `${sheet} is a derived sheet — shade the original instead` });
+            return;
+          }
+
+          const src = path.join(spritesDir, `${sheet}.png`);
+          const out = path.join(spritesDir, `${sheet}${SHADED_SUFFIX}.png`);
+          if (!src.startsWith(spritesDir + path.sep) || !out.startsWith(spritesDir + path.sep)) {
+            send(res, 400, { error: 'path escapes sprites dir' });
+            return;
+          }
+          if (!fs.existsSync(src)) { send(res, 404, { error: `${sheet}.png not found` }); return; }
+
+          // Shading params come from the $ editor's sliders. The whitelist is
+          // DEFAULTS itself — same type, same key — so a new shader parameter
+          // is accepted here the moment the lib grows it. (A hand-kept list
+          // already went stale once and silently dropped ceiling/falloff/
+          // detail/dither, making SHADE output not match the live preview.)
+          const raw = await readJsonBody(req).catch(() => ({})) as Record<string, unknown>;
+          const params: Record<string, number | number[] | boolean> = {};
+          for (const [k, dv] of Object.entries(DEFAULTS)) {
+            const v = raw[k];
+            if (typeof dv === 'number' && typeof v === 'number' && Number.isFinite(v)) params[k] = v;
+            if (typeof dv === 'boolean' && typeof v === 'boolean') params[k] = v;
+          }
+          if (Array.isArray(raw.dir) && raw.dir.length === 3 && raw.dir.every(n => Number.isFinite(n))) {
+            params.dir = raw.dir as number[];
+          }
+
+          const img = decodePNG(await fsp.readFile(src));
+          const frames = shadeSheet(img.pixels, img.width, img.height, params);
+          const tmp = `${out}.tmp`;
+          await fsp.writeFile(tmp, encodePNG(img.width, img.height, img.pixels));
+          await fsp.rename(tmp, out);
+          send(res, 200, { ok: true, sheet: `${sheet}${SHADED_SUFFIX}`, frames });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
       // ? editor: global edge-shadow settings — rooms.json top-level `edgeShadows`.
       server.middlewares.use('/__editor/save-shadows', async (req, res, next) => {
         if (req.method !== 'POST') { next(); return; }
@@ -526,7 +589,7 @@ function editorSavePlugin(): Plugin {
 
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/save-character');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/shade-sprite, /__editor/save-character');
       }
     }
   };

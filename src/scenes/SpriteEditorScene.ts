@@ -8,14 +8,51 @@ import { EditorButtons } from '@/editor/EditorButtons';
 import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle, RegionClip } from '@/editor/PixelCanvas';
 import { collectReferencedSheets, getCharacter, allCharacters, applySheetAssignment } from '@systems/CharacterRegistry';
 import { drawCharacterShadow, CHARACTER_SHADOW_FEET_OFFSET } from '@entities/Entity';
+// Same module the dev server and the bake-depth CLI run — see shade.mjs.
+import { shadeSheet, DEFAULTS as SHADE_DEFAULTS } from '../../scripts/lib/shade.mjs';
 
 const FRAME     = 64;    // frame size in px
 const SHEET_PX  = 256;   // sheet is 256×256
 const SHEET_COLS = 4;
 const SHEET_FRAMES = 16;
 
-const WORK_KEY = 'spriteedit-work';
-const SRC_KEY  = 'spriteedit-src';
+const WORK_KEY   = 'spriteedit-work';
+const SRC_KEY    = 'spriteedit-src';
+/** Live-shaded mirror of WORK_KEY. Preview only — never saved. */
+const SHADED_KEY = 'spriteedit-shaded';
+
+/**
+ * Sliders under the SHADE button. `get`/`set` map between a flat slider value
+ * and the shading options object, so light direction can be steered as an
+ * angle + elevation rather than three raw vector components.
+ */
+interface ShadeSlider {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  hint: string;
+}
+const SHADE_SLIDERS: ShadeSlider[] = [
+  { key: 'amount', label: 'AMOUNT', min: 0, max: 1,   step: 0.05, hint: 'how much shading, overall' },
+  { key: 'light',  label: 'LIGHT',  min: 0, max: 360, step: 5,    hint: 'where the light comes from (°)' },
+  { key: 'shape',  label: 'SHAPE',  min: 0, max: 1,   step: 0.05, hint: '0 = one body, 1 = each outlined part' },
+  { key: 'soft',   label: 'SOFT',   min: 1, max: 20,  step: 1,    hint: 'tight rim ← → broad wash (px)' },
+  { key: 'color',  label: 'COLOR',  min: 0, max: 0.7, step: 0.05, hint: 'cool shadows, warm highlights' },
+  { key: 'tones',  label: 'TONES',  min: 0, max: 4,   step: 1,    hint: 'smooth gradient ← → few flat pixel tones' },
+];
+
+/**
+ * TONES positions → band size fed to the shader (0 = smooth). Dithering across
+ * band edges switches on automatically whenever bands are.
+ */
+const TONE_STEPS  = [0, 0.18, 0.25, 0.35, 0.5];
+const TONE_LABELS = ['smooth', '~5', '~4', '~3', '~2'];
+
+/** Default direction expressed as bearing + elevation, matching SHADE_DEFAULTS.dir. */
+const DEFAULT_AZIMUTH   = 116.6;
+const DEFAULT_ELEVATION = 0.805;
 
 const DIRS = ['down', 'left', 'right', 'up'] as const;
 type Dir = typeof DIRS[number];
@@ -106,6 +143,36 @@ export class SpriteEditorScene extends Phaser.Scene {
   private saveBtnTint?: (col?: number) => void;
   private pendingExitAt = 0;
   private assignContainer?: Phaser.GameObjects.Container;
+
+  // ── shading panel ────────────────────────────────────────────────────────
+  private shadeTex?: Phaser.Textures.CanvasTexture;
+  private liveShading = false;
+  private shadeValues: Record<string, number> = {
+    amount: 0.3,
+    light:  DEFAULT_AZIMUTH,
+    shape:  0.2,
+    soft:   SHADE_DEFAULTS.blur,
+    color:  SHADE_DEFAULTS.hue,
+    tones:  0,
+    palette: 0,   // PAL toggle — 0/1 to share this record
+  };
+  private shadeSliderEls = new Map<string, HTMLInputElement>();
+  private shadeValueLabels = new Map<string, Phaser.GameObjects.Text>();
+  /**
+   * Preset-supplied values the coupled slider mapping can't reach: DITHER/HUE
+   * want a milder floor/ceiling than AMOUNT 0.5 derives. floor/ceiling are
+   * cleared as soon as AMOUNT moves (the slider takes both ends back).
+   *
+   * `emboss` is a MODE, not a value: while set (BEVEL preset), shadeOptions()
+   * bypasses the dome mapping entirely — AMOUNT becomes rim depth, SOFT rim
+   * width, LIGHT still aims it; SHAPE/COLOR/TONES are inert. Only another
+   * preset (or RESET) leaves the mode.
+   */
+  private shadeOverrides: Partial<{ floor: number; ceiling: number; emboss: boolean }> = {};
+  private liveCheckboxEl?: HTMLInputElement;
+  /** Re-shade is deferred to update() so a paint drag doesn't run it per pixel. */
+  private shadePreviewDirty = false;
+  private shadePreviewTimer = 0;
 
   // preview state
   private previewSprite!: Phaser.GameObjects.Sprite;
@@ -205,6 +272,7 @@ export class SpriteEditorScene extends Phaser.Scene {
       }
       if (this.textures.exists(WORK_KEY)) this.textures.remove(WORK_KEY);
       if (this.textures.exists(SRC_KEY)) this.textures.remove(SRC_KEY);
+      if (this.textures.exists(SHADED_KEY)) this.textures.remove(SHADED_KEY);
     });
   }
 
@@ -221,6 +289,10 @@ export class SpriteEditorScene extends Phaser.Scene {
   }
 
   private buildAnims(fps: number): void {
+    // Bound to whichever texture is previewing (raw or live-shaded), so both
+    // walk and idle must be rebuilt — not just created once — or toggling live
+    // shading would leave idle pointing at the old texture.
+    const texKey = this.previewTexKey();
     DIRS.forEach((dir, row) => {
       const start = row * 4;
       const walkKey = `spriteedit-walk-${dir}`;
@@ -228,19 +300,226 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.anims.remove(walkKey);
       this.anims.create({
         key: walkKey,
-        frames: [0, 1, 2, 3].map(i => ({ key: WORK_KEY, frame: start + i })),
+        frames: [0, 1, 2, 3].map(i => ({ key: texKey, frame: start + i })),
         frameRate: fps,
         repeat: -1,
       });
-      if (!this.anims.exists(idleKey)) {
-        this.anims.create({
-          key: idleKey,
-          frames: [{ key: WORK_KEY, frame: start }],
-          frameRate: 1,
-          repeat: -1,
-        });
-      }
+      this.anims.remove(idleKey);
+      this.anims.create({
+        key: idleKey,
+        frames: [{ key: texKey, frame: start }],
+        frameRate: 1,
+        repeat: -1,
+      });
     });
+  }
+
+  // ─── Shading panel ─────────────────────────────────────────────────────────
+
+  /**
+   * LIVE checkbox + one slider per shading parameter, under the SHADE button.
+   * The sliders drive both the live preview and what SHADE writes, so what you
+   * tune is exactly what you get.
+   */
+  private buildShadingPanel(x: number, shadeY: number, bw: number, bh: number, gap: number): void {
+    // LIVE toggle sits beside SHADE so the pairing is obvious; PAL (snap the
+    // output to the sheet's own palette) beside it as the other boolean.
+    const liveX = x + bw * 2 + gap + 8;
+    this.add.text(liveX + 19, shadeY + 6, 'LIVE', {
+      fontSize: '14px', color: '#aaccff', fontFamily: 'monospace',
+    });
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.style.cssText = 'position:fixed;z-index:1000;cursor:pointer;margin:0;accent-color:#c8963c';
+    cb.addEventListener('change', () => this.setLiveShading(cb.checked));
+    this.liveCheckboxEl = this.overlay.add(cb, liveX, shadeY + 7, 15, 15);
+
+    const palX = liveX + 62;
+    this.add.text(palX + 19, shadeY + 6, 'PAL', {
+      fontSize: '14px', color: '#aaccff', fontFamily: 'monospace',
+    });
+    const pal = document.createElement('input');
+    pal.type = 'checkbox';
+    pal.style.cssText = 'position:fixed;z-index:1000;cursor:pointer;margin:0;accent-color:#c8963c';
+    pal.title = 'snap shaded pixels to colours already in the sheet';
+    pal.addEventListener('change', () => {
+      this.shadeValues.palette = pal.checked ? 1 : 0;
+      if (this.liveShading) this.shadePreviewDirty = true;
+    });
+    this.overlay.add(pal, palX, shadeY + 7, 15, 15);
+
+    // Six rows — the full parameter set lives in the lib/CLI; the editor
+    // deliberately maps everything onto these few (see shadeOptions).
+    const PITCH = 30;
+    const rowY = (i: number): number => shadeY + bh + 10 + i * PITCH;
+
+    SHADE_SLIDERS.forEach((s, i) => {
+      const y = rowY(i);
+      this.add.text(x, y, s.label, {
+        fontSize: '13px', color: '#667788', fontFamily: 'monospace',
+      });
+
+      const el = document.createElement('input');
+      el.type = 'range';
+      el.min = String(s.min);
+      el.max = String(s.max);
+      el.step = String(s.step);
+      el.value = String(this.shadeValues[s.key]);
+      el.title = s.hint;
+      el.style.cssText = 'position:fixed;z-index:1000;cursor:pointer;accent-color:#c8963c;background:transparent';
+      el.addEventListener('input', () => {
+        this.shadeValues[s.key] = Number(el.value);
+        if (s.key === 'amount') { delete this.shadeOverrides.floor; delete this.shadeOverrides.ceiling; }
+        this.shadeValueLabels.get(s.key)?.setText(this.formatShadeValue(s));
+        // Re-shade on the next update() tick rather than per input event —
+        // dragging a slider fires these far faster than a full sheet re-shade.
+        if (this.liveShading) this.shadePreviewDirty = true;
+      });
+      this.overlay.add(el, x + 72, y - 1, 126, 14);
+      this.shadeSliderEls.set(s.key, el);
+
+      this.shadeValueLabels.set(s.key, this.add.text(x + 204, y, this.formatShadeValue(s), {
+        fontSize: '13px', color: '#c8963c', fontFamily: 'monospace',
+      }));
+    });
+
+    // Presets — full slider records, so each is a reproducible starting point.
+    const py = rowY(SHADE_SLIDERS.length) + 2;
+    const py2 = py + bh - 2;
+    this.btn.make('BEVEL',  x, py, bw, bh - 6, 0x6e4c1c, () => this.applyShadePreset('bevel'));
+    this.btn.make('SOFT',   x + bw + gap, py, bw, bh - 6, 0x2f4f5f, () => this.applyShadePreset('soft'));
+    this.btn.make('DITHER', x + (bw + gap) * 2, py, bw, bh - 6, 0x4f2f5f, () => this.applyShadePreset('dither'));
+    this.btn.make('HUE',    x, py2, bw, bh - 6, 0x4f2f5f, () => this.applyShadePreset('hue'));
+    this.btn.make('RESET',  x + bw + gap, py2, bw, bh - 6, 0x2f4f5f, () => this.applyShadePreset('reset'));
+  }
+
+  private formatShadeValue(s: ShadeSlider): string {
+    const v = this.shadeValues[s.key];
+    if (s.key === 'light') return `${Math.round(v)}°`;
+    if (s.key === 'tones') return TONE_LABELS[Math.round(v)] ?? 'smooth';
+    if (s.key === 'soft')  return `${Math.round(v)}px`;
+    return v.toFixed(2);
+  }
+
+  private applyShadePreset(name: 'bevel' | 'soft' | 'dither' | 'hue' | 'reset'): void {
+    const presets: Record<string, Record<string, number>> = {
+      // Emboss: sprite raised off the surface — lit rim toward the light,
+      // dark rim opposite, interior untouched. AMOUNT = depth, SOFT = width.
+      // Width 3 user-picked from the rendered sweep 2026-08-01.
+      bevel: { amount: 0.4, light: DEFAULT_AZIMUTH, shape: 0, soft: 3, color: 0.25, tones: 0 },
+      // One gentle wash over the whole body, smooth, more colour movement.
+      soft:  { amount: 0.5, light: DEFAULT_AZIMUTH, shape: 0.2, soft: 14, color: 0.4, tones: 0 },
+      // Retro banded wash with grain: 5 tones + Bayer dither, strong colour
+      // movement. Picked by the user from rendered candidates 2026-08-01
+      // ("B": strength 1.3, floor .55, ceiling 1.35 — hence the ramp override).
+      dither: { amount: 0.5, light: DEFAULT_AZIMUTH, shape: 0.2, soft: 7, color: 0.45, tones: 1 },
+      // Same candidate sheet's "HUE": DITHER's ramp, smooth (no bands), hue
+      // pushed harder — warm-gold highlights, cool-blue shadows.
+      hue:   { amount: 0.5, light: DEFAULT_AZIMUTH, shape: 0.2, soft: 7, color: 0.6, tones: 0 },
+      // RESET = the locked house style (matches lib DEFAULTS / bare CLI).
+      reset: { amount: 0.3, light: DEFAULT_AZIMUTH, shape: 0.2, soft: SHADE_DEFAULTS.blur, color: SHADE_DEFAULTS.hue, tones: 0 },
+    };
+    this.shadeOverrides =
+      name === 'dither' || name === 'hue' ? { floor: 0.55, ceiling: 1.35 }
+      : name === 'bevel'                  ? { emboss: true }
+      : {};
+    Object.assign(this.shadeValues, presets[name]);
+    for (const s of SHADE_SLIDERS) {
+      const el = this.shadeSliderEls.get(s.key);
+      if (el) el.value = String(this.shadeValues[s.key]);
+      this.shadeValueLabels.get(s.key)?.setText(this.formatShadeValue(s));
+    }
+    if (this.liveShading) this.shadePreviewDirty = true;
+    const hint = name === 'bevel' ? 'emboss: AMOUNT=depth SOFT=width — ' : '';
+    this.statusText?.setText(`${name} preset — ${hint}${this.liveShading ? 'preview updated' : 'tick LIVE to preview'}`);
+  }
+
+  // ─── Live shading preview ──────────────────────────────────────────────────
+
+  /** Which texture the preview pane is showing — shaded mirror or raw work. */
+  private previewTexKey(): string {
+    return this.liveShading ? SHADED_KEY : WORK_KEY;
+  }
+
+  /** Slider values → the option object shade.mjs expects. */
+  /**
+   * Map the six intuitive controls onto the full shader parameter set (the
+   * lib and the CLI keep every knob; the editor deliberately exposes few).
+   *
+   *   AMOUNT → strength, plus floor/ceiling widened in step so the range is
+   *            always usable but can never crush to black or blow to white
+   *   LIGHT  → direction (elevation fixed at the tuned default)
+   *   SHAPE  → volume/parts blend (0 = one body … 1 = per-outline parts)
+   *   SOFT   → dome radius
+   *   COLOR  → hue shift
+   *   TONES  → band size, with dithering auto-enabled alongside bands
+   */
+  private shadeOptions(): Record<string, number | number[] | boolean> {
+    const v = this.shadeValues;
+    const rad = (v.light * Math.PI) / 180;
+    const dir = [Math.cos(rad), Math.sin(rad), DEFAULT_ELEVATION];
+    if (this.shadeOverrides.emboss) {
+      // BEVEL preset: raised-sticker rim only, dome model bypassed.
+      return {
+        bevel:      Math.max(1, Math.round(v.soft)),
+        bevelDepth: v.amount,
+        palette:    v.palette > 0,
+        dir,
+      };
+    }
+    const steps = TONE_STEPS[Math.round(v.tones)] ?? 0;
+    return {
+      strength: 2.6 * v.amount,
+      floor:    this.shadeOverrides.floor   ?? Math.max(0.3, 1 - 1.15 * v.amount),
+      ceiling:  this.shadeOverrides.ceiling ?? 1 + v.amount,
+      volume:   1 - v.shape,
+      parts:    v.shape,
+      blur:     Math.max(1, Math.round(v.soft)),
+      hue:      v.color,
+      steps,
+      dither:   steps > 0 ? 0.7 : 0,
+      detail:   SHADE_DEFAULTS.detail,
+      falloff:  SHADE_DEFAULTS.falloff,
+      palette:  v.palette > 0,
+      dir,
+    };
+  }
+
+  private buildShadedTexture(): void {
+    if (this.textures.exists(SHADED_KEY)) this.textures.remove(SHADED_KEY);
+    this.shadeTex = this.textures.createCanvas(SHADED_KEY, SHEET_PX, SHEET_PX)!;
+    for (let i = 0; i < SHEET_FRAMES; i++) {
+      this.shadeTex.add(i, 0, (i % SHEET_COLS) * FRAME, Math.floor(i / SHEET_COLS) * FRAME, FRAME, FRAME);
+    }
+  }
+
+  /**
+   * Re-shade the whole sheet into the mirror texture. Runs the same
+   * `shadeSheet` the SHADE button and the CLI use, so what the preview shows is
+   * what gets written — no separate preview approximation to fall out of sync.
+   */
+  private refreshShadedPreview(): void {
+    if (!this.shadeTex) this.buildShadedTexture();
+    const dst = this.shadeTex!;
+    dst.context.clearRect(0, 0, SHEET_PX, SHEET_PX);
+    dst.context.drawImage(this.workTex.canvas, 0, 0);
+    const img = dst.context.getImageData(0, 0, SHEET_PX, SHEET_PX);
+    try {
+      shadeSheet(img.data, SHEET_PX, SHEET_PX, this.shadeOptions());
+    } catch { /* non-conforming sheet size — leave the copy unshaded */ }
+    dst.context.putImageData(img, 0, 0);
+    dst.refresh();
+  }
+
+  private setLiveShading(on: boolean): void {
+    this.liveShading = on;
+    if (on) this.refreshShadedPreview();
+    // Anims are bound to a texture key, so they have to be rebuilt against
+    // whichever mirror is now driving the preview.
+    this.buildAnims(this.fps);
+    this.previewSprite.setTexture(this.previewTexKey(), this.previewPaused ? this.selectedFrame : 0);
+    if (!this.previewPaused) this.previewSprite.play(`spriteedit-walk-${this.previewDir}`, true);
+    this.statusText?.setText(on ? 'live shading on — preview only, SAVE is unaffected' : 'live shading off');
   }
 
   private setFps(fps: number): void {
@@ -249,7 +528,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.previewSprite.anims.stop();
     this.buildAnims(this.fps);
     if (this.previewPaused) {
-      this.previewSprite.setFrame(this.selectedFrame);
+      this.previewSprite.setTexture(this.previewTexKey(), this.selectedFrame);
       return;
     }
     this.previewSprite.play(`spriteedit-walk-${this.previewDir}`, true);
@@ -267,6 +546,10 @@ export class SpriteEditorScene extends Phaser.Scene {
           names = data.sprites
             .filter(s => s.width === SHEET_PX && s.height === SHEET_PX)
             .map(s => s.name)
+            // `_n` normal maps are the same size as their sheet but aren't
+            // paintable art. `-shaded` sheets stay listed — they're meant to
+            // be selectable and assignable once the art is finished.
+            .filter(n => !n.endsWith('_n'))
             .sort();
         }
       } catch { /* dev server endpoint unavailable — fall through */ }
@@ -345,6 +628,9 @@ export class SpriteEditorScene extends Phaser.Scene {
       this.statusText.setText('no sheet loaded to duplicate');
       return;
     }
+    // Stamp any float BEFORE the dirty guard — a hovering paste is unsaved
+    // work and must trip the prompt, not vanish when the sheet swaps.
+    this.canvas.stampFloating();
     if (!duplicate && this.dirty) {
       this.statusText.setText('unsaved changes — SAVE (or discard) before creating a new sheet');
       return;
@@ -362,7 +648,6 @@ export class SpriteEditorScene extends Phaser.Scene {
       return;
     }
 
-    this.canvas.stampFloating();
     const cv = document.createElement('canvas');
     cv.width = SHEET_PX;
     cv.height = SHEET_PX;
@@ -392,8 +677,65 @@ export class SpriteEditorScene extends Phaser.Scene {
     this.statusText.setText(`${duplicate ? 'duplicated to' : 'created'} ${name}.png ✓ — ASSIGN to a character when ready`);
   }
 
+  /**
+   * SHADE button — bake the fixed top-left key light into `<sheet>-shaded.png`.
+   * The original is never modified, and the shaded sheet becomes selectable in
+   * the dropdown so it can be ASSIGNed to a character.
+   *
+   * Server-side (see `/__editor/shade-sprite`) so the button and the
+   * `npm run bake-depth` CLI run the same `scripts/lib/shade.cjs`.
+   */
+  private async createShadedVersion(): Promise<void> {
+    if (!import.meta.env.DEV) {
+      this.statusText.setText('shading only available in dev mode');
+      return;
+    }
+    if (!this.currentSheet) {
+      this.statusText.setText('no sheet loaded');
+      return;
+    }
+    if (this.currentSheet.endsWith('-shaded')) {
+      this.statusText.setText('already a shaded sheet — open the original');
+      return;
+    }
+    // Shading reads the PNG on disk, so unsaved work would silently be left
+    // out of the result. Better to say so than to shade a stale sheet.
+    if (this.dirty) {
+      this.statusText.setText('unsaved changes — SAVE first, then SHADE');
+      return;
+    }
+
+    const name = `${this.currentSheet}-shaded`;
+    this.statusText.setText(`shading ${this.currentSheet}…`);
+    try {
+      const resp = await fetch(
+        `/__editor/shade-sprite?sheet=${encodeURIComponent(this.currentSheet)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          // Exactly the options the live preview is using, so the written file
+          // matches what you were looking at.
+          body: JSON.stringify(this.shadeOptions()),
+        },
+      );
+      const body = await resp.json().catch(() => ({})) as { error?: string; frames?: number };
+      if (!resp.ok) {
+        this.statusText.setText(`shade failed: ${body.error ?? resp.status}`);
+        return;
+      }
+      this.addSheetOption(name);
+      this.statusText.setText(`created ${name}.png ✓ (${body.frames ?? 0} frames) — reload page to open it`);
+    } catch (e: unknown) {
+      this.statusText.setText(`shade error: ${(e as Error).message ?? e}`);
+    }
+  }
+
   private trySelectSheet(name: string): void {
     if (name === this.currentSheet) return;
+    // A hovering paste is real work: stamp it NOW so it sets the dirty flag
+    // and gets the unsaved-changes prompt below — otherwise switching sheets
+    // with a float up discarded it silently past the guard.
+    this.canvas?.stampFloating();
     const now = this.time.now;
     if (this.dirty && !(this.pendingSwitch === name && now - this.pendingSwitchAt < 3000)) {
       this.pendingSwitch = name;
@@ -436,6 +778,11 @@ export class SpriteEditorScene extends Phaser.Scene {
 
     this.currentSheet = name;
     this.setDirty(false);
+    // The shaded mirror is a copy of the work texture, so a sheet swap leaves
+    // it showing the PREVIOUS sheet until something else dirties it. Rebuild
+    // straight away rather than waiting for the next slider nudge.
+    if (this.liveShading) this.refreshShadedPreview();
+    this.shadePreviewDirty = false;
     if (this.dropdownEl && this.dropdownEl.value !== name) this.dropdownEl.value = name;
     this.selectFrame(0);
     this.statusText?.setText(`sheet: ${name}`);
@@ -543,6 +890,7 @@ export class SpriteEditorScene extends Phaser.Scene {
     }
     ctx.putImageData(img, col * FRAME, row * FRAME);
     this.workTex.refresh();
+    this.shadePreviewDirty = true;
     this.setDirty(true);
   }
 
@@ -844,6 +1192,18 @@ export class SpriteEditorScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (!this.previewSprite) return;
+
+    // Coalesce re-shades: a slider drag or a paint stroke can dirty this many
+    // times per frame, and a full-sheet shade is far too heavy to run per event.
+    if (this.liveShading && this.shadePreviewDirty) {
+      this.shadePreviewTimer += delta;
+      if (this.shadePreviewTimer >= 120) {
+        this.shadePreviewTimer = 0;
+        this.shadePreviewDirty = false;
+        this.refreshShadedPreview();
+      }
+    }
+
     if (this.previewPaused) return; // locked to the selected frame — no auto/drive
 
     const p = this.input.activePointer;
@@ -1070,6 +1430,17 @@ export class SpriteEditorScene extends Phaser.Scene {
     });
     this.btn.make('NEW', leftBlockX, leftSheetY, BW, BH, 0x1c5c3c, () => void this.createSheet(false));
     this.btn.make('DUPE', leftBlockX + BW + GAP, leftSheetY, BW, BH, 0x1c5c3c, () => void this.createSheet(true));
+
+    // Bake the key light into a sibling <sheet>-shaded.png, using whatever the
+    // sliders below are set to. Reads what's on disk, so unsaved edits aren't
+    // included — hence the save-first guard in createShadedVersion().
+    const leftShadeY = leftSheetY + 52;
+    this.add.text(leftBlockX, leftShadeY - 18, 'SHADING', {
+      fontSize: '15px', color: '#667788', fontFamily: 'monospace',
+    });
+    this.btn.make('SHADE', leftBlockX, leftShadeY, BW * 2 + GAP, BH, 0x6e4c1c,
+      () => void this.createShadedVersion());
+    this.buildShadingPanel(leftBlockX, leftShadeY, BW, BH, GAP);
 
     this.btn.make('UNDO', bx(4), UTILS_Y, BW, BH, 0x2f4f5f, () => this.canvas.undo());
     this.btn.make('REDO', bx(5), UTILS_Y, BW, BH, 0x2f4f5f, () => this.canvas.redo());

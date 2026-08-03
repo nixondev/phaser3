@@ -19,6 +19,7 @@ npm run build            # tsc + vite build → /dist
 npm run preview          # Serve production build
 npm run setup            # Full asset setup (generate maps + build tileset)
 npm run build-tiles      # Compose assets_src/tiles/ PNGs → tileset.png
+npm run bake-depth -- <sheet>  # Write <sheet>-shaded.png with a baked key light
 npm run regenerate-tiles # Recreate procedural source tiles
 npm run migrate-tiles    # Extract tileset.png back into individual files
 ```
@@ -244,6 +245,89 @@ All player-facing writing lives in `words/**/*.twee` (Twee 3 plain text; full do
 
 ---
 
+## Shaded Sprite Sheets
+
+Creates a shaded copy of a character sheet — a directional key light baked in —
+via `<sheet>-shaded.png`. Pure art pass: no engine support, no runtime cost.
+The original is never modified; derived sheets (`-shaded`, `_n`) are refused as
+inputs so shading can't stack.
+
+**`$` editor → SHADING block**: SHADE button, LIVE checkbox (preview-only
+shading of the preview pane; SAVE unaffected), PAL checkbox (snap output to the
+sheet's own colours), six sliders, BEVEL/SOFT/DITHER + HUE/RESET presets.
+SHADE writes with exactly what is being previewed. The editor deliberately
+exposes FEW controls — `shadeOptions()` maps them onto the full parameter set.
+DITHER (user-picked 2026-08-01: retro 5-tone banded wash, grain, strong hue)
+and HUE (same ramp, smooth, hue 0.6) need a floor/ceiling pair AMOUNT's
+coupled mapping can't produce, so presets may set overrides — released when
+AMOUNT next moves. BEVEL is different in kind: it enters **emboss mode**
+(`bevel > 0` in shade.mjs), which bypasses the dome model entirely — the
+sprite is a flat sticker raised off the surface. Only pixels within `bevel`
+px of transparency change: pushed up where the silhouette edge faces the
+light, down opposite, scaling continuously with facing angle and fading
+linearly across the width (chamfer, not slab). Interior bit-identical,
+interior black lines ignored, #000000 outline pixels immune, outside a frame
+cell counts as EMPTY (same rule as the dome blur: art nudged against the
+frame boundary embosses exactly like art mid-cell — anything else loses the
+head's top highlight on the walk-bob frame). In emboss mode AMOUNT = depth,
+SOFT = width (3 = the
+user-picked preset, 2026-08-01), LIGHT aims it; SHAPE/COLOR/TONES inert.
+CLI: `npm run bake-depth -- <sheet> --bevel 3 --bevelDepth 0.4`.
+
+| Slider | Means | Drives |
+|---|---|---|
+| AMOUNT | how much shading | strength, plus floor/ceiling widened in step |
+| LIGHT  | light bearing (°) | dir (elevation fixed) |
+| SHAPE  | one body ↔ per-outline parts | volume/parts blend |
+| SOFT   | tight rim ↔ broad wash | blur radius |
+| COLOR  | cool shadows / warm highlights | hue |
+| TONES  | smooth ↔ few flat pixel tones | steps, dither auto-on |
+
+Full parameter access stays on the CLI: `npm run bake-depth -- <sheet>` (every
+DEFAULTS key is a flag automatically).
+
+**House style (locked 2026-08-01).** `DEFAULTS` in `scripts/lib/shade.mjs` ARE
+the project's shading style, picked by the user from rendered candidates: a
+subtle, volume-led, smooth directional wash (strength 0.8, blur 6, volume 0.8 /
+parts 0.2, hue 0.35, floor 0.65 / ceiling 1.3, falloff 1.2, no bands, no
+texture) that adds light without fighting the art's existing hand shading.
+Bare `npm run bake-depth -- <sheet>` and the editor's RESET produce exactly it.
+Change it only at the user's direction — and update the `test-shade` defaults
+assertion, which pins these values on purpose.
+
+**The model** (`scripts/lib/shade.mjs`, shared verbatim by editor preview, dev
+endpoint and CLI): one composite height field per 64×64 frame cell —
+
+```
+H = (VOLUME × dome(whole silhouette) + PARTS × dome(split at enclosing #000000 outlines))
+    / (VOLUME + PARTS)  +  TEXTURE × high-passed luminance
+```
+
+shaded once with a directional light, then per-pixel: STRENGTH/TAPER shape the
+ramp, HUE bends it (cool shadows / warm highlights via per-channel exponents —
+m=1 is a fixed point, so flat interiors stay bit-identical), BANDS+DITHER
+quantise it, FLOOR/CEILING clamp it, PAL snaps to the source palette.
+
+Why composite: independent per-region domes are per-part *pillow shading* —
+where two outlined regions touch (head on collar), each gets a full rim at the
+shared edge and the parts pop apart. Blending a whole-body dome in makes
+touching parts bumps on one hill; the shared edge becomes a fold.
+
+**Convention, not inference: every opaque `#000000` pixel is an edge.** The
+artist reserves pure black for outlines; a black-looking non-edge (a pupil, a
+boot) is painted `#000001`, which is visually identical. `#000000` itself is
+immune to shading either way (multiply and hue both fix 0).
+
+Non-obvious invariants, all enforced by **`npm run test-shade`** (40 checks —
+run it after any shader change):
+- outside a frame cell = EMPTY in every blur, never edge-clamp (else the walk
+  frame whose bob touches row 0 loses its highlight and flickers)
+- alpha passes through untouched; source pixels are never blurred
+- blur is radius-based prefix-sum (cost flat in radius); normal tilt scales
+  with radius so STRENGTH means the same at every SPREAD
+- the dev endpoint whitelists params from DEFAULTS itself — a hand-kept list
+  went stale once and silently made SHADE output differ from the live preview
+
 ## Audio System
 
 SpessaSynth (SoundFont-native AudioWorklet). Assets in `public/music/`:
@@ -299,7 +383,7 @@ title screen — there are no in-game function-key tools (early idea, removed).
 
 | Key (title screen) | System | Purpose |
 | **#** | TileEditorScene | Standalone tile atlas / painter |
-| **$** | SpriteEditorScene | Spritesheet editor: paint 64×64 frames, live walk-cycle preview (hover pane + WASD), ASSIGN button → give the open sheet to a cast member (characters.json) |
+| **$** | SpriteEditorScene | Spritesheet editor: paint 64×64 frames, live walk-cycle preview (hover pane + WASD), ASSIGN button → give the open sheet to a cast member (characters.json), SHADE button → bake a key light into `<sheet>-shaded.png` |
 | **?** | EditorScene | Main room editor: objects, layers (1-7), color tiles, smart save |
 
 Inside the `?` editor, DebugManager provides **F1** (info HUD), **F3**
@@ -345,6 +429,7 @@ Resize and drag (Select mode) shift all fields (doors, interactables, afflicted)
 - POST /__editor/save-object -> patches {roomId, kind, id, x, y, spawnX, spawnY} in src/data/rooms.json (supports door, interactable, fflicted)
 - GET /__editor/list-sprites -> lists public/assets/sprites/*.png with dimensions (sprite editor dropdown)
 - POST /__editor/save-sprite?sheet=<name> -> writes public/assets/sprites/<name>.png (sprite editor SAVE)
+- POST /__editor/shade-sprite?sheet=<name> -> writes public/assets/sprites/<name>-shaded.png via scripts/lib/shade.cjs (sprite editor SHADE)
 - POST /__editor/save-character {id, field: sheet|afflictedSheet, value} -> patches src/data/characters.json (sprite editor ASSIGN)
 - POST /__editor/save-shadows {enabled, alpha, blur} -> writes rooms.json top-level edgeShadows (? editor Shadows panel)
 ---

@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "generate-assets": "node scripts/generate-assets.cjs",
     "build-tiles": "node scripts/build-tiles.cjs",
+    "bake-depth": "node scripts/bake-depth.cjs",
+    "test-shade": "node scripts/test-shade.mjs",
     "regenerate-tiles": "node scripts/regenerate-tiles.cjs",
     "migrate-tiles": "node scripts/migrate-tiles.cjs",
     "new-room": "node scripts/new-room.cjs",

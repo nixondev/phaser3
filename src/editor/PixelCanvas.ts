@@ -88,6 +88,10 @@ export class PixelCanvas {
   /** Normalized inclusive selection rect in pixel coords, or null. */
   private selRect: { x0: number; y0: number; x1: number; y1: number } | null = null;
   private selDragAnchor: { x: number; y: number } | null = null;
+  /** Did the pointer leave the anchor pixel during this select-drag? A plain
+   *  click (no drag) means DESELECT — without this, every click-away-to-stamp
+   *  left a stray 1×1 marquee that COPY/CUT then operated on. */
+  private selDragMoved = false;
   /**
    * A region hovering above the canvas (after paste, or after the first nudge
    * of a selection). Not part of `pixels` until stamped down. `lifted` floats
@@ -264,6 +268,7 @@ export class PixelCanvas {
         }
         this.stampFloating();
         this.selDragAnchor = this.toPixel(p.x, p.y);
+        this.selDragMoved = false;
         this.selRect = { x0: this.selDragAnchor.x, y0: this.selDragAnchor.y, x1: this.selDragAnchor.x, y1: this.selDragAnchor.y };
         this.isDrawing = true;
         this.drawingPointerId = p.id;
@@ -298,6 +303,7 @@ export class PixelCanvas {
       if (this.tool === 'select') {
         if (!this.selDragAnchor) return;
         const cur = this.toPixel(p.x, p.y);
+        if (cur.x !== this.selDragAnchor.x || cur.y !== this.selDragAnchor.y) this.selDragMoved = true;
         this.selRect = {
           x0: Math.min(this.selDragAnchor.x, cur.x),
           y0: Math.min(this.selDragAnchor.y, cur.y),
@@ -316,8 +322,16 @@ export class PixelCanvas {
         this.drawingPointerId = null;
         if (this.tool === 'select' && this.selDragAnchor) {
           this.selDragAnchor = null;
-          const r = this.getSelectionRect();
-          if (r) this.cfg.onStatus?.(`selected ${r.w}×${r.h} at (${r.x},${r.y})`);
+          if (!this.selDragMoved) {
+            // Plain click = deselect (and any float was already stamped on
+            // pointerdown) — never leave a stray 1×1 selection behind.
+            this.selRect = null;
+            this.redraw();
+            this.cfg.onStatus?.('deselected — drag to select a region');
+          } else {
+            const r = this.getSelectionRect();
+            if (r) this.cfg.onStatus?.(`selected ${r.w}×${r.h} at (${r.x},${r.y})`);
+          }
         }
       }
       const pinch = this.getActiveTouchPair();
@@ -766,16 +780,19 @@ export class PixelCanvas {
     return true;
   }
 
-  /** Composite the floating layer down (transparent pixels don't punch holes). */
+  /**
+   * Stamp the floating layer down as a full rectangle REPLACE — transparent
+   * pixels in the region overwrite too. Pasting a sprite with blank corners
+   * clears those corners at the destination; a merge that skipped them left
+   * stale pixels showing through, which read as a broken paste.
+   */
   stampFloating(): void {
     if (!this.floating) return;
     const { clip, lifted } = this.floating;
     if (!lifted) this.pushHistory(); // lifted floats pushed history when cut out
     for (let j = 0; j < clip.h; j++) {
       for (let i = 0; i < clip.w; i++) {
-        const argb = clip.pixels[j * clip.w + i];
-        if (((argb >>> 24) & 0xff) === 0) continue;
-        this.setPx(clip.x + i, clip.y + j, argb);
+        this.setPx(clip.x + i, clip.y + j, clip.pixels[j * clip.w + i]);
       }
     }
     this.floating = null;

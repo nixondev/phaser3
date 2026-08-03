@@ -77,7 +77,14 @@ function walkCharacterRefs(node: unknown, refs: Set<string>): void {
  * (Sheet PNGs are not checked here; a missing file surfaces as a Phaser
  * loader error at startup.)
  */
-export function auditCharacters(): string[] {
+/**
+ * Dev startup check for dangling references.
+ *
+ * @param textures pass the scene's texture manager to additionally verify every
+ *   referenced spritesheet actually loaded. Optional so the audit stays usable
+ *   from non-scene contexts.
+ */
+export function auditCharacters(textures?: { exists(key: string): boolean }): string[] {
   const warnings: string[] = [];
   const roomIds = new Set(Object.keys(roomsData.rooms));
   const placementIds = new Set<string>();
@@ -113,6 +120,21 @@ export function auditCharacters(): string[] {
   for (const ref of refs) {
     if (!isCast(ref) && !placementIds.has(ref)) {
       warnings.push(`character ref "${ref}" matches no registry entry or placement id`);
+    }
+  }
+
+  // Sheet textures. A referenced PNG that isn't on disk renders in-game as
+  // Phaser's green missing-texture box with nothing in the log to explain it —
+  // easy to hit by deleting or renaming a sheet that ASSIGN pointed a
+  // character at. Typed structurally so this data module stays Phaser-free.
+  if (textures) {
+    for (const sheet of collectReferencedSheets()) {
+      if (!textures.exists(sheet)) {
+        warnings.push(
+          `sheet "${sheet}" is referenced but has no texture — ` +
+          `check public/assets/sprites/${sheet}.png exists`,
+        );
+      }
     }
   }
 
