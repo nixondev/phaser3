@@ -8,7 +8,7 @@ import { EditorButtons } from '@/editor/EditorButtons';
 import { PixelCanvas, PixelCanvasView, PixelTool, PenStyle, RegionClip } from '@/editor/PixelCanvas';
 import { collectReferencedSheets, getCharacter, allCharacters, applySheetAssignment } from '@systems/CharacterRegistry';
 import { drawCharacterShadow, CHARACTER_SHADOW_FEET_OFFSET } from '@entities/Entity';
-import { getSpriteScale, setSpriteScale } from '@systems/SpriteScale';
+import { getSpriteScale, setSpriteScale, SPRITE_SCALE_RANGE } from '@systems/SpriteScale';
 // Same module the dev server and the bake-depth CLI run — see shade.mjs.
 import { shadeSheet, DEFAULTS as SHADE_DEFAULTS } from '../../scripts/lib/shade.mjs';
 
@@ -985,7 +985,9 @@ export class SpriteEditorScene extends Phaser.Scene {
     });
     const sizeEl = document.createElement('input');
     sizeEl.type = 'range';
-    sizeEl.min = '0.75'; sizeEl.max = '1.75'; sizeEl.step = '0.05';
+    sizeEl.min = String(SPRITE_SCALE_RANGE.MIN);
+    sizeEl.max = String(SPRITE_SCALE_RANGE.MAX);
+    sizeEl.step = '0.05';
     sizeEl.value = String(getSpriteScale());
     sizeEl.title = 'in-game size of ALL character sprites (visual only — collision unchanged)';
     sizeEl.style.cssText = 'position:fixed;z-index:1000;cursor:pointer;accent-color:#c8963c;background:transparent';

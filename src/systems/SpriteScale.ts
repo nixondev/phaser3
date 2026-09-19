@@ -9,11 +9,18 @@ import roomsData from '@/data/rooms.json';
  * this value (arcade bodies multiply both by sprite scale), so collision,
  * interact ranges and touch-death stay identical at any size.
  *
- * Adjustable from the $ editor's SIZE slider (live in its 1:1 preview);
- * persisted via /__editor/save-sprite-scale. The game reads it at entity
- * construction, so a running game needs a reload to reflect a new value.
+ * Adjustable from the $ editor's SIZE slider (live in its 1:1 preview) and
+ * from the ? editor's View panel (live in the room view, next to camera zoom —
+ * the two together set how the world reads). Persisted via
+ * /__editor/save-sprite-scale. The game reads it at entity construction, so a
+ * running game needs a reload to reflect a new value.
+ *
+ * Distinct from `cameraZoom` (see CameraZoom.ts): zoom magnifies EVERYTHING,
+ * this changes only how big characters are relative to the tiles.
  */
-const MIN = 0.5, MAX = 2;
+/** Deliberately wide so extreme proportions can be tried in the editors. */
+export const SPRITE_SCALE_RANGE = { MIN: 0.25, MAX: 4 } as const;
+const { MIN, MAX } = SPRITE_SCALE_RANGE;
 
 let current: number = clamp((roomsData as { spriteScale?: number }).spriteScale ?? 1);
 

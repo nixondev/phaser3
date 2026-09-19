@@ -85,17 +85,23 @@ export class Flashlight {
   }
 
   /** Erases the flashlight cone from a screen-space RenderTexture.
-   *  Pass screen-space coordinates so no scroll math is needed.
+   *  Pass screen-space coordinates so no scroll math is needed. `scale` is the
+   *  camera zoom: RANGE is a world distance, and the texture is in screen px.
    */
-  renderMaskScreenSpace(target: Phaser.GameObjects.RenderTexture, screenX: number, screenY: number): void {
+  renderMaskScreenSpace(
+    target: Phaser.GameObjects.RenderTexture,
+    screenX: number, screenY: number,
+    scale: number = 1,
+  ): void {
     if (!this.on) return;
+    const r = RANGE * scale;
     this.maskGraphics.clear();
     this.maskGraphics.fillStyle(0xffffff, 0.45);
-    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE * 1.2, HALF_ANGLE * 1.4);
+    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, r * 1.2, HALF_ANGLE * 1.4);
     this.maskGraphics.fillStyle(0xffffff, 0.95);
-    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE, HALF_ANGLE);
+    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, r, HALF_ANGLE);
     this.maskGraphics.fillStyle(0xffffff, 1.0);
-    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, RANGE * 0.7, HALF_ANGLE * 0.5);
+    this.drawCone(this.maskGraphics, screenX, screenY, this.lastAngle, r * 0.7, HALF_ANGLE * 0.5);
     target.erase(this.maskGraphics);
   }
 

@@ -567,8 +567,8 @@ function editorSavePlugin(): Plugin {
         try {
           const body = await readJsonBody(req) as { spriteScale?: unknown };
           const v = body.spriteScale;
-          if (typeof v !== 'number' || !Number.isFinite(v) || v < 0.5 || v > 2) {
-            send(res, 400, { error: 'invalid spriteScale (0.5–2)' }); return;
+          if (typeof v !== 'number' || !Number.isFinite(v) || v < 0.25 || v > 4) {
+            send(res, 400, { error: 'invalid spriteScale (0.25–4)' }); return;
           }
           const raw = await fsp.readFile(roomsJsonPath, 'utf8');
           const data = JSON.parse(raw);
@@ -577,6 +577,27 @@ function editorSavePlugin(): Plugin {
           await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
           await fsp.rename(tmp, roomsJsonPath);
           send(res, 200, { ok: true, spriteScale: data.spriteScale });
+        } catch (e: any) {
+          send(res, 500, { error: String(e?.message ?? e) });
+        }
+      });
+
+      // ? editor View panel: global camera zoom — rooms.json top-level `cameraZoom`.
+      server.middlewares.use('/__editor/save-camera-zoom', async (req, res, next) => {
+        if (req.method !== 'POST') { next(); return; }
+        try {
+          const body = await readJsonBody(req) as { cameraZoom?: unknown };
+          const v = body.cameraZoom;
+          if (typeof v !== 'number' || !Number.isFinite(v) || v < 0.25 || v > 4) {
+            send(res, 400, { error: 'invalid cameraZoom (0.25–4)' }); return;
+          }
+          const raw = await fsp.readFile(roomsJsonPath, 'utf8');
+          const data = JSON.parse(raw);
+          data.cameraZoom = Math.round(v * 100) / 100;
+          const tmp = `${roomsJsonPath}.tmp`;
+          await fsp.writeFile(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+          await fsp.rename(tmp, roomsJsonPath);
+          send(res, 200, { ok: true, cameraZoom: data.cameraZoom });
         } catch (e: any) {
           send(res, 500, { error: String(e?.message ?? e) });
         }
@@ -610,7 +631,7 @@ function editorSavePlugin(): Plugin {
 
       // Surface a hint at startup so it's discoverable.
       if (fs.existsSync(tilemapsDir) && fs.existsSync(roomsJsonPath)) {
-        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/shade-sprite, /__editor/save-character, /__editor/save-sprite-scale');
+        server.config.logger.info('[warden-editor] save endpoints active: /__editor/save-tilemap, /__editor/save-object, /__editor/save-room-size, /__editor/save-tile, /__editor/save-weather, /__editor/save-dark, /__editor/save-shadows, /__editor/list-sprites, /__editor/save-sprite, /__editor/shade-sprite, /__editor/save-character, /__editor/save-sprite-scale, /__editor/save-camera-zoom');
       }
     }
   };

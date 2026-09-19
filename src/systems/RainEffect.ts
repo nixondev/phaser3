@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import type { WeatherEffect } from '@systems/WeatherManager';
+import type { ScreenSpaceHost } from '@systems/ScreenSpace';
 
 interface Drop { x: number; y: number; speed: number; }
 
@@ -20,6 +21,8 @@ export class RainEffect implements WeatherEffect {
     this.graphics.setScrollFactor(0);
     this.graphics.setDepth(DEPTH.WEATHER);
     this.graphics.setVisible(false);
+    // Rain is authored in screen pixels — keep it 1:1 however far the camera is zoomed in.
+    (scene as ScreenSpaceHost).pinScreenSpace?.(this.graphics, 0, 0);
 
     for (let i = 0; i < count; i++) {
       this.drops.push({

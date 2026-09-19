@@ -7,7 +7,9 @@ Companion docs: `EDITORGUIDE.md`, `AUTHORING.md`, `PARADIGM.md`, `ROADMAP.md`, `
 2D top-down exploration / puzzle-box game. TypeScript + Phaser 3. No combat.
 Player wakes in a sealed city, cures afflicted residents, each cure adds a character + 2 items + a new body for sequencing puzzles. **Short to execute, long to understand.**
 
-Retro pixel-art, 320×240 @ 3× zoom.
+Retro pixel-art on a native 64px grid. Canvas is 1280×960 logical (`Scale.FIT`
+letterboxes it into the window); `cameraZoom` decides how much of the world
+that canvas shows.
 
 ---
 
@@ -165,7 +167,8 @@ route through `GameScene.applyCure(afflicted, cureSlot, source)`.
 ## Key Constants (`src/utils/Constants.ts`)
 
 ```text
-Display:    320×240 @ 3× zoom, 16px tiles
+Display:    1280×960 canvas, 64px tiles, Scale.FIT into the window
+            visible world = 1280/cameraZoom × 960/cameraZoom px
 Player:     220 px/s, 8 fps animations
 Interact:   28px range
 Inventory:  2 rows × 6 cols, 14px slots
@@ -229,7 +232,26 @@ section (persists via `/__editor/save-shadows`). Also global: `spriteScale` —
 render size of ALL character sprites (Player/Afflicted/parked bodies; items
 and tiles untouched). Visual only: entity bodies divide setSize/setOffset by
 it so collision never changes. Tuned via the `$` editor's SIZE slider (live
-in the 1:1 preview; game reads it at entity construction → reload to apply).
+in the 1:1 preview; game reads it at entity construction → reload to apply)
+and the `?` editor's View panel (live in the room view).
+
+Also global: `cameraZoom` — how magnified the world renders inside the fixed
+1280×960 canvas. The window never changes size; zoom only decides how much
+world fits in it (`20/zoom × 15/zoom` tiles). Unlike `spriteScale` it scales
+EVERYTHING uniformly — tiles, characters, items, edge shadows — so the two are
+orthogonal knobs: **zoom = how close the camera is, spriteScale = how big
+characters are relative to the architecture.** Physics, interact ranges and
+door zones are world units and are unaffected. Tuned in the `?` editor's View
+panel (`src/systems/CameraZoom.ts`, applied in `GameScene.setupCamera`).
+
+Zooming in shows less room, so rooms authored as exactly one screen (20×15)
+start scrolling; the View panel's readout prints visible-tiles vs room-tiles
+so you can see when a room needs growing (`?` editor Shift+Arrow, or a bigger
+tilemap). **Screen-space overlays** (rain, drips, clouds, the darkness RT, the
+transition fade) are *not* zoomed — `setScrollFactor(0)` does not defend
+against zoom, so they register with `scene.pinScreenSpace()` and are held at
+1:1 by `src/systems/ScreenSpace.ts`. Any new full-screen overlay must do the
+same.
 
 **Dev note:** Adding a new `rooms.json` field requires server restart + hard browser refresh. Changing existing values hot-reloads.
 
@@ -427,6 +449,13 @@ the room (via `applyCure`, so home doors unlock and held items drop).
 | Ctrl+Sh+Arrow | Shrink map one tile |
 | X | **Smart Save** (awaits objects before tilemap reload) |
 
+**View panel (left panel, global):** ZOOM and SPRITE sliders (0.25–4) live-apply
+to the room view and persist to `rooms.json`; the readout prints visible tiles
+vs room tiles. "Show reference character" drops the protagonist sheet at the
+room's player spawn at true in-game size — the thing to judge the two sliders
+against. The editor camera sits at the saved `cameraZoom`; ctrl+wheel still
+overrides it freely.
+
 Resize and drag (Select mode) shift all fields (doors, interactables, afflicted) automatically.
 - `POST /__editor/save-tilemap?roomId=<id>` → writes `public/assets/tilemaps/<id>.json`
 - POST /__editor/save-tilemap?roomId=<id> -> writes public/assets/tilemaps/<id>.json
@@ -435,7 +464,8 @@ Resize and drag (Select mode) shift all fields (doors, interactables, afflicted)
 - POST /__editor/save-sprite?sheet=<name> -> writes public/assets/sprites/<name>.png (sprite editor SAVE)
 - POST /__editor/shade-sprite?sheet=<name> -> writes public/assets/sprites/<name>-shaded.png via scripts/lib/shade.cjs (sprite editor SHADE)
 - POST /__editor/save-character {id, field: sheet|afflictedSheet, value} -> patches src/data/characters.json (sprite editor ASSIGN)
-- POST /__editor/save-sprite-scale {spriteScale} -> writes rooms.json top-level spriteScale ($ editor SIZE slider; global character size, visual only — bodies compensate)
+- POST /__editor/save-sprite-scale {spriteScale} -> writes rooms.json top-level spriteScale ($ editor SIZE slider / ? editor View panel; global character size, visual only — bodies compensate)
+- POST /__editor/save-camera-zoom {cameraZoom} -> writes rooms.json top-level cameraZoom (? editor View panel; global world magnification)
 - POST /__editor/save-shadows {enabled, alpha, blur} -> writes rooms.json top-level edgeShadows (? editor Shadows panel)
 ---
 

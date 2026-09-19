@@ -4,6 +4,8 @@ import type { EditorPreviewState } from '@systems/RoomEditorManager';
 import { DARKNESS_CONFIG } from '@utils/Constants';
 import { tilesetSpritesheetKey } from '@utils/TilesetResolver';
 import { getEdgeShadowSettings, setEdgeShadowSettings } from '@systems/EdgeShadows';
+import { getCameraZoom, setCameraZoom, CAMERA_ZOOM_RANGE } from '@systems/CameraZoom';
+import { getSpriteScale, setSpriteScale, SPRITE_SCALE_RANGE } from '@systems/SpriteScale';
 import { EdgeShadowSettings } from '@/types';
 
 /**
@@ -135,6 +137,7 @@ export class EditorUI {
     this.updateWeatherSelector(roomId);
     this.updateDarknessSelector(roomId);
     this.updateAlphaSelectors(roomId);
+    this.updateViewReadout();
   }
 
   public setStatus(text: string): void {
@@ -524,6 +527,89 @@ export class EditorUI {
     if (valEl)  valEl.textContent = this.currentDarkLevel.toFixed(2);
   }
 
+
+  // ── View: camera zoom + sprite size (global — rooms.json top level) ──────
+
+  /**
+   * The two knobs that decide how the world reads on screen, side by side so
+   * they can be balanced against each other:
+   *   Zoom   — how magnified everything renders (tiles AND characters)
+   *   Sprite — how big characters are RELATIVE to the tiles
+   * Both are live in the editor view; both persist to rooms.json on release.
+   */
+  private syncViewControls(): void {
+    const zoom = getCameraZoom();
+    const sprite = getSpriteScale();
+    const zoomEl = this.root.querySelector<HTMLInputElement>('#editor-zoom');
+    const spriteEl = this.root.querySelector<HTMLInputElement>('#editor-sprite');
+    if (zoomEl) zoomEl.value = String(zoom);
+    if (spriteEl) spriteEl.value = String(sprite);
+    const zv = this.root.querySelector<HTMLSpanElement>('#editor-zoom-val');
+    const sv = this.root.querySelector<HTMLSpanElement>('#editor-sprite-val');
+    if (zv) zv.textContent = `×${zoom.toFixed(2)}`;
+    if (sv) sv.textContent = `×${sprite.toFixed(2)}`;
+    this.updateViewReadout();
+  }
+
+  /** Tells you, in tiles, how much of the room the player will actually see. */
+  private updateViewReadout(): void {
+    const el = this.root.querySelector<HTMLDivElement>('#editor-view-readout');
+    if (!el) return;
+    const { roomW, roomH, viewW, viewH } = this.scene.getViewInfo();
+    const fits = roomW <= viewW && roomH <= viewH;
+    el.innerHTML =
+      `visible: <b>${viewW.toFixed(1)} × ${viewH.toFixed(1)}</b> tiles` +
+      ` &middot; room: <b>${roomW} × ${roomH}</b>` +
+      `<br>${fits ? 'whole room on screen (no scroll)' : 'room scrolls — camera follows'}`;
+  }
+
+  private applyView(): void {
+    this.syncViewControls();
+    this.scene.applyViewSettings();
+  }
+
+  private saveView(what: 'zoom' | 'sprite'): void {
+    const url = what === 'zoom' ? '/__editor/save-camera-zoom' : '/__editor/save-sprite-scale';
+    const body = what === 'zoom'
+      ? { cameraZoom: getCameraZoom() }
+      : { spriteScale: getSpriteScale() };
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(r => r.ok
+        ? this.setStatus(`View saved — zoom ×${getCameraZoom().toFixed(2)}, sprite ×${getSpriteScale().toFixed(2)}`)
+        : this.setStatus(`View save failed: ${r.status}`))
+      .catch(e => this.setStatus(`View save failed: ${e}`));
+  }
+
+  private wireViewControls(): void {
+    const zoomEl = this.root.querySelector<HTMLInputElement>('#editor-zoom');
+    zoomEl?.addEventListener('input', () => { setCameraZoom(parseFloat(zoomEl.value)); this.applyView(); });
+    zoomEl?.addEventListener('change', () => this.saveView('zoom'));
+
+    const spriteEl = this.root.querySelector<HTMLInputElement>('#editor-sprite');
+    spriteEl?.addEventListener('input', () => { setSpriteScale(parseFloat(spriteEl.value)); this.applyView(); });
+    spriteEl?.addEventListener('change', () => this.saveView('sprite'));
+
+    const refEl = this.root.querySelector<HTMLInputElement>('#editor-ref-char');
+    refEl?.addEventListener('change', () => {
+      this.scene.setReferenceCharacterVisible(refEl.checked);
+      this.setStatus(refEl.checked
+        ? 'Reference character shown at the room’s player spawn.'
+        : 'Reference character hidden.');
+    });
+
+    this.root.querySelector<HTMLButtonElement>('#editor-view-reset')?.addEventListener('click', () => {
+      setCameraZoom(1);
+      setSpriteScale(1);
+      this.applyView();
+      this.saveView('zoom');
+      this.saveView('sprite');
+    });
+  }
+
   // ── Edge shadows (global setting — rooms.json top-level) ─────────────────
 
   private syncShadowControls(): void {
@@ -723,6 +809,10 @@ export class EditorUI {
       this.scene.game.canvas.focus();
     });
 
+    // View controls (global) — camera zoom + sprite size
+    this.syncViewControls();
+    this.wireViewControls();
+
     // Edge-shadow controls (global) — toggles + one handler per slider, all data-driven
     this.syncShadowControls();
     const flagKeys: (keyof EdgeShadowSettings)[] = ['enabled', 'blurOn', 'shadowOn', 'borderOn'];
@@ -802,6 +892,27 @@ export class EditorUI {
         <h3>Rooms</h3>
         <div id="editor-room-list" class="room-list"></div>
         <div class="hint">Add: <code>npm run new-room &lt;id&gt;</code></div>
+        <h3>View (global)</h3>
+        <div class="row col" style="gap:6px">
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Zoom: <span id="editor-zoom-val"></span></span>
+            <input type="range" class="view-slider" id="editor-zoom"
+                   min="${CAMERA_ZOOM_RANGE.MIN}" max="${CAMERA_ZOOM_RANGE.MAX}" step="0.05"
+                   title="How magnified the world renders. Window size never changes — only how much world fits in it.">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">Sprite: <span id="editor-sprite-val"></span></span>
+            <input type="range" class="view-slider" id="editor-sprite"
+                   min="${SPRITE_SCALE_RANGE.MIN}" max="${SPRITE_SCALE_RANGE.MAX}" step="0.05"
+                   title="Size of ALL character sprites relative to the tiles (visual only — collision unchanged).">
+          </div>
+          <label class="check-row">
+            <input type="checkbox" id="editor-ref-char">
+            <span>Show reference character</span>
+          </label>
+          <div class="hint" id="editor-view-readout">&mdash;</div>
+          <button class="btn" id="editor-view-reset">Reset to 1.00 / 1.00</button>
+        </div>
         <h3>Shadows (global)</h3>
         <div class="row col" style="gap:6px">
           <button class="btn shadow-flag" id="editor-shadow-enabled">shadows: on</button>
@@ -1052,6 +1163,12 @@ export class EditorUI {
       }
       #editor-overlay .dark-slider-label { color: #aaa; white-space: nowrap; min-width: 70px; }
       #editor-overlay #editor-dark-level { flex: 1; cursor: pointer; accent-color: #6666cc; }
+      #editor-overlay .view-slider { flex: 1; cursor: pointer; accent-color: #c8963c; }
+      #editor-overlay .check-row {
+        display: flex; align-items: center; gap: 6px; padding: 0 2px;
+        color: #aaa; cursor: pointer; user-select: none;
+      }
+      #editor-overlay .check-row input { accent-color: #c8963c; cursor: pointer; }
       #editor-overlay .color-picker-row {
         display: flex; align-items: center; gap: 6px; padding: 2px 2px;
       }

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
+import type { ScreenSpaceHost } from '@systems/ScreenSpace';
 
 interface Cloud {
   gfx: Phaser.GameObjects.Graphics;
@@ -13,8 +14,19 @@ interface Cloud {
 export class CloudEffect {
   private clouds: Cloud[] = [];
   private running = false;
+  /**
+   * Clouds are repositioned in screen pixels every frame, so they can't each
+   * carry a zoom-compensating transform. One pinned container holds them all:
+   * the container absorbs the zoom, the children keep plain screen coords.
+   */
+  private root: Phaser.GameObjects.Container;
 
   constructor(scene: Phaser.Scene) {
+    this.root = scene.add.container(0, 0);
+    this.root.setScrollFactor(0);
+    this.root.setDepth(DEPTH.WEATHER - 1);
+    (scene as ScreenSpaceHost).pinScreenSpace?.(this.root, 0, 0);
+
     // Three rows, two clouds each. Same speed per row so spacing never drifts.
     // Random phase start per row so each load looks different.
     const W = GAME_CONFIG.WIDTH;
@@ -35,11 +47,10 @@ export class CloudEffect {
         // Small random y offset within the row band
         const y = yBase + (Math.random() - 0.5) * 40;
         const gfx = scene.add.graphics();
-        gfx.setScrollFactor(0);
-        gfx.setDepth(DEPTH.WEATHER - 1);
         CloudEffect.drawCloud(gfx, cw, ch);
         gfx.setPosition(x, y);
         gfx.setVisible(false);
+        this.root.add(gfx);
         this.clouds.push({ gfx, x, y, speed, w: cw, h: ch });
       }
     }
@@ -80,5 +91,6 @@ export class CloudEffect {
   destroy(): void {
     this.clouds.forEach(c => c.gfx.destroy());
     this.clouds = [];
+    this.root.destroy();
   }
 }

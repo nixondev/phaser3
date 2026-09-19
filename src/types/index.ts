@@ -301,6 +301,7 @@ export interface RoomsData {
   edgeShadows?: Partial<EdgeShadowSettings>;
   /** Global character-sprite render scale (visual only) — see SpriteScale.ts. */
   spriteScale?: number;
+  cameraZoom?: number;
 }
 
 export interface InputState {

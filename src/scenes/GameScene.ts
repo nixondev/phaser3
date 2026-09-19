@@ -23,6 +23,8 @@ import { auditFlags } from '@systems/FlagAudit';
 import { getCharacter, allCharacters, auditCharacters } from '@systems/CharacterRegistry';
 import { buildEdgeShadows } from '@systems/EdgeShadows';
 import { getSpriteScale } from '@systems/SpriteScale';
+import { getCameraZoom } from '@systems/CameraZoom';
+import { applyPin, repin, type PinnableObject, type ScreenSpacePin } from '@systems/ScreenSpace';
 import { resolveText } from '@systems/Words';
 import { resolveTileSprite, tilesetSpritesheetKey } from '@utils/TilesetResolver';
 
@@ -36,6 +38,8 @@ export class GameScene extends Phaser.Scene {
   private inputManager!: InputManager;
   private roomManager!: RoomManager;
   private transitionManager!: TransitionManager;
+  /** Full-screen overlays held at 1:1 screen size against camera zoom. */
+  private screenPins: ScreenSpacePin[] = [];
   private rsm!: RoomStateManager;
   private collider?: Phaser.Physics.Arcade.Collider;
   private colorCollider?: Phaser.Physics.Arcade.Collider;
@@ -373,10 +377,15 @@ export class GameScene extends Phaser.Scene {
 
     this.weatherManager.update(delta);
     const cam = this.cameras.main;
+    // World -> screen under zoom: screen = ((world - scroll) - o) * zoom + o.
+    const z = cam.zoom;
+    const ox = cam.width * cam.originX;
+    const oy = cam.height * cam.originY;
     this.darknessOverlay.update(
-      this.player.x - cam.scrollX,
-      this.player.y - cam.scrollY,
+      (this.player.x - cam.scrollX - ox) * z + ox,
+      (this.player.y - cam.scrollY - oy) * z + oy,
       this.flashlight,
+      z,
     );
     this.updateThoughtIndicator(delta);
     this.updateConversationIndicators(delta);
@@ -1445,12 +1454,18 @@ export class GameScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, roomW, roomH);
 
     const cam = this.cameras.main;
+    cam.setZoom(getCameraZoom());
 
-    const fitsW = roomW <= GAME_CONFIG.WIDTH;
-    const fitsH = roomH <= GAME_CONFIG.HEIGHT;
-    const bX = fitsW ? -(GAME_CONFIG.WIDTH - roomW) / 2 : 0;
-    const bY = fitsH ? -(GAME_CONFIG.HEIGHT - roomH) / 2 : 0;
-    cam.setBounds(bX, bY, Math.max(roomW, GAME_CONFIG.WIDTH), Math.max(roomH, GAME_CONFIG.HEIGHT));
+    // Everything below is in WORLD units, so the viewport is the canvas divided
+    // by zoom — the window never changes size, only how much world it shows.
+    const viewW = GAME_CONFIG.WIDTH / cam.zoom;
+    const viewH = GAME_CONFIG.HEIGHT / cam.zoom;
+
+    const fitsW = roomW <= viewW;
+    const fitsH = roomH <= viewH;
+    const bX = fitsW ? -(viewW - roomW) / 2 : 0;
+    const bY = fitsH ? -(viewH - roomH) / 2 : 0;
+    cam.setBounds(bX, bY, Math.max(roomW, viewW), Math.max(roomH, viewH));
     cam.setBackgroundColor('#111111');
 
     if (fitsW && fitsH) {
@@ -1459,9 +1474,30 @@ export class GameScene extends Phaser.Scene {
     } else {
       cam.startFollow(this.player, true,
         fitsW ? 0 : CAMERA_CONFIG.LERP, fitsH ? 0 : CAMERA_CONFIG.LERP);
-      if (fitsW) cam.scrollX = bX;
-      if (fitsH) cam.scrollY = bY;
+      // scrollX is measured in unzoomed camera widths (see Camera.centerOn), so
+      // centring a too-small room is roomW/2 - cam.width/2, not the bounds edge.
+      if (fitsW) cam.scrollX = roomW / 2 - cam.width / 2;
+      if (fitsH) cam.scrollY = roomH / 2 - cam.height / 2;
     }
+
+    this.repinScreenSpace();
+  }
+
+  // ── Screen-space overlays (ScreenSpaceHost) ─────────────────────────────
+
+  /**
+   * Register a full-screen overlay so camera zoom never scales it. Called by
+   * the weather effects, the darkness RT and the transition fade — see
+   * `ScreenSpace.ts` for why scrollFactor(0) alone is not enough.
+   */
+  public pinScreenSpace(obj: PinnableObject, screenX: number, screenY: number, baseScale = 1): void {
+    const pin: ScreenSpacePin = { obj, screenX, screenY, baseScale };
+    this.screenPins.push(pin);
+    applyPin(pin, this.cameras.main);
+  }
+
+  private repinScreenSpace(): void {
+    this.screenPins = repin(this.screenPins, this.cameras.main);
   }
 
 

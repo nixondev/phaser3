@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { DEPTH, GAME_CONFIG } from '@utils/Constants';
 import type { WeatherEffect } from '@systems/WeatherManager';
+import type { ScreenSpaceHost } from '@systems/ScreenSpace';
 
 interface Drip {
   x: number;
@@ -32,6 +33,7 @@ export class DrippingEffect implements WeatherEffect {
     this.graphics.setScrollFactor(0);
     this.graphics.setDepth(DEPTH.WEATHER);
     this.graphics.setVisible(false);
+    (scene as ScreenSpaceHost).pinScreenSpace?.(this.graphics, 0, 0);
 
     const pts = positions.length > 0 ? positions : scatterPositions();
     const H = GAME_CONFIG.HEIGHT;

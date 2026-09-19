@@ -9,6 +9,12 @@ import { MusicManager } from '@systems/MusicManager';
 import { InputState } from '@/types';
 import { EditorUI } from './EditorUI';
 import { resolveTileSprite } from '@utils/TilesetResolver';
+import { getCameraZoom } from '@systems/CameraZoom';
+import { getSpriteScale } from '@systems/SpriteScale';
+import { applyPin, repin, type PinnableObject, type ScreenSpacePin } from '@systems/ScreenSpace';
+import { getCharacter } from '@systems/CharacterRegistry';
+import { ensureCharacterAnims } from '@entities/animHelpers';
+import { drawCharacterShadow, CHARACTER_SHADOW_FEET_OFFSET } from '@entities/Entity';
 
 const PAN_SPEED = 4 * GAME_CONFIG.TILE_SIZE; // tiles/sec * px/tile
 const MIN_ZOOM = 0.5;
@@ -43,6 +49,13 @@ export class EditorScene extends Phaser.Scene {
   private panKeys?: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
   private wheelHandler?: (e: WheelEvent) => void;
   private contextMenuHandler?: (e: MouseEvent) => void;
+
+  /** Full-screen overlays (actual-view weather/darkness) held at 1:1 under zoom. */
+  private screenPins: ScreenSpacePin[] = [];
+  /** Optional stand-in protagonist, for judging sprite size against the tiles. */
+  private refSprite?: Phaser.GameObjects.Sprite;
+  private refShadow?: Phaser.GameObjects.Graphics;
+  private showReference = false;
 
   constructor() {
     super(SCENES.EDITOR);
@@ -96,6 +109,101 @@ export class EditorScene extends Phaser.Scene {
     this.loadRoomInternal(roomId);
   }
 
+  // ── View settings (camera zoom + sprite size) ────────────────────────────
+
+  /**
+   * Re-apply the global view settings after the View panel moves a slider.
+   * The editor camera deliberately sits at the game's zoom so rooms are
+   * authored at the framing the player will actually get; ctrl+wheel still
+   * overrides it freely for close-up work.
+   */
+  public applyViewSettings(): void {
+    this.cameras.main.setZoom(getCameraZoom());
+    this.rescaleCharacterPlaceholders();
+    this.positionReferenceCharacter();
+    this.repinScreenSpace();
+  }
+
+  /** Room size and the slice of it the game camera will show, for the readout. */
+  public getViewInfo(): { roomW: number; roomH: number; viewW: number; viewH: number } {
+    const map = this.roomManager.getMap();
+    const room = this.roomManager.getCurrentRoomDef();
+    const z = getCameraZoom();
+    return {
+      roomW: map ? map.width : (room?.width ?? 0),
+      roomH: map ? map.height : (room?.height ?? 0),
+      viewW: GAME_CONFIG.WIDTH / z / GAME_CONFIG.TILE_SIZE,
+      viewH: GAME_CONFIG.HEIGHT / z / GAME_CONFIG.TILE_SIZE,
+    };
+  }
+
+  /** View panel checkbox — drop a real character into the room for scale reference. */
+  public setReferenceCharacterVisible(on: boolean): void {
+    this.showReference = on;
+    if (!on) {
+      this.refSprite?.destroy();
+      this.refShadow?.destroy();
+      this.refSprite = undefined;
+      this.refShadow = undefined;
+      return;
+    }
+    if (this.refSprite) { this.positionReferenceCharacter(); return; }
+
+    const sheet = getCharacter('player')?.sheet ?? 'player-good';
+    if (!this.textures.exists(sheet)) return;
+    ensureCharacterAnims(this, sheet);
+
+    this.refShadow = this.add.graphics();
+    drawCharacterShadow(this.refShadow);
+    this.refShadow.setDepth(DEPTH.PLAYER - 0.5);
+
+    this.refSprite = this.add.sprite(0, 0, sheet, 0);
+    this.refSprite.setDepth(DEPTH.PLAYER);
+    this.refSprite.play(`${sheet}-idle-down`, true);
+    this.positionReferenceCharacter();
+  }
+
+  public isReferenceCharacterVisible(): boolean {
+    return this.showReference;
+  }
+
+  /** Park the stand-in at the room's player spawn (room centre if it has none). */
+  private positionReferenceCharacter(): void {
+    if (!this.refSprite || !this.refShadow) return;
+    const room = this.roomManager.getCurrentRoomDef();
+    const map = this.roomManager.getMap();
+    const w = (map ? map.width : room?.width ?? 0) * GAME_CONFIG.TILE_SIZE;
+    const h = (map ? map.height : room?.height ?? 0) * GAME_CONFIG.TILE_SIZE;
+    const x = room?.playerSpawn?.x ?? w / 2;
+    const y = room?.playerSpawn?.y ?? h / 2;
+    const s = getSpriteScale();
+    this.refSprite.setPosition(x, y).setScale(s);
+    this.refShadow.setPosition(x, y + CHARACTER_SHADOW_FEET_OFFSET * s).setScale(s);
+  }
+
+  /**
+   * Afflicted markers stand in for characters, so they follow `spriteScale` —
+   * otherwise the editor shows a size the game will never render.
+   */
+  private rescaleCharacterPlaceholders(): void {
+    const s = getSpriteScale();
+    for (const child of this.afflictedGroup.getChildren()) {
+      (child as Phaser.GameObjects.Sprite).setScale(s);
+    }
+  }
+
+  // ── Screen-space overlays (ScreenSpaceHost) ──────────────────────────────
+
+  public pinScreenSpace(obj: PinnableObject, screenX: number, screenY: number, baseScale = 1): void {
+    const pin: ScreenSpacePin = { obj, screenX, screenY, baseScale };
+    this.screenPins.push(pin);
+    applyPin(pin, this.cameras.main);
+  }
+
+  private repinScreenSpace(): void {
+    this.screenPins = repin(this.screenPins, this.cameras.main);
+  }
+
   /** Used by EditorUI's shadow controls — rebuild edge shadows after a settings change. */
   public refreshEdgeShadows(): void {
     this.editorManager.refreshEdgeShadows();
@@ -125,6 +233,7 @@ export class EditorScene extends Phaser.Scene {
     this.roomManager.loadRoom(roomId);
     this.rsm.visitRoom(roomId);
     this.refreshPlaceholders();
+    this.positionReferenceCharacter();
     this.setupCameraForEditor();
     this.editorUI?.onRoomChanged(roomId);
     this.editorManager?.onRoomChanged();
@@ -143,8 +252,9 @@ export class EditorScene extends Phaser.Scene {
     cam.setBounds(-w, -h, w * 3, h * 3);
     cam.stopFollow();
     cam.centerOn(w / 2, h / 2);
-    cam.setZoom(1);
+    cam.setZoom(getCameraZoom());
     cam.setBackgroundColor('#222222');
+    this.repinScreenSpace();
   }
 
   private setupPanZoomInput(): void {
@@ -195,6 +305,7 @@ export class EditorScene extends Phaser.Scene {
       cam.setZoom(Phaser.Math.Clamp(cam.zoom * factor, MIN_ZOOM, MAX_ZOOM));
       cam.scrollX = Math.round(cam.scrollX);
       cam.scrollY = Math.round(cam.scrollY);
+      this.repinScreenSpace();
     };
     this.game.canvas.addEventListener('wheel', this.wheelHandler, { capture: true, passive: false });
   }
@@ -253,7 +364,8 @@ export class EditorScene extends Phaser.Scene {
 
     for (const aff of room.afflicted ?? []) {
       const sprite = this.add.sprite(aff.x, aff.y, 'tileset-sprites', 10);
-      sprite.setScale(GAME_CONFIG.WORLD_SCALE);
+      // Character-sized marker — follows the global sprite scale, not WORLD_SCALE.
+      sprite.setScale(getSpriteScale());
       sprite.setDepth(DEPTH.ENTITIES);
       sprite.setData('def', aff);
       sprite.setData('kind', 'afflicted');
@@ -310,6 +422,8 @@ export class EditorScene extends Phaser.Scene {
   // ── Cleanup ──
 
   private cleanup(): void {
+    this.setReferenceCharacterVisible(false);
+    this.screenPins = [];
     this.editorUI?.destroy();
     this.editorManager?.destroy();
     this.debugManager?.destroy();
