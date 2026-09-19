@@ -536,7 +536,9 @@ function editorSavePlugin(): Plugin {
           const FLAGS = ['enabled', 'blurOn', 'shadowOn', 'borderOn'];
           const NUMBERS = ['alpha', 'blurQuality', 'blurX', 'blurY', 'blurStrength', 'blurSteps',
                            'shadowX', 'shadowY', 'shadowDecay', 'shadowPower', 'shadowSamples', 'shadowIntensity',
-                           'borderWidth', 'borderJitter', 'borderGrain', 'borderAlpha'];
+                           'borderWidth', 'borderAlpha'];
+          // 0xRRGGBB, so outside the ±1000 bound the other numbers use.
+          const COLORS = ['borderColor'];
           const settings: Record<string, boolean | number> = {};
           for (const k of FLAGS) {
             if (typeof body[k] !== 'boolean') { send(res, 400, { error: `invalid ${k}` }); return; }
@@ -549,6 +551,20 @@ function editorSavePlugin(): Plugin {
             }
             settings[k] = v;
           }
+          for (const k of COLORS) {
+            const v = body[k];
+            if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 0xffffff) {
+              send(res, 400, { error: `invalid ${k}` }); return;
+            }
+            settings[k] = v;
+          }
+          // These three lists must stay in step with EdgeShadowSettings: a key
+          // the editor sends but no list names is dropped silently, and a key
+          // a list names but the editor stops sending 400s every save. Reject
+          // drift loudly instead of debugging it through the save button.
+          const known = new Set([...FLAGS, ...NUMBERS, ...COLORS]);
+          const unknown = Object.keys(body).filter(k => !known.has(k));
+          if (unknown.length) { send(res, 400, { error: `unknown key(s): ${unknown.join(', ')}` }); return; }
           const raw = await fsp.readFile(roomsJsonPath, 'utf8');
           const data = JSON.parse(raw);
           data.edgeShadows = settings;

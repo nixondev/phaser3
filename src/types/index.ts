@@ -287,10 +287,8 @@ export interface EdgeShadowSettings {
   borderOn: boolean;
   /** Base rim thickness in px. */
   borderWidth: number;
-  /** Extra random depth per tooth in px (roughness amplitude). */
-  borderJitter: number;
-  /** Tooth size in px along the edge (grain of the roughness). */
-  borderGrain: number;
+  /** Rim color, 0xRRGGBB. */
+  borderColor: number;
   borderAlpha: number;
 }
 

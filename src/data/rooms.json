@@ -1374,8 +1374,7 @@
     "shadowSamples": 6,
     "shadowIntensity": 0.35,
     "borderWidth": 1,
-    "borderJitter": 8,
-    "borderGrain": 20,
-    "borderAlpha": 1
+    "borderAlpha": 1,
+    "borderColor": 0
   }
 }

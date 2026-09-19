@@ -632,6 +632,9 @@ export class EditorUI {
       const valEl = this.root.querySelector<HTMLSpanElement>(`#editor-sh-${key}-val`);
       if (valEl) valEl.textContent = Number.isInteger(parseFloat(slider.step)) ? String(val) : val.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
     });
+
+    const borderColor = this.root.querySelector<HTMLInputElement>('#editor-sh-borderColor');
+    if (borderColor) borderColor.value = `#${s.borderColor.toString(16).padStart(6, '0')}`;
   }
 
   /** Live-apply a settings change and rebuild the preview (if shadows are showing). */
@@ -833,6 +836,15 @@ export class EditorUI {
       });
     });
 
+    // Border color is a hex swatch, not a slider — parseFloat can't carry it.
+    const borderColor = this.root.querySelector<HTMLInputElement>('#editor-sh-borderColor');
+    borderColor?.addEventListener('input', () =>
+      this.applyShadows({ borderColor: parseInt(borderColor.value.slice(1), 16) }));
+    borderColor?.addEventListener('change', () => {
+      this.saveShadows();
+      this.scene.game.canvas.focus();
+    });
+
     const darkSlider = this.root.querySelector<HTMLInputElement>('#editor-dark-level');
     darkSlider?.addEventListener('input', () => {
       this.currentDarkLevel = parseFloat(darkSlider.value);
@@ -974,6 +986,11 @@ export class EditorUI {
           <div class="dark-slider-row">
             <span class="dark-slider-label">B-Alpha: <span id="editor-sh-borderAlpha-val"></span></span>
             <input type="range" class="shadow-slider" data-key="borderAlpha" id="editor-sh-borderAlpha" min="0" max="1" step="0.05">
+          </div>
+          <div class="dark-slider-row">
+            <span class="dark-slider-label">B-Color</span>
+            <input type="color" id="editor-sh-borderColor"
+                   title="Rim color. A pale warm tone on a NW-lit room reads as a highlight; black reads as a hard edge.">
           </div>
           <div class="hint">Preview with <kbd>G</kbd> actual view</div>
         </div>

@@ -34,8 +34,7 @@ const DEFAULTS: EdgeShadowSettings = {
   shadowIntensity: 0.5,
   borderOn: false,
   borderWidth: 3,
-  borderJitter: 4,
-  borderGrain: 8,
+  borderColor: 0x000000,
   borderAlpha: 0.8,
 };
 
@@ -101,14 +100,6 @@ function fitsInGpu(scene: Phaser.Scene, src: EdgeShadowSource): boolean {
   return false;
 }
 
-/** Deterministic per-tooth pseudo-random in [0,1) — stable across rebuilds, no shimmer. */
-function toothRand(x: number, y: number, i: number): number {
-  let h = (x * 374761393 + y * 668265263 + i * 2246822519) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-
 /**
  * Builds the edge-shadow layers for one room. Two independent layers:
  * `enabled` gates the shadow (silhouette + blur/drop fx), `borderOn` gates
@@ -161,11 +152,20 @@ export function buildEdgeShadows(
     }
     const mask = maskGfx.createGeometryMask();
     mask.invertAlpha = true;
-    for (const layer of out) layer.setMask(mask);
-    out[0].once(Phaser.GameObjects.Events.DESTROY, () => {
-      mask.destroy();
-      maskGfx.destroy();
-    });
+    // Refcounted across every masked layer rather than hung off out[0]: a
+    // caller that destroys layers in any order — or only some of them — must
+    // not free the mask while a sibling still draws through it, nor leak it
+    // because the one layer holding the handler happened to outlive the rest.
+    let live = out.length;
+    for (const layer of out) {
+      layer.setMask(mask);
+      layer.once(Phaser.GameObjects.Events.DESTROY, () => {
+        if (--live === 0) {
+          mask.destroy();
+          maskGfx.destroy();
+        }
+      });
+    }
   }
 
   return out;
@@ -338,10 +338,7 @@ function buildRoughBorder(
   if (opts.scrollFactor !== undefined) rt.setScrollFactor(opts.scrollFactor);
 
   const g = scene.make.graphics();
-  // TEMP: solid bright-yellow line while the border placement is being
-  // fine-tuned — final color (and the jitter/grain roughness, whose settings
-  // stay parked in EdgeShadowSettings) come back once the line sits right.
-  g.fillStyle(0xffff00, 1);
+  g.fillStyle(current.borderColor, 1);
 
   const width = Math.max(1, current.borderWidth);
   // Overlap 2px into the solid area so no seam shows against the art
