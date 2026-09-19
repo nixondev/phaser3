@@ -10,14 +10,11 @@
       "Bash(git push *)",
       "Bash(npm show *)",
       "Bash(npm run *)",
-      "Bash(python3 -c ' *)",
       "Bash(dir \"C:\\\\Users\\\\flyki\\\\Music\\\\EchoThief\")",
       "Bash(git rm *)",
       "Bash(rm -f public/assets/sprites/infected-*-2026*.png)",
       "Bash(dir \"C:\\\\Users\\\\flyki\\\\IdeaProjects\\\\claudeded\\\\*.md\" /b)",
-      "Bash(cp assets_src/tiles/* assets_src/tiles_old/)",
       "Bash(rm assets_src/tiles/*)",
-      "Bash(python3 *)",
       "WebFetch(domain:developers.google.com)",
       "WebSearch",
       "WebFetch(domain:docs.theoplayer.com)",
@@ -25,8 +22,6 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:developer.bitmovin.com)",
-      "Bash(python *)",
-      "Bash(mv \"C:/Users/flyki/IdeaProjects/claudeded/assets_src/tiles/\"tile_*.png \"C:/Users/flyki/IdeaProjects/claudeded/assets_src/tiles/tileset/\")",
       "Bash(rm -f \"C:/Users/flyki/IdeaProjects/claudeded/assets_src/tiles/\"*.png~)"
     ]
   }
