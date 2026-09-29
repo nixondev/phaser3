@@ -13,7 +13,10 @@ import { EdgeShadowSettings } from '@/types';
  * and previously cast no shadow at all).
  *
  * Settings are global (rooms.json top-level `edgeShadows`), adjustable
- * live from the ? editor and persisted via /__editor/save-shadows.
+ * live from the ? editor and persisted via /__editor/save-shadows. A room
+ * may override any subset of them with its own `edgeShadows` block — see
+ * EdgeShadowOptions.override. The ? editor's sliders always edit the
+ * GLOBAL values; a room with an override says so in the panel.
  */
 
 const DEFAULTS: EdgeShadowSettings = {
@@ -69,6 +72,13 @@ export interface EdgeShadowOptions {
   scrollFactor?: number;
   /** Raw postFX blur override (MenuScene's heavy vignette); default derives from settings.blur. */
   fx?: { quality: number; x: number; y: number; strength: number; color: number; steps: number };
+  /**
+   * Per-room `edgeShadows` from rooms.json, merged over the global settings.
+   * The global look assumes a key light from the north-west; a room lit by
+   * something else — the flashlight in a `dark` room, where the light source
+   * moves — overrides the bearing rather than contradicting it.
+   */
+  override?: Partial<EdgeShadowSettings>;
 }
 
 /**
@@ -120,9 +130,13 @@ export function buildEdgeShadows(
   // warning instead. Shadows are cosmetic; the room must still load.
   if (!fitsInGpu(scene, src)) return out;
 
-  if (current.enabled) out.push(buildShadowLayer(scene, src, opts));
-  if (current.borderOn) {
-    const border = buildRoughBorder(scene, src, opts);
+  // Resolved once and passed down, so the two builders can never disagree
+  // about which settings this room is using.
+  const s: EdgeShadowSettings = { ...current, ...(opts.override ?? {}) };
+
+  if (s.enabled) out.push(buildShadowLayer(scene, src, opts, s));
+  if (s.borderOn) {
+    const border = buildRoughBorder(scene, src, opts, s);
     if (border) out.push(border);
   }
   if (!out.length) return out;
@@ -176,6 +190,7 @@ function buildShadowLayer(
   scene: Phaser.Scene,
   src: EdgeShadowSource,
   opts: EdgeShadowOptions,
+  s: EdgeShadowSettings,
 ): Phaser.GameObjects.RenderTexture {
   const TILE = GAME_CONFIG.TILE_SIZE;
   const style = opts.style ?? 'silhouette';
@@ -183,7 +198,7 @@ function buildShadowLayer(
   const rt = scene.add.renderTexture(0, 0, src.widthTiles * TILE, src.heightTiles * TILE);
   rt.setOrigin(0, 0);
   rt.setDepth(DEPTH.GROUND + 0.5);
-  rt.setAlpha(current.alpha);
+  rt.setAlpha(s.alpha);
   if (opts.scrollFactor !== undefined) rt.setScrollFactor(opts.scrollFactor);
 
   const blocks = scene.make.graphics();
@@ -230,25 +245,25 @@ function buildShadowLayer(
     if (opts.fx) {
       rt.postFX.addBlur(opts.fx.quality, opts.fx.x, opts.fx.y, opts.fx.strength, opts.fx.color, opts.fx.steps);
     } else {
-      if (current.shadowOn) {
+      if (s.shadowOn) {
         rt.postFX.addShadow(
-          current.shadowX,
-          current.shadowY,
-          current.shadowDecay,
-          current.shadowPower,
+          s.shadowX,
+          s.shadowY,
+          s.shadowDecay,
+          s.shadowPower,
           0x000000,
-          Math.round(Phaser.Math.Clamp(current.shadowSamples, 1, 12)),
-          current.shadowIntensity,
+          Math.round(Phaser.Math.Clamp(s.shadowSamples, 1, 12)),
+          s.shadowIntensity,
         );
       }
-      if (current.blurOn) {
+      if (s.blurOn) {
         rt.postFX.addBlur(
-          Math.round(Phaser.Math.Clamp(current.blurQuality, 0, 2)),
-          current.blurX,
-          current.blurY,
-          current.blurStrength,
+          Math.round(Phaser.Math.Clamp(s.blurQuality, 0, 2)),
+          s.blurX,
+          s.blurY,
+          s.blurStrength,
           0xffffff,
-          Math.round(current.blurSteps),
+          Math.round(s.blurSteps),
         );
       }
     }
@@ -275,6 +290,7 @@ function buildRoughBorder(
   scene: Phaser.Scene,
   src: EdgeShadowSource,
   opts: EdgeShadowOptions,
+  s: EdgeShadowSettings,
 ): Phaser.GameObjects.RenderTexture | undefined {
   const TILE = GAME_CONFIG.TILE_SIZE;
   const S = DETECT_SCALE;
@@ -334,13 +350,13 @@ function buildRoughBorder(
   const rt = scene.add.renderTexture(0, 0, src.widthTiles * TILE, src.heightTiles * TILE);
   rt.setOrigin(0, 0);
   rt.setDepth(DEPTH.GROUND + 0.6);
-  rt.setAlpha(current.borderAlpha);
+  rt.setAlpha(s.borderAlpha);
   if (opts.scrollFactor !== undefined) rt.setScrollFactor(opts.scrollFactor);
 
   const g = scene.make.graphics();
-  g.fillStyle(current.borderColor, 1);
+  g.fillStyle(s.borderColor, 1);
 
-  const width = Math.max(1, current.borderWidth);
+  const width = Math.max(1, s.borderWidth);
   // Overlap 2px into the solid area so no seam shows against the art
   // (the collision-cell knockout mask clips whatever lands inside cells).
   const INSET = 2;

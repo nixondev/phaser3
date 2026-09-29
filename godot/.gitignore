@@ -1,0 +1,4 @@
+# Godot's import cache
+.godot/
+# Copies of the Phaser project's assets/data — regenerate with tools/sync-shared.cjs
+shared/

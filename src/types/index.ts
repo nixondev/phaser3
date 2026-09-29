@@ -253,6 +253,13 @@ export interface RoomDefinition {
    * Room-specific tiles use `tilesetKey: "<name>"` on items/interactables.
    */
   tilesets?: string[];
+  /**
+   * Per-room edge-shadow overrides, merged over the global `edgeShadows`.
+   * Use where the global north-west key light does not apply — a `dark`
+   * room lit by the flashlight has a light source that moves, so a baked
+   * directional shadow would contradict it.
+   */
+  edgeShadows?: Partial<EdgeShadowSettings>;
 }
 
 /**

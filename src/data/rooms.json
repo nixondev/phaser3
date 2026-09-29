@@ -391,7 +391,12 @@
       "darkLevel": 0.4,
       "tilesets": [
         "city-street-tiles"
-      ]
+      ],
+      "edgeShadows": {
+        "shadowOn": false,
+        "blurX": 14,
+        "blurY": 14
+      }
     },
     "protag-house": {
       "id": "protag-house",
@@ -554,7 +559,12 @@
       "tilesets": [
         "protag-house-tiles"
       ],
-      "onGroundAlpha": 0.3
+      "onGroundAlpha": 0.3,
+      "edgeShadows": {
+        "shadowOn": false,
+        "blurX": 14,
+        "blurY": 14
+      }
     },
     "house-b": {
       "id": "house-b",
@@ -1155,7 +1165,12 @@
       "weather": "dripping",
       "tilesets": [
         "room-vault-tiles"
-      ]
+      ],
+      "edgeShadows": {
+        "shadowOn": false,
+        "blurX": 14,
+        "blurY": 14
+      }
     },
     "room-library": {
       "id": "room-library",
@@ -1363,16 +1378,16 @@
     "borderOn": false,
     "alpha": 1,
     "blurQuality": 0,
-    "blurX": 14,
-    "blurY": 14,
-    "blurStrength": 0.3,
+    "blurX": 16,
+    "blurY": 16,
+    "blurStrength": 0.45,
     "blurSteps": 7,
-    "shadowX": 0,
-    "shadowY": 15,
-    "shadowDecay": 0.01,
-    "shadowPower": 0.75,
-    "shadowSamples": 6,
-    "shadowIntensity": 0.35,
+    "shadowX": 11,
+    "shadowY": 22,
+    "shadowDecay": 0.018,
+    "shadowPower": 1,
+    "shadowSamples": 10,
+    "shadowIntensity": 0.6,
     "borderWidth": 1,
     "borderAlpha": 1,
     "borderColor": 0

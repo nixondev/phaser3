@@ -1317,7 +1317,7 @@ export class GameScene extends Phaser.Scene {
         collisionData: collisionLayer.layer.data,
         tilesets: map.tilesets,
         colorCells: this.roomManager.getCollisionColorCells(),
-      });
+      }, { override: this.roomManager.getCurrentRoomDef()?.edgeShadows });
       this.edgeShadows = rts.length ? rts : undefined;
     } catch (e) {
       console.warn('[GameScene] edge shadows failed to build; room loads without them:', e);

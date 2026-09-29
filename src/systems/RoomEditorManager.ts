@@ -1748,7 +1748,7 @@ export class RoomEditorManager {
       collisionData: collisionLayer.layer.data,
       tilesets: map.tilesets,
       colorCells: this.roomManager.getCollisionColorCells(),
-    });
+    }, { override: this.roomManager.getCurrentRoomDef()?.edgeShadows });
     this.edgeShadows = rts.length ? rts : undefined;
   }
 

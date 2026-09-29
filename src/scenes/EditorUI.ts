@@ -137,6 +137,7 @@ export class EditorUI {
     this.updateWeatherSelector(roomId);
     this.updateDarknessSelector(roomId);
     this.updateAlphaSelectors(roomId);
+    this.updateShadowOverrideHint(roomId);
     this.updateViewReadout();
   }
 
@@ -644,6 +645,23 @@ export class EditorUI {
     (this.scene as unknown as { refreshEdgeShadows?: () => void }).refreshEdgeShadows?.();
   }
 
+  /**
+   * These sliders write the GLOBAL settings, but a room may override any of
+   * them. Without this the panel silently lies in those rooms: you drag Dir X
+   * in city-street, the save succeeds, and nothing moves.
+   */
+  private updateShadowOverrideHint(roomId: string): void {
+    const el = this.root.querySelector<HTMLDivElement>('#editor-sh-override');
+    if (!el) return;
+    const room = RoomManager.getRoomsData().rooms[roomId] as
+      { edgeShadows?: Record<string, unknown> } | undefined;
+    const keys = Object.keys(room?.edgeShadows ?? {});
+    el.style.display = keys.length ? '' : 'none';
+    el.textContent = keys.length
+      ? `Room overrides ${keys.join(', ')} — these sliders edit the global values.`
+      : '';
+  }
+
   private saveShadows(): void {
     const s = getEdgeShadowSettings();
     fetch('/__editor/save-shadows', {
@@ -992,6 +1010,7 @@ export class EditorUI {
             <input type="color" id="editor-sh-borderColor"
                    title="Rim color. A pale warm tone on a NW-lit room reads as a highlight; black reads as a hard edge.">
           </div>
+          <div class="hint" id="editor-sh-override" style="display:none"></div>
           <div class="hint">Preview with <kbd>G</kbd> actual view</div>
         </div>
       </aside>

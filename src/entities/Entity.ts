@@ -11,11 +11,27 @@ const CHARACTER_SHADOW_RINGS = [
   { w: 42, h: 14, alpha: 0.07 },
 ] as const;
 
+/**
+ * Where the key light throws this pool, in px — the character-scale echo of
+ * the room's `edgeShadows.shadowX/Y`. Light comes from the north-west (the
+ * same bearing `scripts/lib/shade.mjs` bakes into the sheets), so the pool
+ * slides south-east.
+ *
+ * NOT the room's 1:2 bearing, though, and deliberately so: these ellipses are
+ * already foreshortened ~3.25:1 (26 wide, 8 tall) to sell a floor plane seen
+ * from above. A world offset projected onto that plane has its southward
+ * component squashed by the same ratio, so the same physical bearing reads on
+ * screen as roughly 1.6:1 — horizontal-dominant. Matching the wall shadows
+ * literally here would look like the characters are lit from further south
+ * than the walls are.
+ */
+const CHARACTER_SHADOW_LIGHT_OFFSET = { x: 5, y: 3 } as const;
+
 /** Stamp the concentric-ellipse contact shadow into a graphics object at its origin. */
 export function drawCharacterShadow(g: Phaser.GameObjects.Graphics): void {
   for (const r of CHARACTER_SHADOW_RINGS) {
     g.fillStyle(0x000000, r.alpha);
-    g.fillEllipse(0, 0, r.w, r.h);
+    g.fillEllipse(CHARACTER_SHADOW_LIGHT_OFFSET.x, CHARACTER_SHADOW_LIGHT_OFFSET.y, r.w, r.h);
   }
 }
 
