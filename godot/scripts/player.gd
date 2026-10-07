@@ -41,6 +41,12 @@ func setup(sheet: Texture2D, sprite_scale: float) -> void:
 	sprite.play("idle-down")
 
 
+## Player.setSheet — character switch.
+func set_sheet(sheet: Texture2D) -> void:
+	sprite.sprite_frames = make_frames(sheet)
+	sprite.play("idle-" + facing)
+
+
 ## animHelpers.ensureCharacterAnims: walk-<dir> (4 frames, 8 fps) and
 ## idle-<dir> (the row's first frame) from a 4×4 sheet. Shared with afflicted.
 static func make_frames(sheet: Texture2D) -> SpriteFrames:

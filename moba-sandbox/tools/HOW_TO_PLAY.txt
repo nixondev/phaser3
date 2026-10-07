@@ -1,0 +1,62 @@
+MOBA SANDBOX — a roguelite built on MOBA laning
+================================================
+
+Run "MOBA Sandbox.exe". Windows may say "Windows protected your PC" because
+the file isn't signed: click "More info" -> "Run anyway".
+
+THE RUN
+  Pick a hero. A run is endless rounds on one lane: destroy the enemy
+  tower to win a round; lose your tower and the run is over. Your best
+  round is saved.
+
+  Towers are SHIELDED against heroes: you can only damage one while at
+  least one of your creeps is inside its range circle (a leashed creep
+  counts). Bring a wave. In overtime the shields drop.
+
+  Gold comes from last hitting: only your KILLING BLOW on an enemy creep
+  pays (the white tick on their health bars marks your attack damage).
+  Dying costs some of your gold, and the enemy hero takes it if it got the
+  kill.
+
+  From overtime (a few minutes in, later each round) kills pay no gold,
+  tower shields drop, towers take more and more damage, and waves grow:
+  finish the round. Every hero death in overtime sends a siege minion with
+  the other side's next wave: it can't be stopped and blows up on the tower
+  for 10% of its health.
+
+  Between rounds, spend gold in the shop: switch heroes, level your
+  Q/W/E/R, buy upgrades and creep (wave) upgrades. Every pick makes prices
+  rise a little. The enemy shops too, and gets smarter as the run goes on.
+
+CONTROLS
+  Right-click        move (hold to keep steering)
+  Left-click         attack the enemy nearest the cursor
+  Left-click         on your own creep below half health: deny it (nobody
+                     gets its gold)
+  Q W E R            cast at the cursor the moment you press (quick cast)
+                     (some abilities have a second press: SHOCK, POUNCE)
+                     Prefer to aim first? Esc menu -> Cast indicator ON:
+                     hold to see the aim, release to cast, right-click cancels
+  T                  with the cursor on one of your creeps: leash it — it
+                     follows you and attacks what you attack (T on it again
+                     to release; with Cast indicator ON: T, then click)
+  Hover a Q W E R    see what the ability does right now
+  Click your hero    (top left) fold / unfold your upgrade list; the
+  box                enemy's panel (top right) folds the same way
+  S                  stop
+  Mouse to an edge   pan the camera (or arrow keys, or click the minimap)
+  Space              jump the camera to your hero; Y locks it on
+  Esc                pause (resume, abandon run, quit)
+  F11                fullscreen / window
+  F9                 in Training: back to hero select
+
+TRAINING
+  From the hero-pick screen's Training mode button (not from inside a run).
+  Dummies to practise on, plus an enemy tower to the south-east with creep
+  waves for both sides every 25 s (last hits, denies, leashing, the tower
+  shield). Top right: No cooldowns and No mana switches, and a free Shop
+  (or press B) to try any build. 1-4 switches hero.
+
+YOUR BASE
+  Standing in your own base (the well) heals you, and nothing can hurt you
+  there. An enemy hero standing in it burns.

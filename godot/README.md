@@ -112,8 +112,21 @@ Phaser's cone ignores walls) — and handles touch: a matching cure item →
 death → fresh run. E on cured: "stares past you" away from home, backstory
 pages at home → recovered. Title wanderers come from the title-screen room.
 Debug chords: Ctrl+Shift+C cures the room, Ctrl+Shift+/ unlocks all doors.
-Not yet: proximity sound (MIDI), joining the roster,
+Not yet: proximity sound (MIDI),
 afflicted placements as editor nodes (they're read from rooms.json).
+
+## Roster
+
+GameState keeps the roster (id, sheet, room, position, traits), the active
+character, and one 12-slot inventory per character (swapped on switch; the
+keyId lookup follows whoever is active). The protagonist founds it on the
+first room load; a cured resident joins on the last page of their backstory
+(at home), with their recoveredItems, and stays there as a parked body.
+1–4 or clicking a portrait (HUD avatar bar) switches — in place, or a fade to
+another room, arriving where that body was left. Death with another body left:
+items scatter in a 40 px ring, `died/<id>` is set, the dead leave the roster,
+control passes to the next member; the last death resets the run. Parked
+bodies answer E with Phaser's stock line (the conversation layer is next).
 
 ## HUD, inventory, prose
 
@@ -123,8 +136,8 @@ TEXT_STYLES (narrative/thought in Bitcount Ink, lore/document in Workbench,
 system in Silkscreen), `---` / 10-line paging, PWR bar, 2×6 inventory grid.
 `GameState.inventory` is a real 12-slot inventory: TAB → arrows, E use,
 Q drop; dropped items stay in their room. `scripts/words.gd` ports Words.ts
-so `words:<key>` resolves from the twee files. Not ported: avatar bar
-(no roster), DocumentReaderScene (documents show in the dialog box).
+so `words:<key>` resolves from the twee files. Not ported:
+DocumentReaderScene (documents show in the dialog box).
 
 ## Doors + rooms
 
@@ -176,5 +189,5 @@ entirely; 2D directional shadows are infinitely long.
 
 ## Not yet
 
-`requires`/`produces` puzzle conditions, thoughts (T), roster / character switching / succession, edge-shadow rough border, MIDI music,
+`requires`/`produces` puzzle conditions, thoughts (T), edge-shadow rough border, MIDI music,
 dialog/words.

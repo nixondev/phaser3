@@ -7,7 +7,11 @@ extends CanvasLayer
 ##                    "---" lines and every 10 lines; E dismisses / advances
 ##   PWR bar          top left, while a flashlight is carried
 ##   inventory grid   2×6, top right; cursor + item name + key hints
-## Not ported: the character avatar bar (no roster yet), mobile buttons.
+##   avatar bar       bottom left: a portrait per roster member, the active
+##                    one highlighted; click to switch (avatar_clicked)
+## Not ported: mobile buttons.
+
+signal avatar_clicked(index: int)
 
 const W := 1280.0
 const H := 960.0
@@ -47,6 +51,8 @@ var _cursor: Panel
 var _item_name: Label
 var _hint: Label
 var _tweens := {}
+var _avatars: Array[TextureRect] = []
+var _avatar_highlight: Panel
 
 
 func _ready() -> void:
@@ -112,8 +118,49 @@ func _ready() -> void:
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	set_inventory_mode(false)
 
+	_avatar_highlight = Panel.new()
+	_avatar_highlight.size = Vector2(68, 68)
+	_avatar_highlight.add_theme_stylebox_override("panel", _box(Color(0, 0, 0, 0), Color("#ffdd44"), 4))
+	_avatar_highlight.visible = false
+	_avatar_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_avatar_highlight)
+
 
 # ── API ─────────────────────────────────────────────────────────────────
+
+## UIScene.onRosterChanged + updateAvatarHighlight: 68 px portraits (frame
+## 0 of each sheet) from (16, 864), 8 px apart; yellow frame on the active.
+func set_roster(roster: Array, active_id: String) -> void:
+	for a in _avatars:
+		a.queue_free()
+	_avatars.clear()
+	_avatar_highlight.visible = false
+	for i in roster.size():
+		var c: Dictionary = roster[i]
+		var portrait := AtlasTexture.new()
+		portrait.atlas = WardenData.texture("sprites/%s.png" % c["sheet"])
+		portrait.region = Rect2(0, 0, 64, 64)
+		var t := TextureRect.new()
+		t.texture = portrait
+		t.position = Vector2(16 + i * (68 + 8), 864)
+		t.size = Vector2(68, 68)
+		t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		t.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				avatar_clicked.emit(i))
+		add_child(t)
+		_avatars.append(t)
+		if c["id"] == active_id:
+			_avatar_highlight.position = t.position
+			_avatar_highlight.visible = true
+	move_child(_avatar_highlight, -1)
+
+
+## Drop any open or queued dialog (death closes the box first, like Phaser).
+func close_dialog() -> void:
+	_pages.clear()
+	_next_page()
 
 func show_room_name(text: String) -> void:
 	_room_name.text = text

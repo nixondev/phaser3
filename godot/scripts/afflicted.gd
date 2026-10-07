@@ -43,6 +43,7 @@ const TINTS := {
 var afflicted_id := ""       # cast slug, or the placement id for extras
 var character_id := ""       # "" for anonymous extras
 var resident_name := "Unknown"
+var role := ""
 var status := "wandering"
 var behavior := "wander"
 var home_room := ""
@@ -73,6 +74,7 @@ func setup(def: Dictionary, character: Dictionary, initial_status: String, sprit
 	afflicted_id = def.get("character", def.get("id", ""))
 	character_id = def.get("character", "")
 	resident_name = character.get("name", def.get("name", "Unknown"))
+	role = character.get("role", "")
 	behavior = def.get("behaviorLoop", "wander")
 	home_room = character.get("home", {}).get("room", "")
 	cured_clue = character.get("curedClue", "")

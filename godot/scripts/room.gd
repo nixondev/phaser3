@@ -7,6 +7,7 @@ extends Node2D
 ## Controls (GameScene): WASD/arrows move, E interact (pick up / read /
 ## recharge / use a door; dismisses dialog), F flashlight (once carried),
 ## TAB inventory — arrows move the cursor, E use, Q drop, TAB/Esc close.
+## 1–4 (or clicking a portrait) switch to that roster member.
 ## What survives a room change lives in the GameState autoload; the HUD is
 ## hud.gd (UIScene port).
 ##
@@ -74,6 +75,8 @@ var _cam: Camera2D
 var _shake_time := 0.0
 var _shake_px := 0.0
 var _recovery_page := {}  # afflicted id -> next backstory page (session-only, as in Phaser)
+var _switching := false
+var _cast: Dictionary  # characters.json
 
 
 func _ready() -> void:
@@ -94,9 +97,9 @@ func _ready() -> void:
 		dark = true
 		dark_level = float(args["dark-level"])
 
+	_cast = WardenData.load_json("data/characters.json")["characters"]
 	player = PlayerScript.new()
 	player.name = "Player"
-	player.setup(player_sheet, sprite_scale)
 	player.position = ($Entities/PlayerSpawn as Marker2D).position
 	if args.has("at"):
 		var xy: PackedStringArray = str(args["at"]).split(",")
@@ -108,11 +111,17 @@ func _ready() -> void:
 	player.facing = game.facing
 	if args.has("face"):
 		player.facing = args["face"]
+	# GameScene.create: the protagonist founds the roster on the first load;
+	# the body you control is whoever is active.
+	game.init_roster({"id": "player", "sheet": _cast.get("player", {}).get("sheet", "main"),
+		"room": room_id, "x": player.position.x, "y": player.position.y, "traits": []})
+	player.setup(_sheet_texture(game.character(game.active)), sprite_scale)
 	$Entities.add_child(player)
 	player.sprite.light_mask = FlashlightScript.HOLDER_MASK  # lit by the ambient circle, not their own beam
 	player.collision_layer = AfflictedScript.LAYER_PLAYER  # walls stay on layer 1; afflicted touch-test layer 2
 	player.collision_mask = AfflictedScript.LAYER_WALLS
 	_spawn_afflicted()
+	_spawn_parked()
 	for inter in $Entities/Interactables.get_children():
 		if game.collected.has(inter.interact_id):
 			inter.queue_free()
@@ -133,6 +142,10 @@ func _ready() -> void:
 	hud.name = "HUD"
 	add_child(hud)
 	hud.show_room_name(room_name)
+	hud.set_roster(game.roster, game.active)
+	hud.avatar_clicked.connect(func(i: int) -> void:
+		if i < game.roster.size():
+			_switch_to(game.roster[i]["id"]))
 	if game.pending_toast != "":
 		hud.show_unlock(game.pending_toast)
 		game.pending_toast = ""
@@ -218,6 +231,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F:
 			if held.has("flashlight"):
 				flashlight.toggle()
+		KEY_1, KEY_2, KEY_3, KEY_4:
+			var i: int = code - KEY_1
+			if i < game.roster.size():
+				_switch_to(game.roster[i]["id"])
 		KEY_TAB:
 			_inv_mode = true
 			hud.set_inventory_mode(true)
@@ -384,7 +401,7 @@ func _nearest_target() -> Node2D:
 	var nearest: Node2D = null
 	var best := INF
 	var calm := afflicted.filter(func(a: Node) -> bool: return is_instance_valid(a) and a.is_calm())
-	var candidates: Array = $Entities/Interactables.get_children() + $Entities/Doors.get_children() + _dropped_nodes() + calm
+	var candidates: Array = $Entities/Interactables.get_children() + $Entities/Doors.get_children() + _dropped_nodes() + calm + _parked_nodes()
 	for target in candidates:
 		if target.is_queued_for_deletion():
 			continue
@@ -409,6 +426,12 @@ func _interact() -> void:
 		return
 	if nearest in afflicted:
 		_talk_to(nearest)
+		return
+	if nearest.has_meta("parked"):
+		# The speaker×listener conversation layer isn't ported yet — Phaser's
+		# stock line when nothing matches.
+		var who: String = _cast.get(nearest.get_meta("parked"), {}).get("name", "They")
+		hud.open_dialog("%s\n\"I'm ready when you are.\"" % who, "narrative")
 		return
 
 	match nearest.kind:
@@ -502,6 +525,8 @@ func _spawn_afflicted() -> void:
 		var sid: String = def.get("character", def.get("id", ""))
 		if recovered.has(sid):
 			continue  # recovered residents are roster bodies, not NPCs
+		if game and sid == game.active:
+			continue  # the active character IS the player sprite
 		if cured.has(sid) and character.has("home"):
 			continue  # cured cast members have gone home
 		_add_afflicted(def, character, "cured" if cured.has(sid) else "wandering")
@@ -509,6 +534,8 @@ func _spawn_afflicted() -> void:
 	for cid: String in cast:
 		var c: Dictionary = cast[cid]
 		if c.get("home", {}).get("room", "") != room_id or not cured.has(cid) or recovered.has(cid):
+			continue
+		if game and cid == game.active:
 			continue
 		_add_afflicted({"id": cid, "character": cid, "x": c["home"]["x"], "y": c["home"]["y"], "behaviorLoop": "sentinel"}, c, "cured")
 
@@ -539,14 +566,15 @@ func _in_cone(target: Vector2) -> bool:
 
 
 ## GameScene.handleAfflictedCollision: carrying a matching cure cures them;
-## otherwise it's death. With no roster yet, death is the full run reset.
+## otherwise it's death — succession to the next roster member, or the full
+## reset when this was the last body.
 func _on_touch(a: Node) -> void:
 	for i in game.inventory.size():
 		var it: Variant = game.inventory[i]
 		if it is Dictionary and it.get("category") == "cure" and it.get("useTarget", "") in ["", a.afflicted_id]:
 			_apply_cure(a, i, false)
 			return
-	_die()
+	_death()
 
 
 ## GameScene.applyCure — the single cure entry point.
@@ -581,8 +609,46 @@ func _unlock_doors_to(target_room: String) -> void:
 				game.unlocked_doors[d["id"]] = true
 
 
-## No roster yet, so every death is the last one: shake, fade, fresh run
-## from startRoom (GameScene: rsm.reset() + scene.restart()).
+## Death with another playable body left (GameScene succession): the dead
+## drop everything in a ring where they fell, leave the roster for good
+## (flag died/<id>), and control passes to the next member — resuming
+## wherever that body was parked, in whatever room.
+func _death() -> void:
+	var dead: String = game.active
+	var idx := -1
+	for i in game.roster.size():
+		if game.roster[i]["id"] == dead:
+			idx = i
+	if game.roster.size() <= 1 or idx < 0:
+		_die()
+		return
+	var successor: String = game.roster[(idx + 1) % game.roster.size()]["id"]
+	_cure_cooldown = 1.0  # no second death before the switch lands
+	_shake(0.4, 0.01)
+	hud.close_dialog()
+	_scatter_inventory(player.position)
+	game.flags["died/" + dead] = true
+	game.remove_from_roster(dead)
+	hud.set_roster(game.roster, game.active)
+	await get_tree().create_timer(0.4).timeout
+	_switch_to(successor)
+
+
+## GameScene.dropAllInventoryAt: a 40 px ring (one item: on the spot).
+func _scatter_inventory(at: Vector2) -> void:
+	var slots: Array = []
+	for i in game.inventory.size():
+		if game.inventory[i] is Dictionary:
+			slots.append(i)
+	var radius := 40.0 if slots.size() > 1 else 0.0
+	for n in slots.size():
+		var item: Dictionary = game.remove_slot(slots[n])
+		_drop_at(item, at + Vector2.from_angle(n * TAU / slots.size()) * radius)
+	hud.set_inventory(game.inventory)
+
+
+## The last body: shake, fade, fresh run from startRoom
+## (GameScene: rsm.reset() + scene.restart()).
 func _die() -> void:
 	_dying = true
 	player.frozen = true
@@ -605,15 +671,91 @@ func _talk_to(a: Node) -> void:
 	if not a.is_cast():
 		hud.open_dialog("%s seems to be calming down.\nThey need some time alone." % a.resident_name, "narrative")
 		return
-	# Home: one backstory page per E; after the last, they're recovered.
-	# (Phaser then adds them to the roster — not ported yet.)
-	var page: int = _recovery_page.get(a.afflicted_id, 0)
-	if page < a.backstory.size():
+	# Home: one backstory page per E. The last page recovers them: they join
+	# the roster with their recovered items and stay here as a parked body.
+	var id: String = a.afflicted_id
+	var page: int = _recovery_page.get(id, 0)
+	if not a.backstory.is_empty() and page < a.backstory.size() - 1:
 		hud.open_dialog(a.backstory[page], "narrative")
-		_recovery_page[a.afflicted_id] = page + 1
-	if page + 1 >= a.backstory.size():
-		game.recovered[a.afflicted_id] = true
-		a.set_status("recovered")
+		_recovery_page[id] = page + 1
+		return
+	var final_text: String = a.backstory[page] if page < a.backstory.size() else "%s — %s\n\"I'm ready to help. Let's go.\"" % [a.resident_name, a.role]
+	_recovery_page.erase(id)
+	game.recovered[id] = true
+	var c: Dictionary = _cast.get(id, {})
+	game.add_to_roster({"id": id, "sheet": c.get("sheet", "main"), "room": room_id,
+		"x": a.position.x, "y": a.position.y, "traits": c.get("traits", [])}, c.get("recoveredItems", []))
+	afflicted.erase(a)
+	a.queue_free()
+	_spawn_parked()
+	hud.set_roster(game.roster, game.active)
+	hud.open_dialog(final_text, "narrative")
+
+
+# ── Roster (GameScene.switchToCharacter / refreshParkedBodies) ─────────
+
+## Keys 1–4 / portraits. Same room: swap sheet and position in place.
+## Another room: fade there, arriving where that body was left.
+func _switch_to(id: String) -> void:
+	if _switching or _dying or hud.is_dialog_open() or id == game.active:
+		return
+	var target: Variant = game.character(id)
+	if target == null:
+		return
+	game.update_position(game.active, room_id, player.position)
+	game.set_active(id)
+	hud.set_inventory(game.inventory)
+	hud.set_roster(game.roster, game.active)
+	if target["room"] != room_id:
+		_switching = true
+		game.pending_spawn = Vector2(target["x"], target["y"])
+		game.facing = player.facing
+		game.flashlight_on = flashlight.on
+		game.flashlight_charge = flashlight.charge
+		set_process_unhandled_input(false)
+		await _fade(1.0)
+		get_tree().change_scene_to_file("res://scenes/rooms/%s.tscn" % target["room"])
+		return
+	for a in afflicted.duplicate():  # a lingering NPC for the incoming character
+		if is_instance_valid(a) and a.afflicted_id == id:
+			afflicted.erase(a)
+			a.queue_free()
+	player.set_sheet(_sheet_texture(target))
+	player.position = Vector2(target["x"], target["y"])
+	_cure_cooldown = 0.6  # can't be killed the instant you teleport in
+	_spawn_parked()
+
+
+## Inactive roster members in this room stand where they were left.
+func _spawn_parked() -> void:
+	for n in _parked_nodes():
+		n.queue_free()
+	for c: Dictionary in game.roster:
+		if c["id"] == game.active or c["room"] != room_id:
+			continue
+		var body := Node2D.new()
+		body.name = "Parked-" + c["id"]
+		body.position = Vector2(c["x"], c["y"])
+		body.set_meta("parked", c["id"])
+		body.add_to_group("parked")
+		var sprite := AnimatedSprite2D.new()
+		sprite.sprite_frames = PlayerScript.make_frames(_sheet_texture(c))
+		sprite.scale = Vector2.ONE * sprite_scale
+		sprite.play("idle-down")
+		var shadow: Node2D = PlayerScript.CharacterShadow.new()
+		shadow.sprite = sprite
+		body.add_child(shadow)
+		body.add_child(sprite)
+		$Entities.add_child(body)
+		$Entities.move_child(body, player.get_index())
+
+
+func _parked_nodes() -> Array:
+	return get_tree().get_nodes_in_group("parked").filter(func(n: Node) -> bool: return is_ancestor_of(n) and not n.is_queued_for_deletion())
+
+
+func _sheet_texture(c: Dictionary) -> Texture2D:
+	return WardenData.texture("sprites/%s.png" % c["sheet"])
 
 
 ## Camera shake: duration s, intensity as a fraction of the screen width
