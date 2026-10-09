@@ -337,7 +337,7 @@ func _process(delta: float) -> void:
 	push_out()
 	var half := 3000.0 - radius  # keep inside the map
 	position = position.clamp(Vector2(-half, -half), Vector2(half, half))
-	velocity = (position - _last_pos) / maxf(delta, 0.0001)
+	velocity = ((position - _last_pos) / maxf(delta, 0.0001)).limit_length(speed * 1.5)  # (a blink / respawn jump isn't a speed: bots lead their aim by this)
 	_last_pos = position
 	queue_redraw()
 
@@ -460,6 +460,18 @@ func ability_cost(slot: String) -> float:
 	return float(abilities[slot]["cost"]) * (1.0 + mod("mana_cost")) * (1.0 - Unit.ability_haste)  # Overclock; overtime
 
 
+## The play log: your casts, or red's (with where it aimed and how far you were).
+func _log_cast(slot: String, a: Dictionary, point: Vector2) -> void:
+	if not is_bot:
+		PlayLog.cast(slot, a, point)
+	elif PlayLog.recording():
+		var foe: Variant = get("enemy_hero")
+		var d: int = roundi(position.distance_to(foe.position)) if foe != null and is_instance_valid(foe) and foe.is_targetable() else -1
+		PlayLog.event("red_cast", {"slot": slot, "ability": a.get("name", ""), "at": [roundi(point.x), roundi(point.y)], "you_dist": d, "mana": roundi(mana)})
+		if has_method("track_cast"):
+			call("track_cast", str(a.get("name", "")), slot)  # bot.gd: did it hit?
+
+
 ## Afterimage: enemies have lost track of you while your decoy is up.
 func hidden_by_decoy() -> bool:
 	return is_instance_valid(decoy) and decoy.is_targetable()
@@ -479,13 +491,15 @@ func attack_damage_vs(target: Node2D, dmg: float) -> float:
 
 
 ## After one of your attacks lands: Serrated makes heroes bleed; a charged
-## Spellblade shot spends the charge.
+## Spellblade shot spends the charge; KYLE's attacks stoke his burn on it.
 func on_attack_landed(target: Node2D, charged := false) -> void:
 	if charged:
 		_spellblade_ready = false
 		_spellblade_shot = null
 	if mod("serrated") > 0.0 and target.is_in_group("heroes") and target.is_targetable():
 		target.bleed(self, mod("serrated"), 2.0)
+	if def["attack"].get("stoke", false) and is_instance_valid(target) and target.has_method("stoke_burn"):
+		target.stoke_burn(self)  # KYLE: each hit restarts your burn on them at its full length
 
 
 ## Aftershock: you (or your Tank Minion) stunned `victim` — a shockwave there.
@@ -498,6 +512,17 @@ func on_stunned(victim: Node2D) -> void:
 	nova.source = self
 	nova.hit = {"aoe": true, "heroes": Unit.ABILITY_VS_HEROES, "creeps": Unit.ABILITY_VS_CREEPS, "structures": Unit.ABILITY_VS_STRUCTURES}
 	effects.add_child(nova)
+
+
+## BOOP's ring has reached `u` (Effects.Boop carries it out): enemies take
+## `dmg`, tethers snap, and Afterimage fires if it's you being carried.
+func _booped(u: Node2D, a: Dictionary, dmg: float) -> void:
+	if u == self and mod("afterimage") > 0.0:
+		_leave_decoy()  # booping yourself away counts as a getaway
+	if u.is_tethered():
+		u.break_tether()  # (POUNCE's hold snaps)
+	if u.team != team and dmg > 0.0 and is_instance_valid(self):
+		u.take_damage(dmg, a["color"], false, false, self, ability_hit(a))
 
 
 ## Afterimage: leave a decoy here (before a dash or blink moves you).
@@ -513,6 +538,8 @@ func _leave_decoy() -> void:
 	d.radius = radius
 	d.life = mod("afterimage")
 	d.points = shape_points(def.get("shape", "circle"), radius, facing)
+	d.slot = "hero_" + str(def.get("shape", "circle"))
+	d.facing = facing
 	d.colour = def["color"]
 	effects.add_child(d)
 	decoy = d
@@ -748,17 +775,16 @@ func toggle_leash(c: Node2D) -> bool:
 	if leashed.has(c):
 		leashed.erase(c)
 		c.leader = null
-		if not is_bot:
-			PlayLog.event("unleash", {"kind": c.kind})
+		PlayLog.event("unleash" if not is_bot else "red_unleash", {"kind": c.kind})
 		return true
 	if leash_used() + c.leash_cost() > leash_capacity():
 		leash_flash = 0.8
 		return false
 	c.leader = self
+	c.set("camp", null)  # (leashing a creep off a totem takes it off)
 	c.leash_slot = leashed.size()
 	leashed.append(c)
-	if not is_bot:
-		PlayLog.event("leash", {"kind": c.kind})
+	PlayLog.event("leash" if not is_bot else "red_leash", {"kind": c.kind})
 	return true
 
 
@@ -783,6 +809,8 @@ func on_deny(at: Vector2, creep: Node2D = null) -> void:
 	effects.add_child(Effects.DenyMark.new(at, Color("#ffca28") if not is_bot else Color("#ef9a9a")))
 	if not is_bot:
 		PlayLog.event("deny")
+	else:
+		PlayLog.event("red_deny")
 
 
 ## Recruit: the creep you just denied gets back up for a while at half health.
@@ -914,12 +942,10 @@ func cast(slot: String, point: Vector2) -> void:
 		effects.add_child(orb)
 		mana -= ability_cost(slot)
 		_spellblade_ready = mod("spellblade") > 0.0
-		if not is_bot:
-			PlayLog.cast(slot, a)
+		_log_cast(slot, a, point)
 		return
 	_cast_effects(a, point, dmg)
-	if not is_bot:
-		PlayLog.cast(slot, a)
+	_log_cast(slot, a, point)
 	if slot == "Q" and mod("echo") > 0.0:  # Echo: the same shot again, half strength
 		var aim_dir := (point - position).normalized()
 		_later(0.4, func() -> void:
@@ -1022,6 +1048,12 @@ func _cast_effects(a: Dictionary, point: Vector2, dmg: float) -> void:
 						_dash(dest, c, dmg, a))
 			else:
 				_dash(dest, c, dmg, a)
+		"boop":  # BOOP: a circle at the cursor; after a beat a ring bursts out and carries everything it meets
+			var at := position + dir * minf(to.length(), float(a["range"]))
+			var boop := Effects.Boop.new(at, float(a["radius"]), float(a.get("push", 120.0)), c, float(a.get("windup", 0.2)))
+			boop.facing = facing
+			boop.on_contact = func(u: Node2D) -> void: _booped(u, a, dmg)  # (u: anyone the ring reaches)
+			effects.add_child(boop)
 		"blink":
 			_cancel_plant()  # GHOST out of a SHADE windup: the beam is lost
 			_leave_decoy()  # Afterimage
@@ -1042,6 +1074,7 @@ func _cast_effects(a: Dictionary, point: Vector2, dmg: float) -> void:
 			sp.ticks = a.get("ticks", 8)
 			sp.attack_slow = a.get("attack_slow", 0.0)
 			sp.slow_time = a.get("slow_time", 1.5)
+			sp.creep_heal = float(a.get("creep_heal", 0.0))
 			spin_left = sp.duration
 			spin_time = sp.duration
 			spin_grow = Vector2(float(a.get("grow_start", 1.6)), float(a.get("grow_end", 2.0)))
@@ -1135,6 +1168,8 @@ func earn_gold(amount: int, at: Vector2, last_hit: bool) -> void:
 		return
 	if last_hit and not is_bot:
 		PlayLog.last_hit("creep", amount)
+	elif last_hit:
+		PlayLog.event("red_last_hit", {"gold": amount})
 	gold += amount
 	if not is_bot:
 		effects.add_child(Effects.GoldNumber.new(at, amount))
@@ -1153,9 +1188,9 @@ func on_dealt(amount: float, _hit: Dictionary = {}, victim: Node2D = null) -> vo
 ## lifesteal) and its damage multipliers by target (heroes.gd vs_* or the
 ## Unit defaults).
 static func ability_hit(a: Dictionary) -> Dictionary:
-	var aoe: bool = a["kind"] in ["ground", "self", "cone", "beam", "orb"] or a.get("pierce", false) \
+	var aoe: bool = a["kind"] in ["ground", "self", "cone", "beam", "orb", "boop"] or a.get("pierce", false) \
 		or a.get("pass_through", false) or int(a.get("count", 1)) > 1
-	return {"aoe": aoe,
+	return {"aoe": aoe, "ability": a.get("name", ""), "douse": float(a.get("douse", 0.0)), "douse_slow": float(a.get("douse_slow", 0.0)), "douse_slow_time": float(a.get("douse_slow_time", 1.5)),
 		"heroes": a.get("vs_heroes", Unit.ABILITY_VS_HEROES),
 		"creeps": a.get("vs_creeps", Unit.ABILITY_VS_CREEPS),
 		"structures": a.get("vs_structures", Unit.ABILITY_VS_STRUCTURES)}
@@ -1224,8 +1259,11 @@ func _die() -> void:
 			effects.add_child(Effects.GoldNumber.new(position + Vector2(0, -30), lost))
 	if not is_bot:
 		PlayLog.death(killed_by, position)
-	elif killed_by and killed_by.is_in_group("heroes") and not killed_by.is_bot:
-		PlayLog.kill(position)
+	else:
+		if killed_by and killed_by.is_in_group("heroes") and not killed_by.is_bot:
+			PlayLog.kill(position)
+		PlayLog.event("red_death", {"at": [roundi(position.x), roundi(position.y)], "killer": PlayLog._source_kind(killed_by),
+			"why": str(get("why")), "leashed": leashed.size()})
 	respawn_in = respawn_time
 	aiming = ""
 	_target = null
@@ -1340,6 +1378,18 @@ static func icon_points(h: Dictionary, r: float, dir: Vector2) -> PackedVector2A
 	return shape_points(h["shape"], r * float(h["radius"]) / ICON_BASE_RADIUS, dir)
 
 
+## Draw hero `h`'s icon on `canvas` at `at` (size `r`, facing `dir`): its skin
+## art if the skin has one, else its shape.
+static func draw_icon(canvas: CanvasItem, h: Dictionary, at: Vector2, r: float, dir: Vector2) -> void:
+	var size: float = r * float(h["radius"]) / ICON_BASE_RADIUS
+	if SkinArt.draw(canvas, "hero_" + str(h["shape"]), at, size, dir):
+		return
+	var icon := icon_points(h, r, dir)
+	for p in icon.size():
+		icon[p] += at
+	canvas.draw_colored_polygon(icon, h["color"])
+
+
 static func shape_points(shape: String, r: float, dir: Vector2) -> PackedVector2Array:
 	var sides: int = {"triangle": 3, "square": 4, "hexagon": 6}.get(shape, 32)
 	var start := dir.angle() + (PI / 4.0 if shape == "square" else 0.0)
@@ -1362,34 +1412,44 @@ func _draw() -> void:
 		draw_line(from, tip, Color(1, 1, 1, 0.95), 2.0)  # the line itself
 	var shape: String = def.get("shape", "circle")
 	var spinning := spin_left > 0.0
-	var pts := shape_points(shape, radius * spin_scale(), facing.rotated(spin_angle()) if spinning else facing)
-	var shadow := PackedVector2Array()
-	for p in pts:
-		shadow.append(p + Vector2(3, 5))
-	draw_colored_polygon(shadow, Color(0, 0, 0, 0.35))  # soft drop shadow
-	draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 48, Color(TEAM_COLORS[team], 0.85), 3.0)  # whose side
-	draw_colored_polygon(pts, def["color"])
-	if spinning:  # GRIND: an equilateral tooth on the last stretch of each side, at its leading corner
-		for i in pts.size():
-			var a: Vector2 = pts[i]
-			var b: Vector2 = pts[(i + 1) % pts.size()]  # the corner this side runs into, the way it spins
-			var along := (b - a).normalized()
-			var base := (b - a).length() * SPIN_TOOTH  # the tooth's side = this share of the square's side
-			var out := Vector2(along.y, -along.x)
-			if out.dot((a + b) / 2.0) < 0.0:
-				out = -out  # point away from the middle
-			var start := b - along * base
-			var tip := (start + b) / 2.0 + out * base * sqrt(3.0) / 2.0
-			draw_colored_polygon(PackedVector2Array([start, b, tip]), def["color"].lightened(0.25))
-	var outline := pts.duplicate()
-	outline.append(pts[0])
-	draw_polyline(outline, RIM, 3.0)
-	# facing notch
-	var tip := facing * (radius - 4.0)
-	var side := facing.orthogonal() * 7.0
-	draw_colored_polygon(PackedVector2Array([tip, tip - facing * 12.0 + side, tip - facing * 12.0 - side]), RIM)
-	if _flash > 0.0:  # just got hit
-		draw_colored_polygon(pts, Color(1, 0.3, 0.3, _flash * 0.5))
+	var art_dir := facing.rotated(spin_angle()) if spinning else facing
+	var pts := shape_points(shape, radius * spin_scale(), art_dir)
+	var slot := "hero_" + shape
+	if SkinArt.has(slot):  # painted art (skin.gd): shadow, team ring, the art, the hit flash
+		var ar := radius * spin_scale()
+		SkinArt.draw(self, slot, Vector2(3, 5), ar, art_dir, Color(0, 0, 0, 0.35))
+		draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 48, Color(TEAM_COLORS[team], 0.85), 3.0)  # whose side
+		SkinArt.draw(self, slot, Vector2.ZERO, ar, art_dir)
+		if _flash > 0.0:
+			SkinArt.draw(self, slot, Vector2.ZERO, ar, art_dir, Color(1, 0.3, 0.3, _flash * 0.5))
+	else:
+		var shadow := PackedVector2Array()
+		for p in pts:
+			shadow.append(p + Vector2(3, 5))
+		draw_colored_polygon(shadow, Color(0, 0, 0, 0.35))  # soft drop shadow
+		draw_arc(Vector2.ZERO, radius + 9.0, 0.0, TAU, 48, Color(TEAM_COLORS[team], 0.85), 3.0)  # whose side
+		draw_colored_polygon(pts, def["color"])
+		if spinning:  # GRIND: an equilateral tooth on the last stretch of each side, at its leading corner
+			for i in pts.size():
+				var a: Vector2 = pts[i]
+				var b: Vector2 = pts[(i + 1) % pts.size()]  # the corner this side runs into, the way it spins
+				var along := (b - a).normalized()
+				var base := (b - a).length() * SPIN_TOOTH  # the tooth's side = this share of the square's side
+				var out := Vector2(along.y, -along.x)
+				if out.dot((a + b) / 2.0) < 0.0:
+					out = -out  # point away from the middle
+				var start := b - along * base
+				var tip := (start + b) / 2.0 + out * base * sqrt(3.0) / 2.0
+				draw_colored_polygon(PackedVector2Array([start, b, tip]), def["color"].lightened(0.25))
+		var outline := pts.duplicate()
+		outline.append(pts[0])
+		draw_polyline(outline, RIM, 3.0)
+		# facing notch
+		var tip := facing * (radius - 4.0)
+		var side := facing.orthogonal() * 7.0
+		draw_colored_polygon(PackedVector2Array([tip, tip - facing * 12.0 + side, tip - facing * 12.0 - side]), RIM)
+		if _flash > 0.0:  # just got hit
+			draw_colored_polygon(pts, Color(1, 0.3, 0.3, _flash * 0.5))
 	if is_tethered() and tether_owner:  # the tether: a taut line to whoever it's bound to
 		var to_other: Vector2 = tether_to.position - position
 		var taut := clampf(to_other.length() / maxf(tether_len, 1.0), 0.0, 1.0)

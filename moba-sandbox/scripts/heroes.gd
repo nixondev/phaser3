@@ -71,7 +71,7 @@ const ROMAN := ["", "I", "II", "III", "IV", "V"]
 ## tooltips, shop, descriptions that mention it, Run History).
 const CIRCLE_Q := "SHOCK"
 const CIRCLE_W := "IGNITE"
-const CIRCLE_E := "WRAITH"
+const CIRCLE_E := "BOOP"
 const CIRCLE_R := "PUNISH"
 const TRIANGLE_Q := "STARS"
 const TRIANGLE_W := "TRAP"
@@ -97,24 +97,24 @@ const LIST := [
 	{
 		"name": CIRCLE_NAME, "shape": "circle", "color": Color("#e0e6ea"),
 		"speed": 360.0, "radius": 26.0, "hp": 700.0, "mana": 500.0, "regen": 6.0,
-		"attack": {"range": 420.0, "damage": 25.0, "interval": 0.8},
+		"attack": {"range": 420.0, "damage": 25.0, "interval": 0.8, "stoke": true},  # stoke: each attack restarts his burn on the target at its full length
 		"bot": {},
 		"abilities": {
-			"Q": {"name": CIRCLE_Q, "desc": "Fires an orb toward the cursor. It explodes at the end of its path — press Q again to set it off early.", "kind": "orb", "fx": "lightning", "range": 450.0, "speed": 900.0, "linger": 0.0, "radius": 80.0, "cooldown": 5.0, "cost": 50.0, "damage": 80.0, "color": Color("#4fc3f7"),
+			"Q": {"name": CIRCLE_Q, "desc": "Fires an orb toward the cursor. It explodes at the end of its path — press Q again to set it off early. An enemy burning from your " + CIRCLE_W + " takes 30% more, stops burning and is slowed 15% for 1.5 s.", "kind": "orb", "douse": 0.3, "douse_slow": 0.15, "douse_slow_time": 1.5, "fx": "lightning", "range": 450.0, "speed": 900.0, "linger": 0.0, "radius": 80.0, "cooldown": 5.0, "cost": 50.0, "damage": 80.0, "color": Color("#4fc3f7"),
 				"levels": [{"damage": 105.0, "radius": 95.0}, {"damage": 130.0, "radius": 110.0, "cooldown": 4.0}]},
-			"W": {"name": CIRCLE_W, "desc": "Marks an area at the cursor; after a warning it burns for a moment. The enemy nearest the centre takes the most. Anyone it touches keeps burning a while after they get out — " + CIRCLE_E + " through burning enemies to slow them.", "kind": "ground", "fx": "fire", "range": 700.0, "radius": 128.0, "cooldown": 8.0, "cost": 80.0, "damage": 80.0, "splash": 0.5, "duration": 1.5, "ticks": 6, "burn_dps": 10.0, "burn_time": 2.0, "color": Color("#ff7a1a"),
+			"W": {"name": CIRCLE_W, "desc": "Marks an area at the cursor; after a warning it burns for a moment. The enemy nearest the centre takes the most. Anyone it touches keeps burning a while after they get out; each of your attacks on them restarts their burn.", "kind": "ground", "fx": "fire", "range": 700.0, "radius": 128.0, "cooldown": 8.0, "cost": 80.0, "damage": 80.0, "splash": 0.5, "duration": 1.5, "ticks": 6, "burn_dps": 10.0, "burn_time": 2.0, "color": Color("#ff7a1a"),
 				"levels": [{"radius": 150.0, "damage": 96.0, "burn_dps": 14.0}, {"damage": 112.0, "splash": 0.75, "cooldown": 6.5, "burn_dps": 18.0}]},
-			"E": {"name": CIRCLE_E, "desc": "After a quick spin, dash toward the cursor, hitting every enemy you pass through and slowing their attacks. Enemies burning from your " + CIRCLE_W + " are slowed too.", "kind": "dash", "zone_slow": 0.2, "range": 380.0, "windup": 0.2, "dash_time": 0.5, "wobble": 4.0, "wobble_sways": 6.0, "spirit": true, "cooldown": 10.0, "cost": 60.0, "damage": 40.0, "color": Color("#81c784"),
-				"pass_through": true, "attack_slow": 0.4, "slow_time": 2.0,
-				"levels": [{"range": 460.0, "damage": 50.0, "attack_slow": 0.5}, {"cooldown": 7.0, "damage": 60.0, "slow_time": 3.0}]},
-			"R": {"name": CIRCLE_R, "desc": "A shockwave around you. It hits hardest up close, tapering to half damage at the edge.", "kind": "self", "radius": 345.0, "edge_damage": 0.5, "cooldown": 60.0, "cost": 150.0, "damage": 200.0, "color": Color("#ce93d8"),
-				"levels": [{"damage": 270.0, "radius": 390.0}, {"damage": 350.0, "cooldown": 48.0}]},
+			"E": {"name": CIRCLE_E, "desc": "A circle at the cursor: after a beat a ring bursts out from its centre and carries everything it meets to the edge — enemies, creeps, and you if you're in it — nicking the enemies. Cast it behind someone to knock them toward you (or into your " + CIRCLE_W + "), or between you and them to knock you both apart. Breaks tethers.",
+				"kind": "boop", "range": 700.0, "radius": 160.0, "push": 120.0, "windup": 0.2, "cooldown": 10.0, "cost": 60.0, "damage": 30.0, "color": Color("#81c784"),
+				"levels": [{"damage": 40.0, "radius": 180.0, "cooldown": 9.0}, {"damage": 50.0, "radius": 200.0, "push": 160.0, "cooldown": 8.0}]},
+			"R": {"name": CIRCLE_R, "desc": "A shockwave around you. It hits hardest up close, tapering to half damage at the edge.", "kind": "self", "radius": 260.0, "edge_damage": 0.5, "cooldown": 60.0, "cost": 150.0, "damage": 200.0, "color": Color("#ce93d8"),
+				"levels": [{"damage": 270.0, "radius": 290.0}, {"damage": 350.0, "cooldown": 48.0}]},
 		},
 	},
 	{
 		"name": TRIANGLE_NAME, "shape": "triangle", "color": Color("#ef9a9a"),
 		"speed": 400.0, "radius": 24.0, "hp": 900.0, "mana": 500.0, "regen": 7.0,
-		"attack": {"range": 150.0, "damage": 45.0, "interval": 0.6},
+		"attack": {"range": 150.0, "damage": 40.0, "interval": 0.65},
 		"bot": {},
 		"abilities": {
 			"Q": {"name": TRIANGLE_Q, "desc": "Throws a fan of spinning barbed stars toward the cursor. They cut through creeps, hitting each one, and stop at the first hero.", "kind": "skillshot", "fx": "star", "pierce_creeps": true, "range": 600.0, "count": 3, "spread": 18.0, "cooldown": 5.0, "cost": 45.0, "damage": 55.0, "color": Color("#ff8a65"),
@@ -124,7 +124,7 @@ const LIST := [
 				"cooldown": 10.0, "cost": 50.0, "damage": 60.0, "color": Color("#b0bec5"),
 				"levels": [{"charges": 2, "move_slow": 0.4, "damage": 80.0}, {"charges": 3, "move_slow": 0.45, "cooldown": 8.0, "damage": 100.0}]},
 			"E": {"name": TRIANGLE_E, "desc": "Dash toward the cursor through creeps. The first hero you hit is tethered to you for a moment: neither of you can get away from the other. Press E again to let go.", "kind": "dash", "range": 520.0,
-				"ignore_creeps": true, "tether": 1.5, "tether_len": 220.0, "cooldown": 8.0, "cost": 60.0, "damage": 70.0, "color": Color("#ffd54f"),
+				"ignore_creeps": true, "tether": 1.2, "tether_len": 220.0, "cooldown": 8.0, "cost": 60.0, "damage": 70.0, "color": Color("#ffd54f"),
 				"levels": [{"damage": 100.0, "range": 600.0}, {"damage": 140.0, "cooldown": 6.0}]},
 			"R": {"name": TRIANGLE_R, "desc": "Rapid rings of barbs burst out around you, following you as you move.", "kind": "self", "barbed": true, "radius": 220.0, "pulses": 3, "interval": 0.25, "cooldown": 50.0, "cost": 120.0, "damage": 90.0, "color": Color("#f06292"),
 				"levels": [{"pulses": 4, "damage": 105.0}, {"pulses": 5, "damage": 120.0}]},
@@ -136,10 +136,10 @@ const LIST := [
 		"attack": {"range": 140.0, "damage": 35.0, "interval": 1.0},
 		"bot": {},
 		"abilities": {
-			"Q": {"name": SQUARE_Q, "desc": "For 2 s you grow and spin — your corners cut everything they sweep, and enemies caught attack slower. You can move and cast but not auto-attack while spinning. Nothing stops it except your own " + SQUARE_E + "; cast during " + SQUARE_E + ", it starts when the charge ends.",
-				"kind": "spin", "vs_creeps": 1.5, "grow_start": 1.6, "grow_end": 2.0, "duration": 2.0, "ticks": 8, "attack_slow": 0.25, "slow_time": 1.5,
-				"cooldown": 7.0, "cost": 50.0, "damage": 120.0, "color": Color("#ffcc80"),
-				"levels": [{"damage": 160.0, "grow_end": 2.2}, {"damage": 200.0, "grow_end": 2.4, "cooldown": 6.0}]},
+			"Q": {"name": SQUARE_Q, "desc": "For 2 s you grow and spin — your corners cut everything they sweep, and enemies caught attack slower. You can move and cast but not auto-attack while spinning. Nothing stops it except your own " + SQUARE_E + "; cast during " + SQUARE_E + ", it starts when the charge ends. Each cut on a creep heals you a little.",
+				"kind": "spin", "vs_creeps": 1.5, "creep_heal": 3.0, "grow_start": 1.6, "grow_end": 2.0, "duration": 2.0, "ticks": 8, "attack_slow": 0.25, "slow_time": 1.5,
+				"cooldown": 7.0, "cost": 50.0, "damage": 180.0, "color": Color("#ffcc80"),
+				"levels": [{"damage": 240.0, "grow_end": 2.2}, {"damage": 300.0, "grow_end": 2.4, "cooldown": 6.0}]},
 			"W": {"name": SQUARE_W, "desc": "Shield yourself and every friendly hero nearby for 3 s; your creeps nearby get a shield worth a share of their own max health.",
 				"kind": "shield", "radius": 300.0, "shield": 120.0, "creep_pct": 0.15, "duration": 3.0,
 				"cooldown": 12.0, "cost": 60.0, "damage": 0.0, "color": Color("#c8ebff"),
@@ -194,7 +194,7 @@ const LABELS := {"damage": "damage", "cooldown": "cooldown", "cost": "mana", "ra
 	"range": "range", "count": "count", "pulses": "pulses", "pulse_damage": "pulses", "width": "width", "angle": "angle",
 	"scatter": "spread", "spread": "spread", "interval": "interval", "speed": "speed", "linger": "linger",
 	"splash": "splash", "attack_slow": "attack slow", "slow_time": "slow time", "move_slow": "slow", "duration": "lasts", "charges": "charges", "bleed": "bleed", "tether": "tether", "tether_len": "tether length", "burn_dps": "burn /s", "burn_time": "burn time",
-	"grow_end": "grows to", "shield": "shield", "knockback": "knockback"}
+	"grow_end": "grows to", "shield": "shield", "knockback": "knockback", "push": "push"}
 ## Shown as percentages on the cards.
 const PERCENT := ["splash", "attack_slow", "move_slow", "bleed"]
 const FLAGS := {"pierce": "pierces"}

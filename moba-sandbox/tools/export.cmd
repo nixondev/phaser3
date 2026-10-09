@@ -16,6 +16,12 @@ set /a N=1
 if exist "builds\MOBA-Sandbox-windows-v%VERSION%.%N%.zip" ( set /a N+=1 & goto nextv )
 if exist "builds\MOBA-Sandbox-playtest-v%VERSION%.%N%.zip" ( set /a N+=1 & goto nextv )
 set "V=%VERSION%.%N%"
+rem the game knows its own version (play logs record it)
+> scripts\build_version.gd (
+  echo extends RefCounted
+  echo ## The build's version - tools/export.cmd rewrites this file on every build.
+  echo const VERSION := "%V%"
+)
 if not exist builds\windows mkdir builds\windows
 "%GODOT%" --headless --path . --export-release "Windows Desktop" "builds/windows/MOBA Sandbox.exe"
 if errorlevel 1 exit /b 1

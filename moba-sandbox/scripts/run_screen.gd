@@ -122,6 +122,8 @@ func pick(i: int) -> void:
 	Run.start(i)
 	hero.set_hero(i)
 	hero.start_ult_cooldown()  # picking rebuilt the hero (cooldowns reset): round 1 opens with the ultimate cooling down too
+	if get_parent().has_method("repick_bot"):
+		get_parent().repick_bot()  # red for round 1, from this run's seed
 	_refresh()
 	if PlayLog.is_on():
 		PlayLog.run_start()
@@ -316,10 +318,7 @@ func _draw_pick(view: Vector2) -> void:
 		var h: Dictionary = Heroes.LIST[i]
 		var r := Rect2(Vector2(x0 + i * (w + gap), 230 + dy + below), Vector2(w, 345))
 		_button(r, "", pick.bind(i), true, h["color"].darkened(0.3))
-		var icon := HeroScript.icon_points(h, 34.0, Vector2.RIGHT)
-		for p in icon.size():
-			icon[p] += r.position + Vector2(w / 2.0, 70)
-		_panel.draw_colored_polygon(icon, h["color"])
+		HeroScript.draw_icon(_panel, h, r.position + Vector2(w / 2.0, 70), 34.0, Vector2.RIGHT)
 		_text(r.position + Vector2(0, 150), h["name"], 26, Color.WHITE, w, HORIZONTAL_ALIGNMENT_CENTER)
 		var top := Rect2(r.position, Vector2(w, 170))
 		if _hovered(top):  # tooltip: the hero's stats (types are found out by playing)
@@ -487,19 +486,13 @@ func _draw_hero_row(at: Vector2, width: float, label_x: float) -> void:
 		_button(r, "", choose_hero.bind(i), true, Color.WHITE if current else h["color"].darkened(0.45))
 		if current:
 			_panel.draw_rect(r, Color.WHITE, false, 3.0)
-		var icon := HeroScript.icon_points(h, 14.0, Vector2.RIGHT)
-		for p in icon.size():
-			icon[p] += r.position + Vector2(26, chip.y / 2.0)
-		_panel.draw_colored_polygon(icon, h["color"])
+		HeroScript.draw_icon(_panel, h, r.position + Vector2(26, chip.y / 2.0), 14.0, Vector2.RIGHT)
 		_text(r.position + Vector2(48, 34), h["name"], 17, Color.WHITE if current else Color(1, 1, 1, 0.6))
 	# who the bot plays next round — rolled from the run seed
 	var foe: Dictionary = Heroes.LIST[Run.bot_hero_for(Run.round_num + 1)]
 	var fx := at.x + n * (chip.x + 10.0) + 14.0
 	_text(Vector2(fx, at.y + 12), "NEXT CHALLENGER", 11, Color(1, 1, 1, 0.45))
-	var ficon := HeroScript.icon_points(foe, 10.0, Vector2.LEFT)
-	for p in ficon.size():
-		ficon[p] += Vector2(fx + 10.0, at.y + 26.0)
-	_panel.draw_colored_polygon(ficon, foe["color"])
+	HeroScript.draw_icon(_panel, foe, Vector2(fx + 10.0, at.y + 26.0), 10.0, Vector2.LEFT)
 	_text(Vector2(fx + 26.0, at.y + 32), foe["name"], 16, Color("#ef9a9a"))
 	# red's build — it shopped when you did: levels beside the name, cards below
 	var name_w := ThemeDB.fallback_font.get_string_size(foe["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x

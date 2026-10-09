@@ -58,6 +58,15 @@ func _draw() -> void:
 				draw_arc(at, a["scatter"] + a["radius"], 0.0, TAU, 64, Color(c, 0.5), 2.0)
 			draw_circle(at, a["radius"], Color(c, 0.2))
 			draw_arc(at, a["radius"], 0.0, TAU, 64, Color(c, 0.85), 3.0)
+		"boop":  # BOOP: the circle, with arrows showing which way each part shoves
+			draw_arc(from, a["range"], 0.0, TAU, 96, Color(c, 0.35), 2.0)
+			var bat: Vector2 = from + to.limit_length(a["range"])
+			var reach: float = float(a["radius"]) + float(a.get("push", 120.0))
+			draw_circle(bat, reach, Color(c, 0.12))
+			draw_arc(bat, reach, 0.0, TAU, 64, Color(c, 0.85), 3.0)  # everyone inside is carried out to here
+			for i in 8:
+				var d := Vector2.from_angle(TAU * i / 8.0)
+				draw_line(bat + d * reach * 0.3, bat + d * reach * 0.8, Color(c, 0.5), 2.0)
 		"dash", "blink":
 			draw_arc(from, a["range"], 0.0, TAU, 96, Color(c, 0.35), 2.0)
 			var land: Vector2 = from + to.limit_length(a["range"])

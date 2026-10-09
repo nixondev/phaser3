@@ -7,6 +7,8 @@ extends "res://scripts/unit.gd"
 var life := 2.0
 var points := PackedVector2Array()  # the hero's shape, round its centre
 var colour := Color.WHITE
+var slot := ""              # the hero's skin cell (skin.gd), if it has art
+var facing := Vector2.RIGHT
 var _t := 0.0
 
 
@@ -34,6 +36,8 @@ func _draw() -> void:
 	if points.size() < 3:
 		return
 	var a := 0.15 + 0.55 * (1.0 - _t / life)
+	if SkinArt.draw(self, slot, Vector2.ZERO, radius, facing, Color(1, 1, 1, a)):  # the hero's art, fading
+		return
 	draw_colored_polygon(points, Color(colour.lerp(Color.WHITE, _flash * 0.5), a))
 	var outline := points.duplicate()
 	outline.append(points[0])

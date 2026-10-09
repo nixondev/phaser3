@@ -4,6 +4,23 @@ The living record of what this project is becoming, what's decided, what's
 built, and every idea on the table. **How to play** and the file map live in
 `README.md`; this file is the *why* and the *what next*.
 
+## North star
+
+**A fun loop that scales in difficulty until the player is overwhelmed — but
+never feels bad.** Like Dr. Mario: each round a little harder, always readable,
+so a run ends because the player was finally outpaced, not because something
+was unfair, invisible or stupid. Every idea, card, tuning change and bot change
+is judged against it:
+- **Scaling** — difficulty climbs steadily round to round (red's skill and
+  stats, tempo, new wrinkles): no flat stretches, no cliffs.
+- **Overwhelmed in the end** — runs end by being outpaced (a strong player
+  around the mid-teens), not by stalling into long grinds.
+- **Never feels bad** — every loss is readable before it happens (the wave
+  turning, the siege coming, the tower crumbling), red's wins are earned (never
+  a bug, a stupid-looking bot moment or an unseen rule), and the player always
+  has an answer.
+(`/analyze-run` judges play logs against this.)
+
 **Working rule:** ideas get logged here first and are built toward the
 larger mechanic as they firm up, not all at once. Nothing is locked in
 unless it's marked **Decided**.
@@ -1153,6 +1170,8 @@ suits BECKY / KYLE; builds: Command, Rally Cry, Reinforcement, Pathfinders.
 Bot v1: farms its own (pusher / farmer keenest, sticky lane-vs-shape choice,
 never while your wave threatens its tower) and contests yours past 50%.
 
+**Built 2026-10-07 (totem.gd, bot v1; see BALANCE.md):** latching is automatic — lead a creep into the ring and it latches (user: "lead one close and it latches"), leaving your leash; it attacks only the totem. Placed well off the lane (y 560 vs the lane edge at 280) so it isn't confused with the lane. Leash intents steps 1–3 are in (key runs, led creeps as targets, totem trips + contest); backup and leash-card tags are next. **The reward is swappable** (user, 2026-10-07): a totem carries reward data `{"kind": …}`; lane.gd TOTEM_REWARDS maps each kind to the function that pays it and its puff text, TOTEM_REWARD is today's (2 siege minions), and `totem_reward_for(team)` is the one place to vary it by round, side or card. New type = one TOTEM_REWARDS entry + one function (then update How to Play's totem line). **Cards that modify the reward (user, 2026-10-07: "a card could modify the reward to a better minion"):** totem_reward_for reads the side's cards. Directions: upgrade (one heavy siege minion for ~25% instead of 2 × 10% — a "heavy_siege" kind + a siege_minion.gd variant), add (a tank creep joins the next wave — a bonus creep, so no gold), change (a short buff to the next wave, or a quicker respawn), scale (+1 siege minion per copy, capped). Wave / epic tier beside Command and Rally Cry — a real minion build around the totem, and the hook for a "minion run" red strategy.
+
 **Update 2026-10-06 — timing, and leashing as the late skill.** (The user calls
 it the totem.)
 - **From round 6, not 11.** The average run reaches ~6 and the best runs 11–12,
@@ -1182,6 +1201,48 @@ it the totem.)
 - **UI:** a small destination marker on leash lines (tower / totem / follow)
   so you can read red's intent and tell your own creeps apart. It shows what
   red is doing now, not its personality (black-box rule holds).
+
+## Bonus creeps pay no gold (2026-10-06; BUILT 2026-10-07 as bounty 0 + grey "no" slash — the per-wave cap below was not built)
+
+User: creeps that come from bonuses shouldn't give gold, "so we aren't just
+letting them farm". Today every bonus creep pays its full bounty to whoever
+last-hits it: Reinforcement (+1 melee a copy, up to 3), Tank Minion (70),
+red's late extras (+1 melee from round 15). (Overtime's extras already pay
+nothing — no kill pays in overtime — and risen Recruit creeps are worth no gold.)
+So buying Reinforcement ×3 hands your opponent three extra 40-gold last hits
+every wave, and red's late extras feed you.
+- Build: bounty 0 on creeps a wave gets from cards or red's late extras (lane.gd
+  spawn_wave knows which they are).
+- Needs a visual tell so nobody wastes a last hit — e.g. a paler body or no
+  gold glint; one look, same on both sides.
+- Bots: farm / last-hit logic skips zero-bounty creeps for gold (still kills
+  them to push); deny logic ignores them (nothing to deny).
+- Knock-ons: Reinforcement and Tank Minion become pure pressure — re-check their
+  prices; Clean Finish / Bounty Hunter / Executioner pay nothing on them.
+- **Alternative (recommended, 2026-10-06): a gold cap per wave.** User: "a way
+  to identify creeps you will not get gold from, or something like a max gold
+  per wave". Each wave pays at most a normal wave's worth (3 melee + 1 ranged);
+  every creep pays as usual until that wave's budget is spent, the rest pay
+  nothing. No creep to tell apart, so last-hitting stays about timing, not
+  identification; bonus creeps (Reinforcement, Tank Minion, red's late extras)
+  can never feed anyone past a normal wave. Cap by gold, not kill count (a tank
+  spends more of the budget). Card bonuses (Clean Finish, Bounty Hunter) sit
+  outside the cap: only creeps' own bounty is capped. Cue: an over-cap last hit
+  shows a grey "0" ("wave paid") so it never reads as a bug. Red's farm step can
+  skip a paid-out wave's creeps (a sharp player would). Overtime unchanged (no
+  kill pays). The visual-tell version above stays the fallback.
+- **Visual cue (user, 2026-10-06: "like a visual cue"):** creeps that will pay
+  carry a small gold pip by their health bar (gold = money, per the cue
+  standard); when a wave's budget runs out its remaining creeps lose the pip
+  live, so you see the moment it stops paying (the grey "0" only confirms).
+  Same cue under the no-gold-bonus-creeps rule (bonus creeps never get one).
+  In overtime every pip goes (no kill pays), matching the greyed tower coin.
+  Subtle: a dot, not a glow — late-round screens are busy.
+- **User's pick for the cue (2026-10-07):** creeps that give no gold get a grey
+  tint and a "no" slash through them (the ⃠ sign: a ring with a diagonal
+  bar) — reads at a glance as "worth nothing". Use it for bonus creeps (or a
+  paid-out wave's leftovers, under the cap), risen Recruit creeps, and every
+  creep in overtime. Inverts the gold-pip idea: mark the exception, not the rule.
 
 ## Red's leashing — leash intents (2026-10-06, planned)
 
@@ -1259,3 +1320,36 @@ look adds the build axis:
    what's coming.
 Order: shape + bot v1 → card tags → per-run red strategies. (Leash intents, below the shape camp, slot in before the shape: see "Red's leashing".)
 
+
+## The loop, from the metrics (2026-10-08, planned)
+
+From the KYLE run (rounds 1–12, won 11): the **wave** decides rounds (wave
+advantage positive in every win, negative in the loss; bigger = faster wins);
+late rounds get **longer, not more intense** (5 min early → 8½–9½ by rounds
+9 and 11; overtime starts 20 s later each round up to round 8); fights turn
+against you from round 6 (damage ratio ~1.9 → ~0.45) and the wave carried you;
+the loss was fair but **unreadable** (red led the wave ~2:1 for minutes, then
+your tower went 50% → rubble in 10 s). Goal: a Dr. Mario loop — steady,
+readable escalation you can always answer.
+1. **Show the wave**: a small HUD bar (your creeps vs red's, or a lean arrow)
+   and a plain warning when red's wave outnumbers yours 2:1.
+2. **Escalate tempo, not length**: rounds stay ~5 min and each gets faster
+   (waves 20 s → ~15 s, creeps a touch quicker); overtime starts about the same
+   time every round.
+3. **One new wrinkle per stage, announced** in the shop in one plain line
+   (totems at 6, red contests at 10, the ramp at 12…).
+4. **Smarter red totem play**: full leash loads, trips timed after its wave
+   clears yours, contest from ~40% meter and from round 8, every personality
+   from round 6 when the wave is even.
+5. **Tune against the metrics** with autoplay targets (round length ~4–6 min,
+   round win rate falling gradually, recoverable wave swings).
+Order: 1 → 2 → 3 / 4; 5 throughout. Analysis: `/analyze-run`
+(`tools/analyze_log.py`).
+
+## Bosses / special maps (2026-10-09, idea)
+
+User: "at some point maybe having bosses or special maps". Not designed yet.
+Context: red's hero order is now a per-run shuffle of the four that repeats all
+run (no hero twice in a row) — bosses or special maps could slot into that
+cycle (e.g. every Nth round) as the stage markers of the north star's steady
+escalation.

@@ -117,7 +117,7 @@ const LAST_HIT_SLACK := 1.6  # swing when a creep is within this many hits of dy
 ##                only to finish you (under 25% health), never under your tower
 ## (Skill — last-hit / deny odds, aim, reaction — is never a personality key.)
 const PERSONALITIES := {
-	"brawler": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"], "retreat_at": 0.2, "healed_at": 0.75,
+	"brawler": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"], "retreat_at": 0.3, "healed_at": 0.75,
 		"engage": 650.0, "trade_cap": 0.6, "trade_margin": -0.25, "dash_at": 0.6, "hold_back": 20.0,
 		"race_need": 0.85, "chase_depth": 700.0},
 	"farmer": {"order": ["clear", "farm", "deny", "abilities", "trade", "push", "siege"], "retreat_at": 0.4, "trade_when": "vulnerable",
@@ -135,7 +135,7 @@ const STANDARD_ORDER := ["abilities", "clear", "trade", "farm", "deny", "push", 
 ## best tools, aimed where they hit the most creeps, plus attacks on the
 ## weakest. Which abilities each hero clears with (heroes.gd order:
 ## KYLE, CHAD, KAREN, BECKY); a shield slot shields its own wave instead.
-const CLEAR_SLOTS := [["W", "Q"], ["Q", "W"], ["E", "Q", "W"], ["W", "Q"]]  # CHAD: STARS through the line, TRAP in the clump  # KAREN: SHOVE exposes the clump, then GRIND cuts it
+const CLEAR_SLOTS := [["W", "Q"], ["Q", "W"], ["Q", "E"], ["W", "Q"]]  # CHAD: STARS through the line, TRAP in the clump  # KAREN: GRIND cuts the clump; SHOVE only when the wave's at its tower and you're far (it's her way into fights)
 const CLEAR_NEAR := 1300.0
 const CLEAR_MIN := 3
 const CLEAR_EDGE := 2
@@ -172,6 +172,7 @@ const COMMIT := {"brawler": 1.0, "opportunist": 1.0, "farmer": 0.6, "pusher": 0.
 const COMMIT_DEFAULT := 0.8
 const COMMIT_MIN_HEALTH := 0.35  # won't start a combo below this much of its own health
 const COMMIT_BITE := 0.35        # "open" target: worth it if the combo takes this share of your health
+const BOOP_KEEP := 0.5           # below this much health it keeps BOOP for escaping (unless it's a kill)
 const COMBO_STEP_WAIT := 1.5     # s it'll wait (closing in) for a step to come into reach before moving on
 const DEFEND_HOLD := 2.5
 const DEFEND_NEAR := 250.0  # you within the tower's range + this count as hitting it
@@ -228,6 +229,7 @@ var _wary := false
 var _rolls := {}
 var _clock := 0.0  # game seconds (so autoplay's fast clock works too)
 const ROLL_HOLD := 1.5  # creep id -> whether it decided to deny that creep
+const NOTICE_HOLD := 4.0  # "notice" rolls (danger, outmatched, an opening, a low you) hold this long: 1.5 s made wariness flicker
 var _lh_roll := {}    # creep id -> whether it decided to go for that last hit
 var _stutter_target: Node2D = null  # the hero it's trading with while stutter-stepping
 var _stepping := false              # walking to a step point between attacks
@@ -271,6 +273,11 @@ func _ready() -> void:
 	if pick >= 0:
 		set_hero(pick)
 	_lane_y = randf_range(-90.0, 90.0)
+	apply_personality()
+
+
+## Its personality's settings (also after main.gd repick_bot swaps its hero).
+func apply_personality() -> void:
 	_p = PERSONALITIES.get(personality, {})
 
 
@@ -314,8 +321,11 @@ func set_rally(r: float) -> void:
 func _roll(key: String, chance: float) -> bool:
 	var r: Variant = _rolls.get(key)
 	if r == null or _clock >= float(r[1]):
-		r = [randf() < chance, _clock + ROLL_HOLD * randf_range(0.7, 1.3)]
+		var prev: Variant = r
+		var hold: float = NOTICE_HOLD if key.begins_with("notice_") else ROLL_HOLD  # (a dull bot misses things for a while, it doesn't flicker)
+		r = [randf() < chance, _clock + hold * randf_range(0.7, 1.3)]
 		_rolls[key] = r
+		_log_roll(key, chance, bool(r[0]), prev)
 	return bool(r[0])
 
 
@@ -337,8 +347,8 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if _react_left > 0.0:
 		_react_left -= delta
-	if _hesitate_left > 0.0:
-		_hesitate_left -= delta
+	if _hesitate_left > 0.0:  # (stops at 0 = "done hesitating: run"; going negative read as "not hurt yet" and re-armed it — it never ran with you near)
+		_hesitate_left = maxf(0.0, _hesitate_left - delta)
 	var own_tower: Node2D = lane.tower(team) if lane else null
 	if own_tower and own_tower.is_targetable():
 		if _tower_hp_seen >= 0.0 and own_tower.hp < _tower_hp_seen:
@@ -365,6 +375,168 @@ func _decide() -> void:
 	_decide_step(trading_with)
 	if _stutter_target == null:
 		_stepping = false
+	if why != _logged_why and PlayLog.recording():  # the play log: each change of mind, with its state
+		_logged_why = why
+		PlayLog.event("red_why", {"why": why, "flags": _flags(), "at": [roundi(position.x), roundi(position.y)],
+			"hp": snappedf(hp / max_hp, 0.01), "mana": roundi(mana), "inputs": _inputs()})
+
+
+var _logged_why := ""
+
+
+# ------------------------------------------------------------------ play log: bot analysis
+# Everything below only writes while the play log is recording (PlayLog.event
+# returns at once otherwise); it never changes a decision.
+
+## Its damage ledger this round (play_log.gd round_end: "red_ledger"):
+## dealt to you by source, taken by source, last hits it chose to skip.
+var ledger := {"dealt": {}, "taken": {}, "skipped_last_hits": 0}
+var _casts_open := {}   # ability name -> {id, slot, you, creeps: {id: true}}
+var _cast_ids := 0
+var _commit_no := ""    # why _should_commit said no (the last time it was asked)
+var _hero_hit_at := -99.0  # when your hero last hurt it (BRACE waits for a real fight)
+const GRIND_CHASE := 320.0  # px: you this close while it spins → it walks onto you
+var _passed_until := 0.0
+const PASS_LOW := 0.35  # you this low and in reach: a chance it should think about
+const PASS_EVERY := 4.0 # one "passed" line per chance, not one per decision
+const CAST_WINDOW := 2.5  # s after a cast its hits count toward that cast
+
+
+## The numbers behind its decision right now.
+func _inputs() -> Dictionary:
+	var eh := _enemy_hero_alive()
+	if eh == null:
+		return {"you": "dead or hidden"}
+	var atk: float = eh.attack_damage() / maxf(eh.attack_interval(), 0.05)
+	var burst: float = (_fight_dps(eh) - atk) * RACE_WINDOW + atk * BURST_WINDOW
+	var d := {"dist": roundi(position.distance_to(eh.position)), "your_reach": roundi(_threat_reach(eh)),
+		"your_burst": roundi(burst), "my_hp": roundi(hp), "you_hp": snappedf(eh.hp / eh.max_hp, 0.01)}
+	if PlayLog.dev():  # its internal judgement (personality-tuned): dev runs only, never a shipped log
+		d.merge({"odds": snappedf(_race(eh), 0.01), "odds_need": snappedf(float(_pv("race_need", STANDARD_RACE)) * WARY_RACE, 0.01),
+			"retreat_at": float(_pv("retreat_at", RETREAT_AT)), "hesitate": snappedf(_hesitate_left, 0.01)})
+	return d
+
+
+## You're low and close, and it didn't commit: say why (once per chance).
+func _log_pass(eh: Node2D, reason: String) -> void:
+	if eh == null or not PlayLog.recording() or _clock < _passed_until or eh.hp / eh.max_hp > PASS_LOW:
+		return
+	if position.distance_to(eh.position) > float(ComboBook.BOOK[hero_index]["open"]) + 200.0:
+		return
+	_passed_until = _clock + PASS_EVERY
+	PlayLog.event("red_passed", {"reason": reason, "why": why, "inputs": _inputs()})
+
+
+## A dice roll that steers a decision: logged when it matters (a skipped step,
+## a commit roll, or a notice roll that flips).
+func _log_roll(key: String, chance: float, result: bool, prev: Variant) -> void:
+	if not PlayLog.recording() or key == "key_pick":
+		return
+	if key.begins_with("blunder_"):
+		if not result:
+			return
+	elif not (key.begins_with("commit_") or key in ["kill_key", "totem_contest"]):
+		if prev != null and bool(prev[0]) == result:
+			return  # same as last time: nothing changed
+	PlayLog.event("red_roll", {"key": key, "chance": snappedf(chance, 0.01), "result": result})
+
+
+## hero.gd _log_cast: a cast to follow for CAST_WINDOW s — did it hit you?
+func track_cast(ability: String, slot: String) -> void:
+	if _casts_open.has(ability):
+		_flush_cast(ability, int(_casts_open[ability]["id"]))
+	_cast_ids += 1
+	var id := _cast_ids
+	_casts_open[ability] = {"id": id, "slot": slot, "you": 0.0, "creeps": {}}
+	_later(CAST_WINDOW, func() -> void: _flush_cast(ability, id))
+
+
+func _flush_cast(ability: String, id: int) -> void:
+	var c: Variant = _casts_open.get(ability)
+	if c == null or int(c["id"]) != id:
+		return
+	_casts_open.erase(ability)
+	PlayLog.event("red_cast_result", {"ability": ability, "slot": c["slot"], "hit_you": float(c["you"]) > 0.0,
+		"you_dmg": roundi(c["you"]), "creeps_hit": (c["creeps"] as Dictionary).size()})
+
+
+func on_dealt(amount: float, hit: Dictionary = {}, victim: Node2D = null) -> void:
+	super(amount, hit, victim)
+	if not PlayLog.recording() or victim == null or not is_instance_valid(victim):
+		return
+	var key: String = "attack" if hit.is_empty() else str(hit.get("ability", "ability"))
+	if victim == enemy_hero:
+		ledger["dealt"][key] = float(ledger["dealt"].get(key, 0.0)) + amount
+	if _casts_open.has(key):
+		if victim == enemy_hero:
+			_casts_open[key]["you"] = float(_casts_open[key]["you"]) + amount
+		elif victim.is_in_group("creeps"):
+			_casts_open[key]["creeps"][victim.get_instance_id()] = true
+
+
+func take_damage(amount: float, colour: Color, big := false, quiet := false, source: Node2D = null, hit: Dictionary = {}) -> void:
+	var before := hp + shield_hp
+	if source != null and is_instance_valid(source) and source.is_in_group("heroes") and source.team != team:
+		_hero_hit_at = _clock
+	super(amount, colour, big, quiet, source, hit)
+	if not PlayLog.recording():
+		return
+	var lost := before - (maxf(hp, 0.0) + shield_hp)
+	if lost <= 0.0:
+		return
+	var key := "other"
+	if source != null and is_instance_valid(source):
+		if source.is_in_group("heroes"):
+			key = "you: " + ("attack" if hit.is_empty() else str(hit.get("ability", "ability")))
+		elif source.is_in_group("creeps"):
+			key = "creeps"
+		elif source.is_in_group("towers"):
+			key = "tower"
+	ledger["taken"][key] = float(ledger["taken"].get(key, 0.0)) + lost
+
+
+## The ledger rounded, for the round's summary.
+func ledger_summary() -> Dictionary:
+	var out := {"skipped_last_hits": ledger["skipped_last_hits"], "dealt": {}, "taken": {}}
+	for side: String in ["dealt", "taken"]:
+		for k: String in ledger[side]:
+			out[side][k] = roundi(ledger[side][k])
+	return out
+
+
+## What colours its decisions right now (for the play log).
+func _flags() -> Array:
+	var f := []
+	if _retreating:
+		f.append("danger_retreat" if _danger_retreat else "retreat")
+	if _wary:
+		f.append("wary")
+	if _clock < _shy_until:
+		f.append("shy")
+	if _clock < _tower_shy_until:
+		f.append("tower_shy")
+	if not _combo.is_empty():
+		f.append("combo")
+	if _defend_left > 0.0:
+		f.append("defending")
+	if _key != null:
+		f.append("key")
+	if _trip:
+		f.append("totem_trip")
+	if _clock < _contest_until:
+		f.append("contesting")
+	if _pressing():
+		f.append("pressing")
+	return f
+
+
+## Its state for a play-log snapshot.
+func log_state() -> Dictionary:
+	var t: Variant = attack_target
+	var tk := "none"
+	if t != null and is_instance_valid(t):
+		tk = "hero" if t.is_in_group("heroes") else ("tower" if t.is_in_group("towers") else ("creep" if t.is_in_group("creeps") else "other"))
+	return {"why": why, "flags": _flags(), "target": tk, "leashed": leashed.size()}
 
 
 func _decide_step(trading_with: Node2D) -> void:
@@ -397,11 +569,26 @@ func _decide_step(trading_with: Node2D) -> void:
 			if can_untether(slot):
 				cast(slot, position)
 		why = "retreat"
+		_log_pass(foe, "retreating")
+		_end_key("retreat")
+		if _trip:  # a totem trip ends too (its creeps go back to the lane below)
+			_trip = false
+			_trip_block_until = _clock + TOTEM_GAP
+		if not leashed.is_empty():  # its creeps would follow it home: send them back to the lane, a moment late
+			if _release_at < 0.0:
+				_release_at = _clock + _jitter(float(difficulty.get("reaction", REACTION)))
+			elif _clock >= _release_at:
+				for c: Variant in leashed.duplicate():
+					toggle_leash(c)
+				why = "unleash:retreat"
 		_escape(home)
 		_go(home + Vector2(0, _lane_y * 0.5))
 		return
 
+	_release_at = -1.0
 	var et := _enemy_tower()
+	if _key != null and _key_tick(et, _enemy_hero_alive()):
+		return  # a key run in progress (before backoff: its creep takes the tower's shots in a moment)
 	if et and et.target == self:
 		_moving_only = true
 		why = "backoff"
@@ -413,15 +600,27 @@ func _decide_step(trading_with: Node2D) -> void:
 	if not _combo.is_empty():
 		why = "combo"
 		return  # mid-combo: _combo_tick drives it
+	if spin_left > 0.0 and eh and position.distance_to(eh.position) <= GRIND_CHASE and _safe(eh.position):
+		why = "grind chase"  # GRIND moves with it: onto you for the rest of the spin
+		if position.distance_to(eh.position) > radius + eh.radius + 40.0:
+			_go(eh.position)  # (already on you: stays put — re-walking onto you every decision jittered)
+		return
 	if _defend(eh):
-		why = "defend"
+		if why != "defend:key":
+			why = "defend"
 		return
 	if eh and _should_commit(eh):
 		why = "commit"
 		_start_combo(eh)
 		return
+	if eh:
+		_log_pass(eh, _commit_no)
 	if _pressing() and _press():
 		why = "press"
+		return
+	if _key_tick(et, eh):
+		return
+	if _totem_tick(eh):
 		return
 	var blunder: float = _pv("blunder", 0.0)
 	for step: String in _pv("order", STANDARD_ORDER):
@@ -474,7 +673,7 @@ func _decide_step(trading_with: Node2D) -> void:
 
 	_idle = true  # nothing to do: hold the spot (free hits may fill the time)
 	why = "hold"
-	_go(_lane_spot())
+	_hold_at(_lane_spot())
 
 
 ## Pushing: the nearest enemy creep to hit (not just last hits) — nobody
@@ -497,9 +696,281 @@ func _push_target(eh: Node2D) -> Node2D:
 			var reach_from := c.position.x * fwd - attack_range() - radius  # where it'd stand to hit it
 			if reach_from > front + PUSH_LEAD or c.position.x * fwd > float(_pv("chase_depth", STANDARD_CHASE)):
 				continue  # would put it in front of its own wave, or deep in your half
-		if best == null or position.distance_to(c.position) < position.distance_to(best.position):
+		if best == null or _pick_dist(c) < _pick_dist(best):
 			best = c
 	return best
+
+
+## Step 2 of the leash plan: a creep your hero leads is worth more than a lane
+## creep — it's the one you'll use to open its tower's shield (or, later, to
+## fill a totem). Picking creeps to hit, it counts as LED_PULL px nearer.
+const LED_PULL := 250.0
+func _led(c: Node2D) -> bool:
+	if c.team == team:
+		return false
+	var l: Variant = c.get("leader")
+	return (l != null and is_instance_valid(l)) or c.get("camp") != null  # led by you, or latched on your totem
+
+
+func _pick_dist(c: Node2D) -> float:
+	return position.distance_to(c.position) - (LED_PULL if _led(c) else 0.0)
+
+
+## The creep holding its tower's shield open, if killing it would shut it: every
+## one of your creeps in the tower's range is one you lead (lowest health first).
+func _shield_key(t: Node2D) -> Node2D:
+	var key: Node2D = null
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team == team or not c.is_targetable() or t.position.distance_to(c.position) > t.RANGE + c.radius:
+			continue
+		if not _led(c):
+			return null  # your wave is there too: killing one led creep won't shut it
+		if key == null or c.hp < key.hp:
+			key = c
+	return key
+
+
+# ------------------------------------------------------------------ leash intents
+
+## Leashing with a purpose (IDEAS.md "Red's leashing"; step 1 of the plan).
+## KEY: tower shields stay up all round, so when its creeps can't reach your
+## tower (busy with your wave, or cleared as they arrive) it leashes one —
+## tank > melee > ranged — waits for it just outside your tower's range, then
+## goes in: the creep opens the shield and takes the tower's shots while it hits
+## the tower. Only in an opening: you're dead, or it's overtime and you're far
+## from your tower. A run holds KEY_HOLD s at least (no flip-flopping) and ends
+## when the creep dies — the shield is back and the usual rules (back off)
+## take over — or the opening closes. Retreating releases its creeps.
+const KEY_FETCH := 350.0       # px: how far it reaches for a creep
+const KEY_FETCH_OPEN := 700.0  # …when you're dead: a real window
+const KEY_HOLD := 3.0          # a run lasts at least this long
+const KEY_MAX := 20.0          # …and at most this long (a creep stuck somewhere)
+const KEY_BLOCK := 4.0         # after a run ends, no new one for this long
+const KEY_BLOCK_CLOSED := 12.0 # …this long when you came back to stop it (wait for a real new chance)
+const KEY_STAGE := 80.0        # px outside your tower's range where it waits for its creep
+const KEY_CLOSE := 140.0       # its creep this close: go in
+const KEY_ARRIVING := 300.0    # its own creeps this close to your tower's range: wait for them instead
+const KEY_MIN_HP := 0.4        # never starts one below this much health
+const KEY_WINDOW := 6.0        # s: you dead at least this much longer, or it's not worth the walk
+const KEY_WALK := 1500.0       # px: farthest it'll walk to the waiting spot (unless you're dead long enough to cover more)
+var _key: Node2D = null        # the creep it's bringing
+var _key_until := 0.0          # held until (KEY_HOLD)
+var _key_end := 0.0            # given up at (KEY_MAX)
+var _key_block_until := 0.0
+var _key_sent := false         # its creep let go at the stage, walking into your tower's range
+var _release_at := -1.0        # retreating: lets its leashed creeps go at this time
+var key_ended := ""            # why the last run ended (autoplay --osc prints it)
+var key_runs := true           # (autoplay --no-key switches them off, for A/B tests)
+
+
+## Is there an opening to walk a creep into your tower? You're dead for a
+## while yet, or it's overtime and you're well away from your tower. (Your
+## well is right behind your tower, and a decoy lasts 2 s: neither is one.)
+func _key_open(et: Node2D, starting: bool) -> bool:
+	if (starting and hp / max_hp < KEY_MIN_HP) or not is_instance_valid(enemy_hero):  # (once going, retreat_at decides when it's too hurt)
+		return false
+	var you := enemy_hero
+	if not you.is_targetable():
+		return not starting or float(you.respawn_in) >= KEY_WINDOW  # (a run under way carries on till you're back)
+	# overtime: you're well away from your tower to start one; a run under way
+	# carries on until you're actually close (hysteresis — no start / stop loop
+	# while you hover at the line)
+	var need: float = _threat_reach(you) + (CLEAR_MARGIN + et.RANGE * 0.5 if starting else 0.0)
+	return Unit.no_gold and (not _wary or not starting) and not you.hidden_by_decoy() 		and you.position.distance_to(et.position) > need
+
+
+## Why the opening counts as closed (for key_ended / autoplay --osc).
+func _closed_why(et: Node2D) -> String:
+	if not is_instance_valid(enemy_hero):
+		return "closed: no foe"
+	var you := enemy_hero
+	if not you.is_targetable():
+		return "closed: ?dead"
+	if not Unit.no_gold:
+		return "closed: you're back (not overtime)"
+	if you.hidden_by_decoy():
+		return "closed: decoy"
+	return "closed: you came within %d of your tower (reach %d)" % [int(you.position.distance_to(et.position)), int(_threat_reach(you))]
+
+
+## Starts, runs or ends a key run. True while it's driving the bot.
+func _key_tick(et: Node2D, eh: Node2D) -> bool:
+	if et == null or not et.is_targetable():
+		_end_key("no tower")
+		return false
+	if _key != null:
+		if not is_instance_valid(_key) or not _key.is_targetable() or (_key.leader != self and not _key_sent) or _clock >= _key_end:
+			_end_key("creep gone" if _clock < _key_end else "too long")  # the creep died (or got stuck): the shield's back
+			return false
+		if et.target == self:
+			_end_key("shot")  # your tower is on it, not its creep: back off (the usual rule) instead of standing in it
+			return false
+		if eh != null and position.distance_to(eh.position) <= _threat_reach(eh):
+			_end_key("contested")  # you came at it: the usual rules (fight / back off), not standing at the stage
+			return false
+		var own: Node2D = lane.tower(team) if lane else null
+		var raided: bool = eh != null and own != null and eh.position.distance_to(own.position) <= own.RANGE + DEFEND_NEAR
+		if _clock >= _key_until and (not _key_open(et, false) or raided):  # (creeps chipping its tower don't call it home: you there do)
+			_end_key("raided" if raided else _closed_why(et))  # the opening closed (or you're at its tower)
+			return false
+		return _key_run(et)
+	if not key_runs or _clock < _key_block_until or _defend_left > 0.0 or not et.shielded_from(team) or not _key_open(et, true):
+		return false
+	if not (smartness >= SIEGE_SMARTS or _pv("siege_always", false)):
+		return false
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team == team and c.is_targetable() and c.leader == null \
+				and c.position.distance_to(et.position) <= et.RANGE + KEY_ARRIVING:
+			return false  # its wave is about to get there anyway
+	if eh != null and position.distance_to(eh.position) <= _threat_reach(eh) + CLEAR_MARGIN:
+		return false  # you're right there: not an opening, however far you are from your tower
+	var walk: float = absf(et.position.x - _forward() * (et.RANGE + radius + KEY_STAGE) - position.x)
+	var walk_ok: bool = walk <= KEY_WALK
+	if eh == null and is_instance_valid(enemy_hero):  # you're dead: fine if it gets there (with a few seconds to spare) before you're back
+		walk_ok = walk / maxf(speed, 1.0) + 3.0 <= float(enemy_hero.respawn_in)
+	if not walk_ok:
+		return false
+	var c := _key_pick(et, KEY_FETCH_OPEN if eh == null else KEY_FETCH)
+	if c == null:
+		return false
+	if c.leader != self and not toggle_leash(c):
+		return false
+	_key = c
+	PlayLog.event("red_key", {"creep": c.kind, "you_dead": not enemy_hero.is_targetable(), "overtime": Unit.no_gold})
+	_key_until = _clock + KEY_HOLD
+	_key_end = _clock + KEY_MAX
+	return _key_run(et)
+
+
+## The creep to bring: one it already leads, or a free one in reach it has the
+## points for. The sturdiest (most tower shots) — a sharp bot weighs that, a
+## duller one now and then just takes the nearest.
+func _key_pick(et: Node2D, reach: float) -> Node2D:
+	var smart := _roll("key_pick", 0.5 + 0.5 * smartness)
+	var best: Node2D = null
+	var best_score := INF
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team != team or not c.is_targetable() or c.get("risen"):
+			continue
+		var d := position.distance_to(c.position)
+		if c.leader != self and (c.leader != null or d > reach or leash_used() + c.leash_cost() > leash_capacity()):
+			continue
+		var rank: int = {"tank": 0, "melee": 1}.get(c.kind, 2)
+		var score := d + (float(rank) * 1000.0 if smart else 0.0) - (500.0 if c.leader == self else 0.0)
+		if score < best_score:
+			best = c
+			best_score = score
+	return best
+
+
+## Walks its creep to your tower: wait just outside the range until it's close,
+## then let it go — a free creep heads for your tower by itself — and attack
+## the tower only once it's inside the range (the shield's open and the tower
+## is shooting the creep). It never walks in ahead of its creep.
+func _key_run(et: Node2D) -> bool:
+	var stage_x: float = et.position.x - _forward() * (et.RANGE + radius + KEY_STAGE)
+	var at_stage: bool = (et.position.x - position.x) * _forward() <= et.RANGE + radius + KEY_STAGE + 40.0
+	if not et.shielded_from(team):
+		why = "leash:key"
+		if attack_target != et:
+			order_attack(et.position)
+		return true
+	if not _key_sent and at_stage and position.distance_to(_key.position) <= KEY_CLOSE:
+		toggle_leash(_key)  # off it goes, to your tower
+		_key.set("dive_to", et)  # straight there: it mustn't stop to fight your creeps on the way (it did, and the run stalled)
+		_key_sent = true
+		PlayLog.event("red_key_send")
+	why = "leash:key send" if _key_sent else "leash:key wait"
+	_go(Vector2(stage_x, position.y))
+	return true
+
+
+func _end_key(reason := "") -> void:
+	_key_sent = false
+	if _key != null:
+		_key_block_until = _clock + (KEY_BLOCK_CLOSED if reason.begins_with("closed") or reason in ["raided", "contested"] else KEY_BLOCK)
+		key_ended = reason
+		PlayLog.event("red_key_end", {"reason": reason})
+	_key = null
+
+
+## TOTEM (step 3; totem.gd): from lane.gd TOTEM_FROM a keen red — pusher or
+## farmer, any red from TOTEM_ALL, or one with leash cards — takes creeps to its
+## totem: leashes up to its points from its own wave nearby, walks them into
+## the ring (they latch on and leave the leash) and goes back to the lane. One
+## trip per TOTEM_GAP s, never while your wave threatens its tower, while it's
+## defending or wary, and not with TOTEM_FULL of its creeps already on it. From
+## TOTEM_ALL it also contests yours: once your totem is TOTEM_CONTEST_AT full it
+## goes and kills the creeps latched on it (held TOTEM_CONTEST_HOLD s at least).
+const TOTEM_ALL := 10
+const TOTEM_GAP := 25.0
+const TOTEM_TRIP_MAX := 20.0
+const TOTEM_FETCH := 450.0
+const TOTEM_FAR := 1600.0      # px: farther than this from its totem, no trip
+const TOTEM_FULL := 3
+const TOTEM_CONTEST_AT := 0.5
+const TOTEM_CONTEST_HOLD := 5.0
+var _trip := false
+var _trip_end := 0.0
+var _trip_block_until := 0.0
+var _contest_until := 0.0
+
+
+func _wants_totem() -> bool:
+	return personality in ["pusher", "farmer"] or Run.round_num >= TOTEM_ALL 		or mod("leash_points") > 0.0 or mod("leash_damage") > 0.0
+
+
+func _totem_tick(_eh: Node2D) -> bool:
+	if lane == null or not lane.has_method("totem"):
+		return false
+	var mine: Node2D = lane.totem(team)
+	var yours: Node2D = lane.totem(1 - team)
+	# contest yours: kill the creeps latched on it
+	if yours != null and not _wary and _wave_threat() == 0 and (_clock < _contest_until 			or (Run.round_num >= TOTEM_ALL and yours.meter() >= TOTEM_CONTEST_AT and _roll("totem_contest", 0.3 + 0.7 * smartness))):
+		var best: Node2D = null
+		for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+			if c.team != team and c.is_targetable() and c.get("camp") == yours 					and (best == null or position.distance_to(c.position) < position.distance_to(best.position)):
+				best = c
+		if best != null:
+			if _clock >= _contest_until:
+				_contest_until = _clock + TOTEM_CONTEST_HOLD
+				PlayLog.event("red_totem_contest", {"your_meter": snappedf(yours.meter(), 0.01)})
+			why = "totem:contest"
+			if attack_target != best:
+				order_attack(best.position)
+			return true
+		_contest_until = 0.0
+	# a trip under way: walk its creeps into the ring (they latch and leave the leash)
+	if _trip:
+		if mine == null or _clock >= _trip_end or leashed.is_empty() or _wary:
+			_trip = false
+			_trip_block_until = _clock + TOTEM_GAP
+			return false
+		why = "totem:trip"
+		_go(mine.position)
+		return true
+	if mine == null or _clock < _trip_block_until or not _wants_totem() or _wave_threat() > 0 or _defend_left > 0.0 or _wary 			or position.distance_to(mine.position) > TOTEM_FAR:
+		return false
+	var on := 0
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team == team and c.is_targetable() and c.get("camp") == mine:
+			on += 1
+	if on >= TOTEM_FULL:
+		return false
+	var free: Array = get_tree().get_nodes_in_group("creeps").filter(func(c: Node2D) -> bool:
+		return c.team == team and c.is_targetable() and c.leader == null and c.get("camp") == null and not c.get("risen") 			and position.distance_to(c.position) <= TOTEM_FETCH)
+	free.sort_custom(func(a: Node2D, b: Node2D) -> bool: return position.distance_to(a.position) < position.distance_to(b.position))
+	for c: Node2D in free:
+		if leash_used() + c.leash_cost() <= leash_capacity():
+			toggle_leash(c)
+	if leashed.is_empty():
+		return false
+	_trip = true
+	_trip_end = _clock + TOTEM_TRIP_MAX
+	PlayLog.event("red_totem_trip", {"creeps": leashed.size(), "on_it": on, "meter": snappedf(mine.meter(), 0.01)})
+	why = "totem:trip"
+	_go(mine.position)
+	return true
 
 
 ## Pusher: leash the nearest free creep of its own while it has the points.
@@ -567,6 +1038,8 @@ func _clear_casts(need: int, keep_mana: bool) -> void:
 			continue
 		if a["kind"] == "dash" and (spin_left > 0.0 or not a.get("expose", 0.0) > 0.0):
 			continue  # only an exposing charge clears, and never cutting its own GRIND short
+		if a["kind"] == "dash" and not _dash_free_for_creeps():
+			continue  # SHOVE is how it starts fights: only on creeps when the wave's at its tower and you're nowhere near
 		if keep_mana and mana - ability_cost(slot) < max_mana * CLEAR_MANA_KEEP:
 			continue  # keeps some mana for you
 		var at: Variant = _clear_point(a, need)
@@ -583,6 +1056,8 @@ func _combo_seq(eh: Node2D) -> Array:
 	if hero_index >= ComboBook.BOOK.size():
 		return []
 	var page: Dictionary = ComboBook.BOOK[hero_index]
+	if page.has("ult") and is_ready("R") and can_afford("R") and smartness >= ULT_SMARTS:
+		return page["ult"]  # its ult combo (KAREN: RAGE → SHOVE → GRIND → BRACE)
 	var away: bool = eh.velocity.length() > 100.0 and eh.velocity.dot(eh.position - position) > 0.0
 	return page["flee"] if away else page["still"]
 
@@ -622,23 +1097,51 @@ func _combo_damage(seq: Array) -> float:
 ## Is a burst worth it right now?
 func _should_commit(eh: Node2D) -> bool:
 	var seq := _combo_seq(eh)
-	if seq.is_empty() or hp / max_hp < COMMIT_MIN_HEALTH or not _safe(eh.position) or eh.in_well or _clock < _commit_block_until:
+	_commit_no = ""
+	if seq.is_empty():
+		_commit_no = "no combo ready"
+	elif hp / max_hp < COMMIT_MIN_HEALTH:
+		_commit_no = "own health low"
+	elif not _safe(eh.position):
+		_commit_no = "you're under your tower"
+	elif eh.in_well:
+		_commit_no = "you're in your well"
+	elif _clock < _commit_block_until:
+		_commit_no = "blocked after a dropped combo"
+	if _commit_no != "":
 		return false
 	var page: Dictionary = ComboBook.BOOK[hero_index]
 	if position.distance_to(eh.position) > float(page["open"]) + 40.0:
+		_commit_no = "out of range"
 		return false
 	var opener: String = seq[0]
 	if not is_ready(opener) or not can_afford(opener):
+		_commit_no = "opener %s not ready" % opener if not is_ready(opener) else "no mana for opener %s" % opener
 		return false  # the combo starts with this: wait for it
 	var dmg := _combo_damage(seq)
 	var ehp: float = (eh.hp + eh.shield_hp) / (1.0 + float(eh.get("_expose")))
+	if abilities[opener]["kind"] == "boop":  # BOOP only pulls: worth it with something to hit you with after
+		var payoff := false
+		for s: String in seq:
+			if s != opener and is_ready(s) and can_afford(s) and float(abilities[s].get("damage", 0.0)) > 0.0:
+				payoff = true
+		if not payoff:
+			_commit_no = "nothing ready to follow BOOP"
+			return false
+		if hp / max_hp < BOOP_KEEP and dmg < ehp * 0.95:
+			_commit_no = "keeping BOOP to get away (own health low)"
+			return false
 	if dmg >= ehp * 0.95:
+		_commit_no = "kill on the table, missed it (roll)"
 		return _roll("commit_kill", 0.5 + 0.5 * smartness)  # a kill on the table: most bots see it
 	var keen: float = float(COMMIT.get(personality, COMMIT_DEFAULT)) * smartness
 	if _open_target(eh) and dmg >= ehp * COMMIT_BITE:
+		_commit_no = "you were open, passed (roll)"
 		return _roll("commit_open", keen)
 	if hp / max_hp >= eh.hp / eh.max_hp + 0.15 and dmg >= ehp * 0.5:
+		_commit_no = "ahead on health, passed (roll)"
 		return _roll("commit_trade", keen * 0.6)
+	_commit_no = "combo %d of your %d not worth it" % [roundi(dmg), roundi(ehp)]
 	return false
 
 
@@ -648,7 +1151,7 @@ func _open_target(eh: Node2D) -> bool:
 	var cheapest := INF
 	for slot: String in SLOT_ORDER:
 		var a: Dictionary = eh.abilities[slot]
-		if (a["kind"] == "dash" or a["kind"] == "blink") and not eh.is_ready(slot):
+		if (a["kind"] == "dash" or a["kind"] == "blink" or a["kind"] == "boop") and not eh.is_ready(slot):
 			return true
 		if not eh.is_ready(slot):
 			spent += 1
@@ -669,6 +1172,7 @@ func _start_combo(eh: Node2D) -> void:
 			seq[k + 1] = tmp
 	var react := _jitter(float(difficulty.get("reaction", REACTION)))  # it sees the opening a moment late
 	_combo = {"seq": seq, "i": 0, "next": _clock + react, "target": eh, "waited": 0.0}
+	PlayLog.event("red_combo", {"seq": seq, "you_hp": snappedf(eh.hp / eh.max_hp, 0.01), "you_dist": roundi(position.distance_to(eh.position)), "react": snappedf(react, 0.01)})
 	_stutter_target = null
 	_stepping = false
 
@@ -682,11 +1186,11 @@ func _combo_tick() -> void:
 	var page: Dictionary = ComboBook.BOOK[hero_index]
 	if not is_instance_valid(eh) or not eh.is_targetable() or eh.in_well or _retreating or not is_targetable() or eh.hidden_by_decoy() \
 			or position.distance_to(eh.position) > float(page["open"]) + 350.0:
-		_end_combo()
+		_end_combo("lost you" if not _retreating else "retreat")
 		return
 	var et := _enemy_tower()
 	if not _safe(eh.position) or (et and et.target == self):
-		_end_combo()  # you ran under your tower (or it's shooting the bot): not worth a dive
+		_end_combo("your tower")  # you ran under your tower (or it's shooting the bot): not worth a dive
 		_commit_block_until = _clock + COMMIT_BLOCK
 		return
 	for slot: String in recast.keys():  # SHOCK's orb out: set it off on you
@@ -699,7 +1203,7 @@ func _combo_tick() -> void:
 	var seq: Array = _combo["seq"]
 	var i: int = _combo["i"]
 	if i >= seq.size():
-		_end_combo()
+		_end_combo("done")
 		return
 	var slot: String = seq[i]
 	var gap := _jitter(0.2 + 0.35 * float(difficulty.get("reaction", REACTION)))  # sharper bots chain faster
@@ -732,8 +1236,13 @@ func _combo_aim(a: Dictionary, eh: Node2D) -> Variant:
 			var miss := Vector2.from_angle(randf() * TAU) * randf() * float(difficulty.get("aim_error", AIM_ERROR)) * 0.5
 			if a.get("tether", 0.0) > 0.0:
 				return eh.position + eh.velocity * 0.15 + miss  # POUNCE: onto you (where you're going)
-			return eh.position + (eh.position - position).normalized() * 90.0 + miss  # through you (WRAITH, SHOVE)
-		"spin", "rage":
+			return eh.position + (eh.position - position).normalized() * 90.0 + miss  # through you (SHOVE)
+		"boop":  # from behind you: you're knocked toward it (into IGNITE / PUNISH next)
+			return _boop_behind(a, eh)
+		"rage":  # the ult combo opens with it: swell up within SHOVE's reach, then charge
+			var page: Dictionary = ComboBook.BOOK[hero_index]
+			return position if d <= float(page["open"]) + eh.radius + 20.0 else null
+		"spin":
 			return position if d <= radius * 2.6 + eh.radius + 40.0 else null
 		"shield":
 			return position
@@ -741,7 +1250,11 @@ func _combo_aim(a: Dictionary, eh: Node2D) -> Variant:
 	return _with_creeps(a, h) if h != null else null
 
 
-func _end_combo() -> void:
+func _end_combo(reason := "") -> void:
+	if not _combo.is_empty():
+		var eh: Variant = _combo.get("target")
+		PlayLog.event("red_combo_end", {"reason": reason, "step": int(_combo.get("i", 0)), "of": (_combo.get("seq", []) as Array).size(),
+			"you_hp": snappedf(eh.hp / eh.max_hp, 0.01) if eh != null and is_instance_valid(eh) else -1})
 	_combo = {}
 	_cast_gap = difficulty.get("cast_gap", CAST_GAP)  # back to the normal pace
 
@@ -754,6 +1267,13 @@ func _defend(eh: Node2D) -> bool:
 	if t == null or not t.is_targetable():
 		return false
 	var shy := _clock < _shy_until
+	var key := _shield_key(t)  # you walked a creep in to open the shield: kill it and the shield's back
+	if key != null and _roll("kill_key", 0.4 + 0.6 * smartness) and not (shy and _too_close_to_foe(key.position)):
+		why = "defend:key"
+		_clear_casts(1, false)
+		if attack_target != key:
+			order_attack(key.position)
+		return true
 	if eh and not shy and eh.position.distance_to(t.position) <= t.RANGE + DEFEND_NEAR:  # you, at its tower: everything at you
 		if _cast_gap <= 0.0:
 			for slot: String in SLOT_ORDER:
@@ -1119,9 +1639,28 @@ func _wants_trade(eh: Node2D) -> bool:
 func _race(eh: Node2D) -> float:
 	var ours := _fight_dps(self)
 	var theirs := _fight_dps(eh)
-	var we_kill: float = eh.hp / maxf(ours, 1.0)
-	var they_kill: float = hp / maxf(theirs, 1.0)
+	var we_kill: float = _fight_hp(eh) / maxf(ours, 1.0)
+	var they_kill: float = _fight_hp(self) / maxf(theirs, 1.0)
 	return they_kill / maxf(we_kill, 0.01)
+
+
+## Health for the damage race: shields up now, a ready shield ability (BRACE),
+## and a ready / running RAGE's damage cut.
+static func _fight_hp(u: Node2D) -> float:
+	var h: float = u.hp + u.shield_hp
+	var cut := 0.0
+	for slot: String in SLOT_ORDER:
+		var a: Dictionary = u.abilities[slot]
+		if not u.is_ready(slot):
+			continue
+		if a["kind"] == "shield":
+			h += float(a.get("shield", 0.0))
+		elif a["kind"] == "rage":
+			cut = maxf(cut, float(a.get("damage_reduction", 0.0)))
+	var rg: Variant = u.get("_rage")
+	if float(u.get("rage_left")) > 0.0 and rg is Dictionary:
+		cut = maxf(cut, float(rg.get("damage_reduction", 0.0)))  # RAGE running
+	return h / (1.0 - minf(cut, 0.8))
 
 
 ## A hero's damage per second over a short fight: its auto-attacks plus the
@@ -1135,6 +1674,9 @@ static func _fight_dps(u: Node2D) -> float:
 		if u.is_ready(slot) and mana >= u.ability_cost(slot) and a.get("damage", 0.0) > 0.0:
 			mana -= u.ability_cost(slot)
 			var hits: float = float(a.get("pulses", a.get("count", 1)))
+			if a["kind"] == "rage":  # contact damage is per second: a window's worth, plus the burn
+				hits = minf(float(a.get("duration", 4.0)), RACE_WINDOW)
+				burst += float(a.get("burn_dps", 0.0)) * 2.0 * AbilityInfo.damage_scale(u.mods, slot) * u.damage_mult
 			burst += a["damage"] * hits * AbilityInfo.damage_scale(u.mods, slot) * u.damage_mult
 	return dps + burst / RACE_WINDOW
 
@@ -1190,10 +1732,12 @@ func _farm_target() -> Node2D:
 			continue
 		if _wary and _too_close_to_foe(c.position):
 			continue  # outmatched: not worth walking into your reach for one creep
-		if c.hp <= dmg and (weakest == null or c.hp < weakest.hp):
+		if c.hp <= dmg and c.bounty > 0 and (weakest == null or c.hp < weakest.hp):  # (no gold in it: not a last hit worth timing)
 			var id := c.get_instance_id()  # one roll per creep: does it go for this last hit?
 			if not _lh_roll.has(id):
 				_lh_roll[id] = randf() < lh_chance
+				if not _lh_roll[id]:
+					ledger["skipped_last_hits"] = int(ledger["skipped_last_hits"]) + 1
 			if _lh_roll[id]:
 				weakest = c
 		if nearest == null or position.distance_to(c.position) < position.distance_to(nearest.position):
@@ -1223,6 +1767,18 @@ func _deny_target() -> Node2D:
 
 
 ## Just behind the most advanced friendly creep, or by its own tower.
+## Hold: walk to `spot` unless it's already within HOLD_SLACK — the spot
+## follows its front creep, which jostles every frame in a melee scrum; without
+## the slack it shuffled after every jostle (autoplay --osc "hold" loops).
+const HOLD_SLACK := 60.0
+func _hold_at(spot: Vector2) -> void:
+	if position.distance_to(spot) <= HOLD_SLACK:
+		var heading: Variant = _target
+		if heading == null or (heading as Vector2).distance_to(spot) <= HOLD_SLACK:
+			return  # close enough: stay (free hits carry on from here)
+	_go(spot)
+
+
 func _lane_spot() -> Vector2:
 	var fwd := _forward()
 	var front := INF if fwd < 0.0 else -INF
@@ -1313,6 +1869,23 @@ func _ability_target(slot: String, a: Dictionary) -> Variant:
 	if ult or not (_pv("creep_casts", true) or you_away):
 		return null  # (a heroes-only personality still clears waves while you're away)
 	return _creep_cast(a)
+
+
+## BOOP aimed just behind you (from the bot's side), so you sit inside it and
+## get knocked toward the bot — or null if that's out of its range.
+func _boop_behind(a: Dictionary, eh: Node2D) -> Variant:
+	var back: Vector2 = (eh.position - position).normalized() if eh.position.distance_to(position) > 1.0 else facing
+	var at: Vector2 = eh.position + back * float(a["radius"]) * 0.55
+	return at if position.distance_to(at) <= float(a["range"]) else null
+
+
+## May it spend a charge (SHOVE) on creeps? Only when its wave is at its tower
+## and you're dead or well away — it's how it starts fights with you.
+func _dash_free_for_creeps() -> bool:
+	if _wave_threat() < 2:
+		return false
+	var eh := _enemy_hero_alive()
+	return eh == null or position.distance_to(eh.position) > _threat_reach(eh) + 600.0
 
 
 ## A cast aimed at you at `h`: nudged, if it can be, to also hit as many of
@@ -1408,9 +1981,13 @@ func _hero_cast(a: Dictionary, eh: Node2D) -> Variant:
 		"spin":  # GRIND: when you're within its spinning corners' reach
 			if d <= radius * corner_factor(def.get("shape", "")) * float(a.get("grow_end", 2.0)) + eh.radius:
 				return position
-		"shield":  # BRACE: going into (or in) a fight with you
-			if d <= 450.0:
+		"shield":  # BRACE: in a real fight with you — you've hit it in the last moment (else it's saved)
+			if d <= 450.0 and _clock - _hero_hit_at <= 1.0:
 				return position
+		"boop":  # you're low and getting away: knock you back toward it
+			var away: bool = eh.velocity.length() > 100.0 and eh.velocity.dot(eh.position - position) > 0.0
+			if away and eh.hp / eh.max_hp < float(_pv("dash_at", 0.35)) and _safe(eh.position) and _may_chase(eh):
+				return _boop_behind(a, eh)
 		"rage":  # RAGE: when it's on top of you
 			if d <= radius + float(a.get("contact_reach", 40.0)) + 80.0:
 				return position
@@ -1482,6 +2059,14 @@ func _escape(home: Vector2) -> void:
 		if a["kind"] == "ground" and a["range"] <= 0.0 and a.get("move_slow", 0.0) > 0.0 and is_ready(slot) and can_afford(slot):
 			cast(slot, position)
 			break
+	for slot: String in SLOT_ORDER:  # BOOP between you and it: you're both knocked apart
+		var b: Dictionary = abilities[slot]
+		var boop_reach: float = float(b.get("radius", 160.0)) + float(b.get("push", 120.0))
+		if b["kind"] == "boop" and is_ready(slot) and can_afford(slot) and eh != null \
+				and (position.distance_to(eh.position) <= boop_reach * 1.2 or is_tethered()):
+			cast(slot, position.lerp(eh.position, 0.5))
+			_react_left = _jitter(float(difficulty.get("reaction", REACTION)))
+			return
 	for slot: String in SLOT_ORDER:
 		var kind: String = abilities[slot]["kind"]
 		if (kind == "dash" or kind == "blink") and is_ready(slot) and can_afford(slot):

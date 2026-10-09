@@ -172,7 +172,7 @@ each other apart — except that your own creeps never push you: they step all
 the way aside as you walk through your wave (the same for red; enemy creeps
 still body-block). Walking into something slides you round it (creeps do the
 same around towers); a dash stops at the first enemy it hits (still
-damaging it — POUNCE ignores creeps, WRAITH passes through everything); a blink never leaves you inside anything; a move order onto a
+damaging it — POUNCE ignores creeps, SHOVE passes through everything); a blink never leaves you inside anything; a move order onto a
 tower or dummy stops at its edge.
 
 ## Heroes (1–4, or click the list top-left)
@@ -182,7 +182,7 @@ Switching is instant and resets mana and cooldowns. Kits live in
 
 | # | Hero | Shape | Stats | Q | W | E | R |
 |---|---|---|---|---|---|---|---|
-| 1 | KYLE | circle | 360 speed · 500 mana · ranged 420 | SHOCK — a harmless dot flies out through units; press Q again to blow it up early, or it explodes at the end of its line | IGNITE — a lingering burn zone; the enemy nearest its centre takes the most | WRAITH — a spin, then a wobbling spirit dash through enemies: slows their attacks, and their movement if they're in your IGNITE | PUNISH — shockwave, full damage at the centre, half at the edge |
+| 1 | KYLE | circle | 360 speed · 500 mana · ranged 420 | SHOCK — a harmless dot flies out through units; press Q again to blow it up early, or it explodes at the end of its line | IGNITE — a lingering burn zone; the enemy nearest its centre takes the most | BOOP — a circle at the cursor (range 700): after a beat it shoves everything inside out past its edge (you too) and nicks enemies; behind someone it knocks them toward you, between you it knocks you apart; breaks tethers | PUNISH — shockwave, full damage at the centre, half at the edge |
 | 2 | CHAD | triangle | 400 speed · 500 mana · melee 150 | STARS — 3–5 barbed stars that cut through creeps | TRAP — spikes at your feet: slow, and your attacks +20% (bleed) on enemies inside; the last second whips round and cuts; 1–3 charges | POUNCE — dash through creeps; tethers the hero it hits (your pull wins; E again lets go) | FLURRY — 3–5 barbed pulses that follow you |
 | 3 | KAREN | square | 320 speed · 450 mana · melee 140 | GRIND — a growing spin round you (move, no auto-attacks), slows attacks | BRACE — shield on you and friendlies nearby (creeps get half) | SHOVE — short charge, knocks enemies aside and slows | RAGE — swell up, burn whoever you touch, take less damage |
 | 4 | BECKY | hexagon | 340 speed · 550 mana · ranged 520 | SHADE — plant, aim (a line shows), then a long beam; hardest far away | RUMOR — area blast, can't land close to her | GHOST — teleport | FALLOUT — 6 scattered blasts |
@@ -211,7 +211,7 @@ heals to full. They block movement.
 
 Damage per ability is in `heroes.gd` (e.g. KYLE: SHOCK 80 in its blast
 when you set the dot off, IGNITE 100 to the enemy nearest its centre over
-1.5 s, WRAITH 40 to each unit passed through, PUNISH 200 at the centre down to
+1.5 s, BOOP 30 to each enemy inside, PUNISH 200 at the centre down to
 100 at the edge).
 
 ## Autoplay (balance testing)

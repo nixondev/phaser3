@@ -20,6 +20,7 @@ extends "res://scripts/unit.gd"
 ## shield stays up in overtime too (lane.gd OVERTIME shield_drops sets `doors_open`). A shielded tower shows a
 ## shield plate, and blocked hero hits puff "SHIELDED".
 
+const PlayLog := preload("res://scripts/play_log.gd")
 const RADIUS := 56.0
 const MAX_HP := 3000.0
 const RANGE := 650.0        # centre to the target's edge
@@ -122,7 +123,9 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 			_puff_cd = 0.35
 			effects.add_child(Effects.ShieldPuff.new(position + Vector2(randf_range(-20, 20), -RADIUS - 24.0), TEAM_COLORS[team]))
 		return
+	var before := hp
 	super(amount * vulnerability, colour, big, quiet, source, hit)
+	PlayLog.tower_hit(team, before - maxf(hp, 0.0), source, vulnerability)
 
 
 ## Is this tower shielded against heroes of `attacker_team`? Yes unless one of
@@ -152,22 +155,27 @@ func _draw() -> void:
 			draw_circle(Vector2.from_angle(a) * RADIUS * 0.5, RADIUS * 0.32, c.darkened(0.7 - 0.05 * (i % 3)))
 		return
 	_draw_range_ring(c)
-	# base plate, then the turret on top
-	var base := PackedVector2Array()
-	for i in 8:
-		base.append(Vector2.from_angle(i * TAU / 8.0 + TAU / 16.0) * RADIUS)
-	var shadow := PackedVector2Array()
-	for p in base:
-		shadow.append(p + Vector2(4, 7))
-	draw_colored_polygon(shadow, Color(0, 0, 0, 0.35))
-	draw_colored_polygon(base, Color("#37474f").lerp(Color.WHITE, _flash * 0.4))
-	base.append(base[0])
-	draw_polyline(base, c.darkened(0.3), 4.0)
-	var top := Vector2(0, -30.0 + _recoil * 4.0)
-	draw_circle(Vector2(0, -6), RADIUS * 0.62, Color("#263238"))
-	draw_circle(top, RADIUS * 0.5, c.lerp(Color.WHITE, _flash * 0.5))
-	draw_arc(top, RADIUS * 0.5, 0.0, TAU, 40, c.darkened(0.5), 3.0)
-	draw_circle(top, RADIUS * 0.2, c.lightened(0.6))  # the crystal
+	var tslot := "tower_%d" % team
+	if SkinArt.has(tslot):  # painted art (skin.gd): shadow, then the art (it doesn't turn)
+		SkinArt.draw(self, tslot, Vector2(4, 7), RADIUS, Vector2.RIGHT, Color(0, 0, 0, 0.35))
+		SkinArt.draw(self, tslot, Vector2.ZERO, RADIUS, Vector2.RIGHT)
+	else:
+		# base plate, then the turret on top
+		var base := PackedVector2Array()
+		for i in 8:
+			base.append(Vector2.from_angle(i * TAU / 8.0 + TAU / 16.0) * RADIUS)
+		var shadow := PackedVector2Array()
+		for p in base:
+			shadow.append(p + Vector2(4, 7))
+		draw_colored_polygon(shadow, Color(0, 0, 0, 0.35))
+		draw_colored_polygon(base, Color("#37474f").lerp(Color.WHITE, _flash * 0.4))
+		base.append(base[0])
+		draw_polyline(base, c.darkened(0.3), 4.0)
+		var top := Vector2(0, -30.0 + _recoil * 4.0)
+		draw_circle(Vector2(0, -6), RADIUS * 0.62, Color("#263238"))
+		draw_circle(top, RADIUS * 0.5, c.lerp(Color.WHITE, _flash * 0.5))
+		draw_arc(top, RADIUS * 0.5, 0.0, TAU, 40, c.darkened(0.5), 3.0)
+		draw_circle(top, RADIUS * 0.2, c.lightened(0.6))  # the crystal
 	draw_health_bar(130.0, c.lightened(0.1), 10.0)
 	var lane := get_parent()
 	if lane and lane.has_method("siege_incoming"):  # siege minions on the way here (overtime deaths)

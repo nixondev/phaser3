@@ -22,6 +22,9 @@ extends Node2D
 const TowerScript := preload("res://scripts/tower.gd")
 const CreepScript := preload("res://scripts/creep.gd")
 const SiegeMinionScript := preload("res://scripts/siege_minion.gd")
+const TotemScript := preload("res://scripts/totem.gd")
+const Effects := preload("res://scripts/effects.gd")
+const PlayLog := preload("res://scripts/play_log.gd")
 const Unit := preload("res://scripts/unit.gd")
 const Run := preload("res://scripts/run.gd")
 const Bounds := preload("res://scripts/bounds.gd")
@@ -66,6 +69,27 @@ const RESPAWN_EVERY := 30.0
 ## round 1, ~14 s for a full wave, so a tower takes a hero plus more than one
 ## wave. 0 = flat 110, the old late-round melt: one good wave took a tower).
 const TOWER_CREEP_SCALE := 1.0
+## TOTEMS (totem.gd): from round TOTEM_FROM each side gets one on its own half,
+## TOTEM_X from the middle and TOTEM_Y off the lane's centre line — well clear
+## of the lane band (±LANE_WIDTH / 2), so lane creeps never wander into its
+## ring. The first rises TOTEM_FIRST s into the round; a destroyed one pays its
+## reward and rises again TOTEM_RESPAWN s later.
+## REWARDS are data: a totem carries {"kind": <type>, ...fields}, and
+## TOTEM_REWARDS maps each type to the lane function that pays it (and the
+## puff text). To swap the reward, change TOTEM_REWARD (or totem_reward_for,
+## to vary it by round, side or card); to add a type, add an entry to
+## TOTEM_REWARDS plus its function.
+const TOTEM_FROM := 6
+const TOTEM_X := 1000.0
+const TOTEM_Y := 560.0
+const TOTEM_FIRST := 90.0
+const TOTEM_RESPAWN := 45.0
+const TOTEM_REWARD := {"kind": "siege", "count": 2}
+const TOTEM_REWARDS := {
+	"siege": {"pay": "_reward_siege", "text": "+%d SIEGE"},  # siege minions out with that side's next wave
+}
+var totems_on := true          # (tests can switch them off)
+var _totem_at := [-1.0, -1.0]  # elapsed time each side's next totem rises (-1: none due)
 const OVERTIME := {"start": 150.0, "start_per_round": 20.0, "start_max": 300.0, "tower_per_min": 0.5, "melee_every": 2, "max_extra": 4, "ability_haste": 0.25, "haste_ult": true, "shield_drops": false,
 	"red_per_min": 0.0, "red_cap": 0.6, "red_round1": 0.5}  # rally OFF (2026-10-01): 0.08 to try it again
 
@@ -138,6 +162,7 @@ func _process(delta: float) -> void:
 			if t:
 				t.vulnerability = weak
 				t.doors_open = bool(OVERTIME["shield_drops"]) and elapsed >= overtime_start()  # (off: heroes always need a creep, leashed ones count)
+		_tick_totems()
 		if bot:
 			bot.set_rally(red_rally())
 		next_wave -= delta
@@ -174,6 +199,7 @@ static func in_well(p: Vector2, team: int) -> bool:
 ## One wave from each base: melee in a line across the lane, ranged behind.
 func spawn_wave() -> void:
 	wave += 1
+	var sent := [{}, {}]  # for the play log: what each side sends this wave
 	for team in 2:
 		var home := base_of(team)
 		var forward := -signf(home.x)  # toward the enemy
@@ -184,6 +210,13 @@ func spawn_wave() -> void:
 			kinds.push_front("melee")
 		for i in int(wave_mods[team].get("tank", 0)):  # Tank Minion leads
 			kinds.push_front("tank")
+		# bonus creeps (pushed to the front above: Tank Minion, Reinforcement,
+		# red's late extras, overtime's extras) are worth no gold — buying more
+		# creeps mustn't feed the other side's farm
+		var bonus_left: int = kinds.size() - WAVE.size()
+		sent[team] = {"creeps": kinds.size(), "bonus": bonus_left, "tanks": kinds.count("tank"),
+			"overtime_extra": extra_melee(), "reinforcement": int(wave_mods[team].get("extra_melee", 0)), "late": late,
+			"siege": int(pending_siege[team])}
 		var melee := kinds.count("melee")
 		var m := 0
 		var w: Dictionary = wave_mods[team]
@@ -209,6 +242,10 @@ func spawn_wave() -> void:
 				at = home + Vector2(randf_range(-20, 20), randf_range(-40, 40))
 			var creep: Node2D = CreepScript.new(team, kind, at, Vector2(goal.x, at.y))
 			creep.effects = effects
+			if bonus_left > 0:
+				bonus_left -= 1
+				creep.bonus = true
+				creep.bounty = 0
 			creep.siege = wave_mods[team].get("siege", 0.0)  # Siege Training
 			creep.speed_bonus = float(w.get("wave_speed", 0.0))  # Pathfinders
 			creep.vanguard = float(w.get("vanguard", 0.0))  # Vanguard
@@ -232,6 +269,10 @@ func spawn_wave() -> void:
 
 
 ## How long a death keeps a hero out right now: grows as the round goes on.
+	PlayLog.wave({"n": wave, "blue": sent[0], "red": sent[1], "overtime": elapsed >= overtime_start(),
+		"tower_mult": snappedf(tower_vulnerability(), 0.01)})
+
+
 func respawn_seconds() -> float:
 	return RESPAWN_BASE + RESPAWN_STEP * floorf(elapsed / RESPAWN_EVERY)
 
@@ -263,6 +304,60 @@ func extra_melee() -> int:
 		return 0
 	var waves_in := int(overtime() / WAVE_EVERY)  # waves sent since overtime began
 	return mini(1 + waves_in / int(OVERTIME["melee_every"]), int(OVERTIME["max_extra"]))
+
+
+## Totems: the first pair at TOTEM_FIRST s (from round TOTEM_FROM), then each
+## side's again TOTEM_RESPAWN s after it falls.
+func _tick_totems() -> void:
+	if not totems_on or Run.round_num < TOTEM_FROM:
+		return
+	for team in 2:
+		if totem(team) != null:
+			continue
+		if _totem_at[team] < 0.0:
+			_totem_at[team] = TOTEM_FIRST
+		if elapsed >= _totem_at[team]:
+			_totem_at[team] = INF  # (set again when it falls)
+			var t: Node2D = TotemScript.new(team, Vector2(-TOTEM_X if team == 0 else TOTEM_X, TOTEM_Y))
+			t.name = "Totem%d" % team
+			t.reward = totem_reward_for(team)
+			t.effects = effects
+			t.died.connect(func(_u: Node2D) -> void:
+				var text := _pay_totem_reward(team, t.reward)
+				_totem_at[team] = elapsed + TOTEM_RESPAWN
+				if text != "":
+					effects.add_child(Effects.ShieldPuff.new(t.position + Vector2(0, -80), Unit.TEAM_COLORS[team], text))
+				PlayLog.event("totem_down", {"team": team, "reward": t.reward})
+				t.queue_free())
+			add_child(t)
+			PlayLog.event("totem_up", {"team": team})
+
+
+## The reward a new totem of `team`'s carries. One place to vary it (by round,
+## side, a card…); today every totem pays TOTEM_REWARD.
+func totem_reward_for(_team: int) -> Dictionary:
+	return TOTEM_REWARD.duplicate()
+
+
+## Pays a destroyed totem's reward to `team`; returns the puff text ("" = none).
+func _pay_totem_reward(team: int, reward: Dictionary) -> String:
+	var entry: Dictionary = TOTEM_REWARDS.get(str(reward.get("kind", "")), {})
+	if entry.is_empty():
+		push_warning("lane.gd: unknown totem reward %s" % str(reward))
+		return ""
+	call(entry["pay"], team, reward)
+	var text: String = entry.get("text", "")
+	return text % int(reward.get("count", 1)) if "%d" in text else text
+
+
+## "siege": `count` siege minions go out with `team`'s next wave.
+func _reward_siege(team: int, reward: Dictionary) -> void:
+	pending_siege[team] += int(reward.get("count", 1))
+
+
+func totem(team: int) -> Node2D:
+	var t := get_node_or_null("Totem%d" % team)
+	return t if t != null and not t.is_queued_for_deletion() and t.is_targetable() else null
 
 
 ## Siege minions headed for `team`'s tower: walking now, plus waiting for the next wave.

@@ -11,6 +11,8 @@ const Bounds := preload("res://scripts/bounds.gd")
 
 signal died(unit: Node2D)
 
+const UnitLog := preload("res://scripts/play_log.gd")  # (subclasses have their own PlayLog)
+const SkinArt := preload("res://scripts/skin.gd")
 const TEAM_COLORS := [Color("#4f8ff7"), Color("#ef5350")]  # blue (you), red
 ## A hero that hits an enemy hero is marked this long; towers and creeps near
 ## the victim switch to the attacker (the Dota rule — don't dive for free).
@@ -70,7 +72,7 @@ var _bleed_left := 0.0
 var _zbleed_amt := 0.0   # TRAP's in-zone bleed, kept apart from Serrated's (a 2 s attack bleed
 var _zbleed_left := 0.0  # mustn't carry TRAP's bigger bonus out of the zone)
 ## Standing in a hero's lingering zone (Blast, TRAP): refreshed every frame
-## while inside, so combos can check it (WRAITH through IGNITE also slows).
+## while inside, so combos can check it.
 var _zone_by: Node2D = null
 var _zone_left := 0.0
 ## Tether (CHAD's POUNCE): two units bound together, at most `tether_len`
@@ -254,6 +256,19 @@ func burn(by: Node2D, dps: float, time: float) -> void:
 	_burn_len = maxf(_burn_len if _burn_left > time else 0.0, time)
 
 
+## KYLE's attacks: `by`'s burn on this unit starts over at its full length.
+func stoke_burn(by: Node2D) -> void:
+	if _burn_left > 0.0 and by != null and _burn_by == by and is_targetable():
+		_burn_left = maxf(_burn_left, _burn_len)
+
+
+## SHOCK: `by`'s burn on this unit goes out.
+func douse(by: Node2D) -> void:
+	if by != null and _burn_by == by:
+		_burn_left = 0.0
+		burn_dps = 0.0
+
+
 ## Is this unit burning from `by`'s fire right now (inside it, or after)?
 func is_burning_from(by: Node2D) -> bool:
 	return _burn_left > 0.0 and by != null and _burn_by == by
@@ -377,7 +392,7 @@ func attack_time_mult() -> float:
 
 ## Can a hero of `by_team` deny this unit right now?
 func deniable_by(by_team: int) -> bool:
-	return team == by_team and is_in_group("creeps") and is_targetable() and hp < max_hp * DENY_BELOW and not get("risen")
+	return team == by_team and is_in_group("creeps") and is_targetable() and hp < max_hp * DENY_BELOW and bounty > 0  # (a creep worth no gold: nothing to deny)
 
 
 func is_targetable() -> bool:
@@ -439,6 +454,8 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 		hp = 0.0
 		_spread_burn()
 		killed_by = source if is_instance_valid(source) else null
+		if is_in_group("creeps"):
+			UnitLog.creep_died(team, killed_by, not hit.is_empty())
 		if bounty > 0 and killed_by and killed_by.is_in_group("heroes"):
 			if killed_by.team != team:
 				killed_by.earn_gold(bounty, position, is_in_group("creeps"))

@@ -355,14 +355,18 @@ static func choose_hero(i: int) -> void:
 	hero_index = clampi(i, 0, Heroes.LIST.size() - 1)
 
 
-## The enemy bot's hero in round `r` — rolled from the seed, so the shop can
+## The enemy bot's hero in round `r`: the heroes are shuffled once per run
+## (from the seed) and that order repeats for the whole run — every hero once
+## every 4 rounds, never the same one twice in a row. Seeded, so the shop can
 ## show who you'll face next and the same run always meets the same heroes.
 static func bot_hero_for(r: int) -> int:
 	if red_hero_fixed >= 0:
 		return red_hero_fixed
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([run_seed, r, "bot"])
-	return rng.randi_range(0, Heroes.LIST.size() - 1)
+	var order: Array = range(Heroes.LIST.size())
+	# sorted by a per-hero hash of the seed: well mixed (a freshly seeded RNG's
+	# first draws barely move with the seed — every run got the same order)
+	order.sort_custom(func(a: int, b: int) -> bool: return hash([run_seed, "bot order", a]) < hash([run_seed, "bot order", b]))
+	return int(order[(maxi(r, 1) - 1) % order.size()])
 
 
 ## Red's bot personality for hero `i`: its SIGNATURE (unless an experiment

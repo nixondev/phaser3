@@ -128,6 +128,9 @@ func _play_from(n: int) -> void:
 	if st.is_empty():
 		return
 	Run.from_dict(st)
+	if PlayLog.is_on():  # a replay gets its own play log (marked as one), like a fresh run
+		PlayLog.run_start()
+		PlayLog.event("replay", {"from": _run.get("file", ""), "round": n})
 	get_tree().paused = false
 	get_tree().reload_current_scene()
 
@@ -139,6 +142,7 @@ func _hero_name(n: String) -> String:
 
 func _load_run(index: int) -> void:
 	_run = _parse(_files[index])
+	_run["file"] = str(_files[index]).get_file()  # (a replay's log names where it came from)
 	_round = 1
 	_panel.queue_redraw()
 
@@ -183,7 +187,7 @@ func _parse(path: String) -> Dictionary:
 					"upgrades": e.get("upgrades", []), "seed": seed, "rerolls": rerolls, "levels": _int_levels(e.get("levels", {})),
 					"red": red_state.duplicate(true)}
 			"round_end":
-				for k: String in ["outcome", "time", "kills", "deaths", "last_hits", "missed", "bot_last_hits", "denies", "bot_denies", "gold_earned"]:
+				for k: String in ["outcome", "time", "kills", "deaths", "last_hits", "missed", "bot_last_hits", "denies", "bot_denies", "gold_earned", "red_ledger", "metrics"]:
 					r[k] = e.get(k)
 			"snap":
 				r["snaps"].append(e)
@@ -321,7 +325,7 @@ func _rd(n: int) -> Dictionary:
 # ------------------------------------------------------------------ tabs
 
 func _draw_overview(area: Rect2, order: Array) -> void:
-	var cols := [["Round", 70], ["You vs red", 230], ["Result", 90], ["Length", 80], ["K / D", 80], ["Last hits (missed)", 170], ["Red's last hits", 140], ["Denies you / red", 150], ["Gold earned", 120]]
+	var cols := [["Round", 60], ["You vs red", 200], ["Result", 80], ["Length", 70], ["Wave", 80], ["Damage", 90], ["Last hits", 130], ["K / D", 70], ["Red's LH", 90], ["Denies", 100], ["Gold", 90]]
 	var y := area.position.y + 24.0
 	var x := area.position.x
 	for c: Array in cols:
@@ -334,16 +338,22 @@ func _draw_overview(area: Rect2, order: Array) -> void:
 		var won: bool = str(r.get("outcome", "")) == "won"
 		_panel.draw_rect(Rect2(Vector2(area.position.x - 8, y - 21), Vector2(area.size.x + 16, 28)), Color(1, 1, 1, 0.03 if n % 2 == 0 else 0.0))
 		var t := float(r.get("time", 0.0))
+		var m := _metrics(r)
 		var cells := [str(n), "%s vs %s" % [r.get("hero", "?"), r.get("bot_hero", "?")],
 			str(r.get("outcome", "—")), "%d:%02d" % [int(t) / 60, int(t) % 60],
+			"%+.1f" % float(m["wave_adv"]) if m.has("wave_adv") else "—",
+			"%.2f" % float(m["dmg_ratio"]) if float(m.get("dmg_ratio", -1.0)) >= 0.0 else "—",
+			"%s (%d%%)" % [str(r.get("last_hits", "—")), int(m["lh_pct"])] if m.has("lh_pct") else "—",
 			"%s / %s" % [str(r.get("kills", "—")), str(r.get("deaths", "—"))],
-			"%s (%s)" % [str(r.get("last_hits", "—")), str(r.get("missed", "—"))], str(r.get("bot_last_hits", "—")),
+			str(r.get("bot_last_hits", "—")),
 			"%s / %s" % [str(r.get("denies", "—")), str(r.get("bot_denies", "—"))], str(r.get("gold_earned", "—"))]
 		x = area.position.x
 		for i in cells.size():
 			var colour := Color.WHITE
 			if i == 2:
 				colour = Color("#81c784") if won else (RED if r.has("outcome") else DIM)
+			elif i == 4 and m.has("wave_adv"):  # wave: ahead green, behind red
+				colour = Color("#81c784") if float(m["wave_adv"]) > 0.0 else (RED if float(m["wave_adv"]) < 0.0 else Color.WHITE)
 			_text(Vector2(x, y), cells[i], 15, colour)
 			x += float(cols[i][1])
 
@@ -395,10 +405,47 @@ func _round_picker(area: Rect2, order: Array) -> void:
 		_button(Rect2(Vector2(area.end.x - 230.0, area.position.y), Vector2(230, 36)), "▶ Play from round %d" % n, func() -> void: _play_from(n))
 
 
+## A round's headline numbers: from its summary (play_log.gd round_metrics), or
+## worked out from the timeline for logs written before they were saved.
+##   wave_adv: your creeps minus red's, averaged · dmg_ratio: your damage to red ÷
+##   red's to you · lh_pct: last hits ÷ (last hits + missed)
+func _metrics(r: Dictionary) -> Dictionary:
+	var m: Dictionary = r.get("metrics", {}) if r.get("metrics") is Dictionary else {}
+	if not m.is_empty():
+		return m
+	m = {}
+	var snaps: Array = r.get("snaps", [])
+	if not snaps.is_empty():
+		var sum := 0.0
+		for s: Dictionary in snaps:
+			sum += float(s["creeps"][0]) - float(s["creeps"][1])
+		m["wave_adv"] = sum / snaps.size()
+	if r.get("red_ledger") is Dictionary:
+		var led: Dictionary = r["red_ledger"]
+		var to_red := 0.0
+		for k: String in led.get("taken", {}):
+			if k.begins_with("you"):
+				to_red += float(led["taken"][k])
+		var to_you := 0.0
+		for k: String in led.get("dealt", {}):
+			to_you += float(led["dealt"][k])
+		if to_you > 0.0:
+			m["dmg_ratio"] = to_red / to_you
+	if r.get("last_hits") != null and r.get("missed") != null:
+		m["lh_pct"] = roundi(100.0 * float(r["last_hits"]) / maxf(1.0, float(r["last_hits"]) + float(r["missed"])))
+	return m
+
+
 func _draw_round(area: Rect2, order: Array) -> void:
 	_round_picker(area, order)
 	var r := _rd(_round)
 	var snaps: Array = r["snaps"]
+	var m := _metrics(r)  # the headline numbers, over the charts
+	var line := "Wave %s    Damage ratio %s    Last hits %s" % [
+		"%+.1f" % float(m["wave_adv"]) if m.has("wave_adv") else "—",
+		"%.2f" % float(m["dmg_ratio"]) if float(m.get("dmg_ratio", -1.0)) >= 0.0 else "—",
+		"%d%%" % int(m["lh_pct"]) if m.has("lh_pct") else "—"]
+	_text(area.position + Vector2(520, 25), line, 15, Color(1, 1, 1, 0.85))
 	if snaps.size() < 2:
 		_text(area.position + Vector2(0, 80), "No timeline recorded for this round.", 16, DIM)
 		return

@@ -85,6 +85,13 @@ static func ability(h: Dictionary, slot: String, level: int, mods: Dictionary, d
 	for k: String in ["radius", "range", "width", "scatter"]:
 		if a.has(k) and float(a[k]) > 0.0 and not (k == "radius" and a["kind"] == "spin"):
 			rows.append([Heroes.LABELS.get(k, k), _n(a[k]), ""])
+	if a.get("creep_heal", 0.0) > 0.0:
+		rows.append(["heals", "%s per creep each cut" % _n(a["creep_heal"]), ""])
+	if a.get("douse", 0.0) > 0.0:
+		var ds_slow: String = ("; slows %d%% for %ss" % [roundi(float(a["douse_slow"]) * 100.0), _n(a.get("douse_slow_time", 1.5))]) if a.get("douse_slow", 0.0) > 0.0 else ""
+		rows.append(["burning", "+%d%% to enemies burning from your fire; puts it out%s" % [roundi(float(a["douse"]) * 100.0), ds_slow], ""])
+	if a["kind"] == "boop":
+		rows.append(["push", "everyone within %s (you too) carried out to its edge" % _n(float(a["radius"]) + float(a.get("push", 120.0))), ""])
 	if a.get("expose", 0.0) > 0.0:
 		rows.append(["exposed", "+%d%% damage taken for %ss" % [roundi(a["expose"] * 100.0), _n(a.get("expose_time", 3.0))], ""])
 	if a.get("blind", false):

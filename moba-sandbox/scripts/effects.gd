@@ -381,8 +381,15 @@ class Blast extends Node2D:
 		for d: Node2D in hits:
 			if centre == null or d.position.distance_to(position) < centre.position.distance_to(position):
 				centre = d
+		var douse: float = float(hit.get("douse", 0.0))  # SHOCK: more on your burning enemies, and the fire goes out
 		for d: Node2D in hits:
-			d.take_damage(amount if d == centre else amount * splash, _colour, false, false, source, hit)
+			var amt: float = amount if d == centre else amount * splash
+			var doused: bool = douse > 0.0 and is_instance_valid(source) and d.is_burning_from(source)
+			d.take_damage(amt * (1.0 + douse) if doused else amt, _colour, doused, false, source, hit)
+			if doused and is_instance_valid(d):
+				d.douse(source)
+				if float(hit.get("douse_slow", 0.0)) > 0.0 and d.is_targetable():
+					d.slow_moves(float(hit["douse_slow"]), float(hit.get("douse_slow_time", 1.5)))
 			if blind and is_instance_valid(d) and d.is_targetable():
 				d.blind()
 
@@ -505,6 +512,7 @@ class Spin extends Node2D:
 	var ticks := 8
 	var attack_slow := 0.0
 	var slow_time := 1.5
+	var creep_heal := 0.0  # GRIND: the hero heals this much for each creep each cut lands on
 	var _damage: float
 	var _colour: Color
 	var _t := 0.0
@@ -532,6 +540,8 @@ class Spin extends Node2D:
 					source.rage_contact(u)  # during RAGE, GRIND's cuts burn like a touch
 				if attack_slow > 0.0:
 					u.slow_attacks(attack_slow, slow_time)
+				if creep_heal > 0.0 and u.is_in_group("creeps") and source.is_targetable():
+					source.hp = minf(source.max_hp, source.hp + creep_heal)
 		if _t >= duration:
 			queue_free()
 		queue_redraw()
@@ -770,6 +780,88 @@ class Ghost extends Node2D:
 
 	func _draw() -> void:
 		draw_circle(Vector2.ZERO, _radius, Color(_colour, 0.35 * (1.0 - _t)))
+
+
+## BOOP, a snowplow: two circles. The OUTER one is as far as the push goes
+## (radius + push) and shows from the start, filling in during the windup.
+## Then the INNER one — the push itself — bursts from the centre to the outer
+## one, fast then slowing (ease-out), and carries every hero and creep it meets
+## (anyone inside the outer circle, or walking into it mid-sweep): they don't
+## move until the ring reaches them, then ride its edge to the outer circle.
+## (It used to catch only those within `radius` when it went off — someone in
+## the band between looked inside it and was swept straight over.)
+## on_contact(unit) fires once per unit the moment the ring reaches it.
+class Boop extends Node2D:
+	const SLIDE := 0.3   # s the ring takes to reach the outer circle
+	const FADE := 0.2
+	var facing := Vector2.RIGHT  # who's dead centre goes back this way
+	var on_contact: Callable
+	var _radius: float
+	var _reach: float
+	var _colour: Color
+	var _windup: float
+	var _t := 0.0
+	var _dirs := {}        # unit id -> the way the ring carries it (fixed at first contact)
+	var _went_off := false
+
+	func _init(at: Vector2, radius: float, push: float, colour: Color, windup: float) -> void:
+		position = at
+		_radius = radius
+		_reach = radius + push
+		_colour = colour
+		_windup = windup
+
+	static func ease_out(k: float) -> float:
+		var m := 1.0 - clampf(k, 0.0, 1.0)
+		return 1.0 - m * m * m
+
+	func _ring() -> float:
+		return _reach * ease_out((_t - _windup) / SLIDE)
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if _t >= _windup:
+			_went_off = true
+		if _went_off and _t <= _windup + SLIDE:
+			var ring := _ring()
+			for u: Node2D in get_tree().get_nodes_in_group("units"):  # every hero and creep the ring has reached
+				if not u.is_targetable() or u.solid or u.is_in_group("decoys") or u.is_in_group("towers"):
+					continue
+				if not (u.is_in_group("heroes") or u.is_in_group("creeps")):
+					continue
+				var off: Vector2 = u.position - position
+				if off.length() >= ring:
+					continue  # the ring hasn't got there yet
+				var id: int = u.get_instance_id()
+				if not _dirs.has(id):  # first contact
+					_dirs[id] = off.normalized() if off.length() > 1.0 else -facing
+					if on_contact.is_valid():
+						on_contact.call(u)
+					if not is_instance_valid(u) or not u.is_targetable():
+						continue  # the hit killed it
+				u.position = position + _dirs[id] * ring  # carried on the edge
+		if _t >= _windup + SLIDE + FADE:
+			queue_free()
+		queue_redraw()
+
+	func _draw() -> void:
+		if _t < _windup:  # the outer ring (how far it'll go — and everyone inside it gets carried) filling in
+			var k := _t / maxf(_windup, 0.01)
+			draw_arc(Vector2.ZERO, _reach, 0.0, TAU, 64, Color(_colour, 0.7), 2.0)
+			draw_circle(Vector2.ZERO, _reach * k, Color(_colour, 0.14))
+			return
+		var after := clampf((_t - _windup - SLIDE) / FADE, 0.0, 1.0)
+		var fade := 1.0 - after
+		var ring := _ring()
+		draw_arc(Vector2.ZERO, _reach, 0.0, TAU, 64, Color(_colour, 0.45 * fade), 2.0)  # outer: the limit
+		draw_circle(Vector2.ZERO, ring, Color(_colour, 0.12 * fade))
+		draw_arc(Vector2.ZERO, ring, 0.0, TAU, 64, Color(_colour, 0.95 * fade), 5.0)  # inner: the push itself
+		for i in 8:  # arrows riding the push
+			var d := Vector2.from_angle(TAU * i / 8.0)
+			var tip := d * ring
+			draw_line(tip - d * 22.0, tip, Color(_colour, fade), 3.0)
+			draw_line(tip, tip - d.rotated(0.5) * 11.0, Color(_colour, fade), 3.0)
+			draw_line(tip, tip - d.rotated(-0.5) * 11.0, Color(_colour, fade), 3.0)
 
 
 ## Slam (cone): an instant wedge in front of the hero; hits everything inside.

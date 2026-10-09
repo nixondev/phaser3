@@ -35,6 +35,10 @@ extends SceneTree
 ##   --osc             report bot oscillations: 8+ turnarounds within 5 s
 ##                     (a decision loop), with the decisions it flipped
 ##                     between — for finding back-and-forth bugs
+##   --no-key          bots never make key runs (bot.gd) — A/B tests
+##   --no-totem        no totems (lane.gd) — A/B tests
+##   --start-round N   start each run at round N (no cards or levels for the
+##                     rounds skipped) — to test late-round mechanics   (1)
 ##   --variant V       base (today's game) | fixes (red skips economy
 ##                     cards, bot stats 1.0 from round 3, Overcharge
 ##                     cooldown-only) — for A/B balance tests           (base)
@@ -52,7 +56,7 @@ const Main := preload("res://scripts/main.gd")
 const STEP := 1.0 / 60.0   # game seconds per frame under --fixed-fps 60
 
 var opts := {"runs": 5, "hero": "cycle", "policy": "greedy", "seed": 0,
-	"max-round": 900.0, "max-rounds": 10, "out": "res://autoplay_runs", "quiet": false, "variant": "base", "osc": false,
+	"max-round": 900.0, "max-rounds": 10, "out": "res://autoplay_runs", "quiet": false, "variant": "base", "osc": false, "start-round": 1, "no-key": false, "no-totem": false,
 	"red-hero": -1, "personality": "", "smartness": -1.0}
 var _seed_base := 0
 
@@ -123,6 +127,7 @@ func _play_run(i: int) -> Dictionary:
 	seed(Run.run_seed)
 	var hero_i := _hero_for(i)
 	Run.start(hero_i)
+	Run.round_num = maxi(1, int(opts["start-round"]))  # (no shop gold for the rounds skipped: for testing late-round mechanics)
 	var run := {"run": i + 1, "seed": Run.run_seed, "hero": Heroes.LIST[hero_i]["name"],
 		"policy": opts["policy"], "rounds": [], "result": "",
 		"red_hero": Heroes.LIST[Run.red_hero_fixed]["name"] if Run.red_hero_fixed >= 0 else "rolled",
@@ -164,6 +169,10 @@ func _play_round() -> Dictionary:
 	var lane: Node2D = main.lane
 	var hero: Node2D = main.hero
 	var bot: Node2D = main.bot
+	lane.totems_on = not opts["no-totem"]
+	for b: Variant in [hero, bot]:
+		if b != null and b.get("key_runs") != null:
+			b.key_runs = not opts["no-key"]
 	var gold_start: int = hero.gold
 	var frames := 0
 	var outcome := ""
@@ -173,6 +182,11 @@ func _play_round() -> Dictionary:
 		frames += 1
 		if opts["osc"] and frames % 15 == 0:
 			_watch_osc(osc, [hero, bot], frames * STEP)
+			for tm in 2:  # totems rising and falling
+				var up: bool = lane.totem(tm) != null
+				if up != bool(osc.get("totem%d" % tm, false)):
+					osc["totem%d" % tm] = up
+					print("TOTEM R%d t=%.0f %s totem %s" % [Run.round_num, frames * STEP, "blue" if tm == 0 else "red", "up" if up else "DOWN (+siege)"])
 		if lane.winner >= 0:
 			outcome = "won" if lane.winner == hero.team else "lost"
 		elif frames * STEP > float(opts["max-round"]):
@@ -219,7 +233,17 @@ func _watch_osc(osc: Dictionary, units: Array, t: float) -> void:
 			if float(st["last"]) != 0.0 and (dx > 0.0) != (float(st["last"]) > 0.0):
 				st["turns"].append(t)
 			st["last"] = dx
-		st["whys"].append([t, str(u.get("why")) + ("+combo" if not u.get("_combo").is_empty() else "") + ("+retreat" if u.get("_retreating") else "") + ("+wary" if u.get("_wary") else "")])
+		st["whys"].append([t, ("x%d y%d " % [int(u.position.x), int(u.position.y)]) + str(u.get("why")) + ("+combo" if not u.get("_combo").is_empty() else "") + ("+retreat" if u.get("_retreating") else "") + ("+wary" if u.get("_wary") else "")])
+		var tw := str(u.get("why"))
+		if tw.begins_with("totem:") and tw != str(st.get("tw", "")):
+			print("TOTEM R%d t=%.0f %s %s %s" % [Run.round_num, t, "blue" if u.team == 0 else "red", u.def["name"], tw])
+		st["tw"] = tw if tw.begins_with("totem:") else ""
+		var keying := str(u.get("why")).begins_with("leash:key")  # key runs (bot.gd): print each start and end
+		if keying != bool(st.get("key", false)):
+			st["key"] = keying
+			var et: Node2D = u.get("lane").tower(1 - u.team) if u.get("lane") else null
+			print("KEY %s R%d t=%.0f %s %s  enemy tower %d%%  (%s)" % ["start" if keying else "end  ", Run.round_num, t, "blue" if u.team == 0 else "red",
+				u.def["name"], int(100.0 * et.hp / et.max_hp) if et else -1, str(u.get("why")) if keying else "ended: " + str(u.get("key_ended"))])
 		st["turns"] = st["turns"].filter(func(x: float) -> bool: return x > t - 5.0)
 		st["whys"] = st["whys"].filter(func(x: Array) -> bool: return float(x[0]) > t - 5.0)
 		if st["turns"].size() >= 8 and t > float(st["quiet_until"]):
@@ -227,7 +251,9 @@ func _watch_osc(osc: Dictionary, units: Array, t: float) -> void:
 			osc_found += 1
 			var seen := {}
 			for w: Array in st["whys"]:
-				seen[w[1]] = int(seen.get(w[1], 0)) + 1
+				var label: String = str(w[1]).split(" ", true, 2)[2] if str(w[1]).count(" ") >= 2 else str(w[1])
+				seen[label] = int(seen.get(label, 0)) + 1
+			print("   trail: " + " | ".join(st["whys"].map(func(w: Array) -> String: return "%.1f %s" % [w[0], w[1]])))
 			var foe: Node2D = u.enemy_hero
 			var dist: float = u.position.distance_to(foe.position) if is_instance_valid(foe) and foe.is_targetable() else -1.0
 			print("OSC R%d t=%.0f %s %s x=%d hp=%.0f%% foe dist=%d  decisions: %s" % [Run.round_num, t, "blue" if u.team == 0 else "red",

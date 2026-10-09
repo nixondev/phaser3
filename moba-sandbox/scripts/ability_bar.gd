@@ -427,6 +427,12 @@ func _draw_minimap(view: Vector2) -> void:
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.is_targetable():
 			_panel.draw_circle(_to_map(r, c.position), 3.0 if c.kind == "tank" else 2.0, TEAM_COLORS[c.team].lightened(0.15))
+	# totems: a square in the side's colour, its meter as a gold rim
+	for t: Node2D in get_tree().get_nodes_in_group("totems"):
+		if t.is_targetable():
+			var tp := _to_map(r, t.position)
+			_panel.draw_rect(Rect2(tp - Vector2(4, 4), Vector2(8, 8)), TEAM_COLORS[t.owner_team])
+			_panel.draw_arc(tp, 7.0, -PI / 2.0, -PI / 2.0 + TAU * maxf(0.02, t.meter()), 16, Color("#ffd54f"), 1.5)
 	# siege minions: a small arrowhead in the team's colour, outlined to stand out
 	for m: Node2D in get_tree().get_nodes_in_group("siege_minions"):
 		var mp := _to_map(r, m.position)
@@ -467,10 +473,7 @@ func _draw_opponent(font: Font, view: Vector2) -> void:
 	_panel.draw_rect(r, Color(0.1, 0.05, 0.06, 0.85))
 	_draw_vitals(font, bot, r, true, lane.kills)
 	_panel.draw_rect(Rect2(Vector2(r.end.x - 4.0, r.position.y), Vector2(4, r.size.y)), TEAM_COLORS[1])
-	var icon := HeroScript.icon_points(bot.def, 14.0, Vector2.LEFT)
-	for p in icon.size():
-		icon[p] += r.position + Vector2(r.size.x - 28.0, 24)
-	_panel.draw_colored_polygon(icon, bot.def["color"])
+	HeroScript.draw_icon(_panel, bot.def, r.position + Vector2(r.size.x - 28.0, 24), 14.0, Vector2.LEFT)
 	_panel.draw_string(font, r.position + Vector2(0, 21), bot.def["name"], HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 52.0, 16, Color("#ef9a9a"))
 	var lv: Array = bot.SLOT_ORDER.map(func(k: String) -> String: return "%s %s" % [k, Heroes.ROMAN[bot.ability_levels[k]]])
 	_panel.draw_string(font, r.position + Vector2(0, 38), "  ".join(lv), HORIZONTAL_ALIGNMENT_RIGHT, r.size.x - 52.0, 12, Color(1, 1, 1, 0.55))
@@ -549,10 +552,7 @@ func _draw_build(font: Font) -> void:
 	_panel.draw_rect(r, Color(0.06, 0.08, 0.1, 0.85))
 	_panel.draw_rect(Rect2(r.position, Vector2(4, r.size.y)), TEAM_COLORS[0])  # your team's stripe (red's box has its own)
 	_draw_vitals(font, hero, r, false, lane.deaths if lane else 0)
-	var icon := HeroScript.icon_points(hero.def, 14.0, Vector2.RIGHT)
-	for p in icon.size():
-		icon[p] += r.position + Vector2(28, 24)
-	_panel.draw_colored_polygon(icon, hero.def["color"])
+	HeroScript.draw_icon(_panel, hero.def, r.position + Vector2(28, 24), 14.0, Vector2.RIGHT)
 	_panel.draw_string(font, r.position + Vector2(52, 21), hero.def["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
 	var lv: Array = hero.SLOT_ORDER.map(func(k: String) -> String: return "%s %s" % [k, Heroes.ROMAN[hero.ability_levels[k]]])
 	_panel.draw_string(font, r.position + Vector2(52, 38), "  ".join(lv), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.55))
@@ -596,10 +596,7 @@ func _draw_hero_list(font: Font) -> void:
 		_panel.draw_rect(r, Color(0.06, 0.08, 0.1, 0.85 if current else 0.55))
 		if current:
 			_panel.draw_rect(r, Color.WHITE, false, 2.0)
-		var icon := HeroScript.icon_points(h, 14.0, Vector2.RIGHT)
-		for p in icon.size():
-			icon[p] += r.position + Vector2(30, r.size.y / 2.0)
-		_panel.draw_colored_polygon(icon, h["color"])
+		HeroScript.draw_icon(_panel, h, r.position + Vector2(30, r.size.y / 2.0), 14.0, Vector2.RIGHT)
 		_panel.draw_string(font, r.position + Vector2(52, 21), h["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE if current else Color(1, 1, 1, 0.6))
 		_panel.draw_string(font, r.position + Vector2(52, 38), h["shape"], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.35))
 

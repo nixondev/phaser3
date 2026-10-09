@@ -193,6 +193,22 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Record this round in the play log (also called when logging is switched on
 ## mid-round, or when the run starts from the hero pick).
+## Picking your hero starts the run: red for round 1 is rebuilt for this run's
+## seed (the lane behind the hero-select screen built it from the last run's).
+func repick_bot() -> void:
+	if bot == null or not is_instance_valid(bot):
+		return
+	bot.pick = Run.bot_hero_for(Run.round_num)
+	bot.difficulty = Run.difficulty()
+	bot.personality = Run.red_personality_for(bot.pick)
+	bot.smartness = Run.red_smartness_now()
+	bot.upgrade_ids = Run.red_upgrades.duplicate()
+	bot.ability_levels = Run.red_levels.duplicate()
+	bot.set_hero(bot.pick)
+	bot.apply_personality()
+	bot.start_ult_cooldown()
+
+
 func start_play_log_probe() -> void:
 	if has_node("PlayLogProbe"):
 		return

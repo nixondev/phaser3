@@ -58,7 +58,7 @@ const LIST := [
 	{"id": "scavenger", "tier": "common", "name": "Scavenger", "text": "Denying a creep restores 25 mana and 40 health", "mods": {"deny_mana": 25.0, "deny_heal": 40.0}},
 	{"id": "heavy_hands", "tier": "common", "name": "Heavy Hands", "text": "Attacks deal +40% damage but take 25% longer", "mods": {"attack_damage_pct": 0.4, "attack_interval_pct": 0.25}},
 	{"id": "homeguard", "tier": "common", "name": "Homeguard", "text": "Inside your tower's range: +25% attack speed, +5 health regen", "mods": {"home_attack_speed": 0.25, "home_regen": 5.0}},
-	{"id": "rally_cry", "tier": "common", "max": 2, "name": "Rally Cry", "text": "Leashed creeps deal +30% damage and take 30% less", "mods": {"leash_damage": 0.3, "leash_armor": 0.3}},
+	{"id": "rally_cry", "tier": "common", "max": 2, "name": "Rally Cry", "text": "Leashed creeps, and ones latched on your totem, deal +30% damage and take 30% less", "mods": {"leash_damage": 0.3, "leash_armor": 0.3}},
 	{"id": "adrenaline", "tier": "common", "max": 2, "name": "Adrenaline", "text": "Each last hit takes 1 s off your ultimate's cooldown", "mods": {"last_hit_ult": 1.0}},
 	{"id": "keen_eye", "tier": "common", "name": "Keen Eye", "text": "Your attack shots fly 50% faster", "mods": {"shot_speed": 0.5}},
 	{"id": "clean_finish", "tier": "common", "name": "Clean Finish", "text": "Your attacks deal +15% damage to creeps below half health", "mods": {"finish_damage": 0.15}},

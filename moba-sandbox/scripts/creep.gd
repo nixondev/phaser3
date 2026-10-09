@@ -69,6 +69,17 @@ const BANNER_RANGE := 300.0
 ## Recruit: a denied creep risen for its hero — crumbles after `life_left` s, worth no gold.
 var life_left := 0.0
 var risen := false
+## A bonus creep (Tank Minion, Reinforcement, red's late extras, overtime's
+## extras: lane.gd sets it, with bounty 0) — worth no gold to anyone.
+var bonus := false
+const NO_GOLD_GREY := Color("#9e9e9e")
+## Latched on a totem (totem.gd): attacks it and nothing else until one of
+## them dies. `camp_hero` led it there (Rally Cry still counts for it).
+var camp: Node2D = null
+var camp_hero: Node2D = null
+## Sent on a key run (bot.gd): walks straight into this enemy tower's range,
+## ignoring everything on the way — then Tower Vision takes over.
+var dive_to: Node2D = null
 
 
 func _init(team_: int, kind_: String, at: Vector2, goal_: Vector2) -> void:
@@ -113,9 +124,20 @@ func _process(delta: float) -> void:
 		_stun_cd -= delta
 		if _stun_cd <= 0.0 and _try_stun():
 			_stun_cd = _stats["stun_cd"]
+	if camp != null:
+		if not is_instance_valid(camp) or not camp.is_targetable():
+			camp = null  # it fell: back to the lane
+			camp_hero = null
+		else:
+			_on_camp(delta)
+			queue_redraw()
+			return
 	if leader != null:
 		if not is_instance_valid(leader) or not leader.is_targetable():
 			leader = null  # its hero died: back to the lane
+		elif _try_latch():
+			queue_redraw()
+			return
 		else:
 			if vanguard > 0.0 and not _vanguard_done and kind == "melee" and _tower_vision():  # Vanguard, leashed too
 				_vanguard_done = true
@@ -134,11 +156,15 @@ func _process(delta: float) -> void:
 		add_shield(vanguard, 8.0)
 	if focus:  # Tower Vision: inside an enemy tower's range, the tower and nothing else
 		target = focus
+	elif dive_to != null and is_instance_valid(dive_to) and dive_to.is_targetable():
+		target = dive_to  # a key run: into the tower's range first, no stopping for your creeps
 	elif _retarget <= 0.0:
 		_retarget = RETARGET
 		var picked := _pick_target()
 		if not _in_reach(target) or (picked != null and picked.is_in_group("heroes") and picked.hero_aggro > 0.0):
 			target = picked
+	if focus:
+		dive_to = null  # in: the dive's done its job
 
 	var dest := goal
 	if target:
@@ -221,9 +247,55 @@ func leash_cost() -> int:
 	return int(_stats.get("leash", 1))
 
 
+## Worth no gold right now (a bonus or risen creep, or anything in overtime):
+## drawn grey with a "no" slash through it.
+func worthless() -> bool:
+	return bounty <= 0 or no_gold  # (no_gold: the overtime flag, unit.gd)
+
+
+## Led into its own side's totem ring: latch on (off the leash, the points are free).
+func _try_latch() -> bool:
+	for t: Node2D in get_tree().get_nodes_in_group("totems"):
+		if t.in_latch(self):
+			var by: Node2D = leader
+			by.toggle_leash(self)  # (sets leader = null)
+			camp = t
+			camp_hero = by
+			target = t
+			PlayLog.event("latch", {"team": team, "kind": kind})
+			return true
+	return false
+
+
+## Latched: walk into reach of the totem and hit it — nothing else.
+func _on_camp(delta: float) -> void:
+	target = camp
+	if _in_reach(camp):
+		facing = (camp.position - position).normalized()
+		if _cd <= 0.0:
+			_attack()
+		push_out()
+		return
+	var to: Vector2 = camp.position - position
+	facing = to.normalized()
+	position += facing * minf(_stats["speed"] * move_speed_mult() * delta, to.length())
+	push_out()
+
+
+## The hero whose leash cards count for this creep: the one leading it, or the
+## one who latched it on a totem.
+func _boss() -> Node2D:
+	if leader != null and is_instance_valid(leader):
+		return leader
+	if camp != null and is_instance_valid(camp_hero):
+		return camp_hero
+	return null
+
+
 ## Leashed: attack whatever the leader is attacking; otherwise trail behind it.
 func _follow_leader(delta: float) -> void:
-	var t: Node2D = leader.attack_target
+	var lt: Variant = leader.attack_target  # untyped: it may already be freed (a creep that just died)
+	var t: Node2D = lt if is_instance_valid(lt) else null
 	var speed: float = maxf(_stats["speed"], leader.speed)  # keep up with the hero
 	var dest: Vector2
 	if t != null and is_instance_valid(t) and t.is_targetable() and t.team != team and not _safe_in_well(t):
@@ -276,8 +348,9 @@ func _attack() -> void:
 	_cd = _stats["interval"] * attack_time_mult() / (1.0 + _banner_bonus())
 	var quiet: bool = not target.loud
 	var dmg: float = _stats["damage"] * power * (1.0 + siege if target.is_in_group("towers") else 1.0)
-	if leader != null and is_instance_valid(leader):  # Rally Cry: leashed creeps hit harder
-		dmg *= 1.0 + leader.mod("leash_damage")
+	var boss := _boss()
+	if boss != null:  # Rally Cry: leashed (or latched) creeps hit harder
+		dmg *= 1.0 + boss.mod("leash_damage")
 	if kind != "ranged":
 		_lunge = 1.0
 		if use_miss(target):  # blinded by RUMOR: a melee hit lands at once — and misses
@@ -299,8 +372,9 @@ func _banner_bonus() -> float:
 
 ## Rally Cry: a leashed creep takes less damage.
 func take_damage(amount: float, colour: Color, big := false, quiet := false, source: Node2D = null, hit: Dictionary = {}) -> void:
-	if leader != null and is_instance_valid(leader):
-		amount *= 1.0 - minf(leader.mod("leash_armor"), 0.75)  # never immune (or healed) by stacking
+	var boss := _boss()
+	if boss != null:
+		amount *= 1.0 - minf(boss.mod("leash_armor"), 0.75)  # never immune (or healed) by stacking
 	super(amount, colour, big, quiet, source, hit)
 
 
@@ -311,7 +385,7 @@ func _die() -> void:
 			t.take_damage(sapper, Color("#ffb74d"), true, false, self)
 			effects.add_child(Effects.Zap.new(position, t.position, Color("#ffb74d")))
 			effects.add_child(Effects.Ghost.new(position, radius * 3.0, Color("#ffb74d")))
-	if PlayLog.recording():  # an enemy creep dying near you to someone else's blow: a missed last hit
+	if PlayLog.recording() and not worthless():  # an enemy creep dying near you to someone else's blow: a missed last hit
 		for h: Node2D in get_tree().get_nodes_in_group("heroes"):
 			if not h.is_bot and h.team != team and h.is_targetable() and killed_by != h \
 					and h.position.distance_to(position) < PlayLog.MISS_RANGE:
@@ -328,6 +402,9 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, heal_radius, 0.0, TAU, 48, Color(0.4, 0.9, 0.5, 0.25), 1.5)
 	var o := facing * 8.0 * sin(_lunge * PI)  # lunge toward the target on a melee hit
 	var body := c.lerp(Color.WHITE, _flash * 0.6)
+	var nothing := worthless()
+	if nothing:  # worth no gold: greyed (and slashed, below)
+		body = body.lerp(NO_GOLD_GREY, 0.45)
 	if risen:  # Recruit: a pale, see-through body on borrowed time
 		body = Color(body.lightened(0.4), 0.45)
 	if banner > 0.0:  # Standard Bearer: a flag on a pole, and its reach
@@ -336,7 +413,12 @@ func _draw() -> void:
 		draw_colored_polygon(PackedVector2Array([o + Vector2(0, -radius - 30.0), o + Vector2(20, -radius - 24.0), o + Vector2(0, -radius - 18.0)]), c.lightened(0.3))
 	if sapper > 0.0:  # Sappers: a lit fuse
 		draw_circle(o + Vector2(0, -radius - 6.0), 4.0, Color("#ffb74d"))
-	if kind == "tank":  # a heavy armoured square
+	var cslot := "creep_%s_%d" % [kind, team]
+	if SkinArt.has(cslot):  # painted art (skin.gd): shadow, then the art (grey when worth nothing, see-through when risen)
+		var tint := Color(1, 1, 1, body.a).lerp(Color(0.62, 0.62, 0.62, body.a), 0.45 if nothing else 0.0)
+		SkinArt.draw(self, cslot, o + Vector2(2, 4), radius, facing, Color(0, 0, 0, 0.3 * body.a))
+		SkinArt.draw(self, cslot, o, radius, facing, tint)
+	elif kind == "tank":  # a heavy armoured square
 		var sq := PackedVector2Array()
 		for i in 4:
 			sq.append(o + Vector2.from_angle(PI / 4.0 + i * TAU / 4.0) * radius * 1.2)
@@ -363,7 +445,13 @@ func _draw() -> void:
 		draw_colored_polygon(pts, body)
 		pts.append(pts[0])
 		draw_polyline(pts, c.darkened(0.55), 2.5)
-	draw_circle(o + facing * (radius * 0.55), 3.5, c.darkened(0.6))  # which way it faces
+	if not SkinArt.has(cslot):
+		draw_circle(o + facing * (radius * 0.55), 3.5, c.darkened(0.6))  # which way it faces
+	if nothing:  # the "no" sign: a ring with a slash through it
+		var nr := radius * (1.1 if kind == "melee" else 1.2)
+		var d := Vector2(-1, -1).normalized() * nr
+		draw_arc(o, nr, 0.0, TAU, 32, Color(0.88, 0.88, 0.88, 0.4), 1.5)
+		draw_line(o + d, o - d, Color(0.88, 0.88, 0.88, 0.4), 1.5)
 	if hp < max_hp:
 		draw_health_bar(56.0 if kind == "tank" else 40.0, c.lightened(0.15), 5.0)
 		_draw_last_hit_tick()
@@ -389,6 +477,8 @@ func _draw_last_hit_tick() -> void:
 		if deniable_by(you.team):
 			draw_rect(r.grow(2.0), Color("#ffca28") if hp > dmg else Color("#fff176"), false, 2.0)
 		return
+	if worthless():
+		return  # no gold in it: no last-hit window to show
 	if hp <= dmg:
 		draw_rect(r.grow(2.0), Color.WHITE, false, 2.0)
 	else:

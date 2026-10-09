@@ -12,6 +12,16 @@ extends RefCounted
 ##                       start and end, last hits, missed last hits, casts,
 ##                       deaths and kills, shop actions, pauses, and a
 ##                       snapshot every SNAPSHOT_EVERY seconds
+##                       — plus RED's side for bot analysis: its decisions as
+##                       they change (red_why, with flags), casts, last hits,
+##                       denies, deaths, combos (start / end + why), key runs,
+##                       totem trips / contests, leashes, the numbers behind
+##                       each decision (inputs), chances it passed up and why
+##                       (red_passed), dice rolls that steered it (red_roll),
+##                       whether each cast hit (red_cast_result), and a damage
+##                       ledger per round (round_end red_ledger); its state in every
+##                       snapshot; its build and skill at round start (its
+##                       personality only in dev runs — never in a shipped log)
 ##   run_<stamp>.json    the run summary in autoplay's format (policy
 ##                       "human"), so tools/combine_reports.py can put your
 ##                       runs next to the bots'
@@ -20,12 +30,14 @@ extends RefCounted
 ## Everything here is static: the run spans several scene reloads.
 
 const Run := preload("res://scripts/run.gd")
+const BuildVersion := preload("res://scripts/build_version.gd")
 const Heroes := preload("res://scripts/heroes.gd")
 
 const SETTINGS := "user://settings.cfg"
 const SNAPSHOT_EVERY := 0.25    # seconds between position / health snapshots (TEMP 2026-10-02 for analysis; normally 1.0)
 const SHOT_WIDTH := 1280        # screenshots are scaled down to this width
 const MISS_RANGE := 700.0       # an enemy creep dying this close without your blow = missed
+const RACE_EVERY := 15.0        # s between tower-race samples in the round summary
 
 static var dir := "user://playlogs"
 static var enabled := false
@@ -40,6 +52,12 @@ static var _shots := 0
 
 
 # ------------------------------------------------------------------ switch
+
+## A dev run (the editor / F5), not an exported build: logs may name red's
+## personality (a black box to players).
+static func dev() -> bool:
+	return OS.is_debug_build() and not OS.has_feature("template")
+
 
 static func available() -> bool:
 	return OS.is_debug_build() or OS.has_feature("playlog")
@@ -95,7 +113,12 @@ static func run_start() -> void:
 	_shots = 0
 	_run = {"run": 1, "seed": Run.run_seed, "hero": Heroes.LIST[Run.hero_index]["name"], "policy": "human",
 		"rounds": [], "result": "in progress", "build": [], "levels": Run.levels.duplicate(), "reached": 0}
-	event("run_start", {"hero": _run["hero"], "seed": Run.run_seed})
+	var version: String = BuildVersion.VERSION
+	if OS.is_debug_build() and not OS.has_feature("template"):
+		version = "dev (after v%s)" % version  # run from the project: code may be newer than the last build
+	var hero_script: Variant = load("res://scripts/hero.gd")
+	event("run_start", {"hero": _run["hero"], "seed": Run.run_seed, "version": version,
+		"settings": {"cast_indicator": bool(hero_script.cast_indicator())}})
 
 
 ## Called by main when a round's scene is built (and by the pause-menu switch
@@ -107,9 +130,17 @@ static func round_start(main: Node) -> void:
 	var bot: Node2D = main.bot
 	_round = {"gold_start": main.hero.gold, "missed": 0, "casts": {"Q": 0, "W": 0, "E": 0, "R": 0},
 		"damage_taken": {"creep": 0.0, "tower": 0.0, "hero": 0.0, "other": 0.0}, "damage_dealt": 0.0,
-		"hero": main.hero.def["name"], "bot_hero": bot.def["name"] if bot else ""}
+		"hero": main.hero.def["name"], "bot_hero": bot.def["name"] if bot else "",
+		"wave_sum": 0, "wave_n": 0, "race": [], "race_next": 0.0,
+		"tower_damage": [{}, {}], "creep_deaths": [{}, {}]}
+	var red := {}
+	if bot:
+		red = {"upgrades": Run.red_upgrades.duplicate(), "levels": Run.red_levels.duplicate(), "gold": bot.gold,
+			"smartness": snappedf(float(bot.get("smartness")), 0.01)}
+		if dev():
+			red["personality"] = str(bot.get("personality"))
 	event("round_start", {"hero": _round["hero"], "bot_hero": _round["bot_hero"], "gold": main.hero.gold,
-		"levels": Run.levels.duplicate(), "upgrades": Run.upgrades.duplicate(), "difficulty": Run.difficulty()})
+		"levels": Run.levels.duplicate(), "upgrades": Run.upgrades.duplicate(), "difficulty": Run.difficulty(), "red": red})
 
 
 static func round_end(main: Node, outcome: String) -> void:
@@ -129,6 +160,11 @@ static func round_end(main: Node, outcome: String) -> void:
 		"casts": _round["casts"], "damage_taken": _round["damage_taken"], "damage_dealt": roundi(_round["damage_dealt"]),
 		"build": Run.upgrades.duplicate(), "levels": Run.levels.duplicate(),
 	}
+	if bot and bot.has_method("ledger_summary"):
+		rec["red_ledger"] = bot.ledger_summary()  # red's damage by source, both ways, and last hits it skipped
+	rec["metrics"] = round_metrics(rec, _round)
+	rec["tower_damage"] = {"yours": _rounded(_round["tower_damage"][0]), "reds": _rounded(_round["tower_damage"][1])}
+	rec["creep_deaths"] = {"yours": _round["creep_deaths"][0], "reds": _round["creep_deaths"][1]}
 	_run["rounds"].append(rec)
 	_run["reached"] = Run.round_num
 	_run["build"] = Run.upgrades.duplicate()
@@ -136,6 +172,84 @@ static func round_end(main: Node, outcome: String) -> void:
 	event("round_end", rec)
 	_round = {}
 	_save_summary()
+
+
+## The round's headline numbers (also worked out by Run History for older logs):
+##   wave_adv   your creeps minus red's on the field, averaged over the round —
+##              the best single sign of who's winning (pushing decides rounds)
+##   dmg_ratio  damage you dealt red ÷ damage red dealt you (fights trending)
+##   lh_pct     last hits ÷ (last hits + missed) — your farming, the skill you control
+##   race       [time, your tower, red's tower] (fractions) every RACE_EVERY s
+static func round_metrics(rec: Dictionary, r: Dictionary) -> Dictionary:
+	var led: Dictionary = rec.get("red_ledger", {})
+	var to_red := 0.0
+	for k: String in led.get("taken", {}):
+		if k.begins_with("you"):
+			to_red += float(led["taken"][k])
+	var to_you := 0.0
+	for k: String in led.get("dealt", {}):
+		to_you += float(led["dealt"][k])
+	var lh := int(rec.get("last_hits", 0))
+	var missed := int(rec.get("missed", 0))
+	return {
+		"wave_adv": snappedf(float(r.get("wave_sum", 0)) / maxf(1.0, float(r.get("wave_n", 0))), 0.1),
+		"dmg_ratio": snappedf(to_red / to_you, 0.01) if to_you > 0.0 else -1.0,
+		"lh_pct": roundi(100.0 * lh / maxi(1, lh + missed)),
+		"race": r.get("race", []),
+	}
+
+
+## A tower lost `lost` health to `source`: tallied by who did it (creeps, you,
+## red, siege minions…), with the share overtime's crumble added on top.
+static func tower_hit(team: int, lost: float, source: Variant, vulnerability: float) -> void:
+	if not recording() or _round.is_empty() or lost <= 0.0:
+		return
+	var key := _who(source, team)
+	var d: Dictionary = _round["tower_damage"][team]
+	d[key] = float(d.get(key, 0.0)) + lost
+	if vulnerability > 1.0:  # how much of it was overtime's crumble
+		d["overtime_bonus"] = float(d.get("overtime_bonus", 0.0)) + lost * (1.0 - 1.0 / vulnerability)
+
+
+## A creep of `team` died: tallied by its killer (and attack / ability for heroes).
+static func creep_died(team: int, killer: Variant, by_ability: bool) -> void:
+	if not recording() or _round.is_empty():
+		return
+	var key := _who(killer, team)
+	if key == "you" or key == "red":
+		key += " ability" if by_ability else " attack"
+	var d: Dictionary = _round["creep_deaths"][team]
+	d[key] = int(d.get(key, 0)) + 1
+
+
+## Who `s` is, seen from a unit of `team`: you, red, creeps, tower, totem, siege, other.
+static func _who(s: Variant, _team: int) -> String:
+	if s == null or not is_instance_valid(s):
+		return "other"  # (an attacker that died before its shot landed)
+	if s.is_in_group("siege_minions"):
+		return "siege"
+	if s.is_in_group("heroes"):
+		return "red" if s.get("is_bot") else "you"
+	if s.is_in_group("creeps"):
+		return "creeps"
+	if s.is_in_group("towers"):
+		return "tower"
+	if s.is_in_group("totems"):
+		return "totem"
+	return "other"
+
+
+static func _rounded(d: Dictionary) -> Dictionary:
+	var out := {}
+	for k: String in d:
+		out[k] = roundi(float(d[k]))
+	return out
+
+
+## Each wave as it leaves: what each side sends (normal / bonus creeps, tanks,
+## siege minions) and overtime's state — tempo and escalation across rounds.
+static func wave(data: Dictionary) -> void:
+	event("wave", data)
 
 
 static func run_end(result: String) -> void:
@@ -175,11 +289,14 @@ static func damage_dealt(amount: float) -> void:
 		_round["damage_dealt"] += amount
 
 
-static func cast(slot: String, a: Dictionary) -> void:
+static func cast(slot: String, a: Dictionary, at := Vector2.INF) -> void:
 	if not recording() or _round.is_empty():
 		return
 	_round["casts"][slot] += 1
-	event("cast", {"slot": slot, "ability": a["name"], "level": a.get("level", 1)})
+	var d := {"slot": slot, "ability": a["name"], "level": a.get("level", 1)}
+	if at != Vector2.INF:
+		d["at"] = _v(at)  # where it was aimed
+	event("cast", d)
 
 
 static func death(killer: Variant, at: Vector2) -> void:
@@ -196,13 +313,73 @@ static func snapshot(main: Node) -> void:
 	var hero: Node2D = main.hero
 	var bot: Node2D = main.bot
 	var creeps: Array = main.get_tree().get_nodes_in_group("creeps")
+	if not _round.is_empty():  # the round's metrics as it goes: wave advantage, the tower race
+		var c0 := creeps.filter(func(c: Node2D) -> bool: return c.team == 0).size()
+		var c1 := creeps.filter(func(c: Node2D) -> bool: return c.team == 1).size()
+		_round["wave_sum"] = int(_round["wave_sum"]) + c0 - c1
+		_round["wave_n"] = int(_round["wave_n"]) + 1
+		if clock >= float(_round["race_next"]):
+			_round["race_next"] = clock + RACE_EVERY
+			var t0: Node2D = main.lane.tower(0)
+			var t1: Node2D = main.lane.tower(1)
+			_round["race"].append([snappedf(clock, 0.1), snappedf(t0.hp / t0.max_hp, 0.01), snappedf(t1.hp / t1.max_hp, 0.01)])
 	event("snap", {
 		"you": {"at": _v(hero.position), "hp": roundi(hero.hp), "mana": roundi(hero.mana), "alive": hero.is_targetable()},
-		"bot": {"at": _v(bot.position), "hp": roundi(bot.hp), "alive": bot.is_targetable()} if bot else {},
+		"bot": _bot_snap(bot) if bot else {},
 		"creeps": [creeps.filter(func(c: Node2D) -> bool: return c.team == 0).size(), creeps.filter(func(c: Node2D) -> bool: return c.team == 1).size()],
 		"towers": [roundi(main.lane.tower(0).hp), roundi(main.lane.tower(1).hp)],
 		"gold": hero.gold,
+		"totems": _totems(main),
+		"front": _fronts(creeps),
+		"at_tower": _at_towers(main, creeps),
 	})
+
+
+## Each side's most advanced creep (x; the lane runs blue −x → red +x), or null.
+static func _fronts(creeps: Array) -> Array:
+	var f: Array = [null, null]
+	for c: Node2D in creeps:
+		if not c.is_targetable():
+			continue
+		var x := roundi(c.position.x)
+		if c.team == 0:
+			f[0] = x if f[0] == null else maxi(int(f[0]), x)
+		else:
+			f[1] = x if f[1] == null else mini(int(f[1]), x)
+	return f
+
+
+## [your creeps inside red's tower range, red's creeps inside yours].
+static func _at_towers(main: Node, creeps: Array) -> Array:
+	var out := [0, 0]
+	for team in 2:
+		var t: Node2D = main.lane.tower(1 - team)
+		if t == null:
+			continue
+		for c: Node2D in creeps:
+			if c.team == team and c.is_targetable() and t.position.distance_to(c.position) <= t.RANGE + c.radius:
+				out[team] += 1
+	return out
+
+
+## Red in a snapshot: where, health, mana, gold, and what it's doing (bot.gd log_state).
+static func _bot_snap(bot: Node2D) -> Dictionary:
+	var d := {"at": _v(bot.position), "hp": roundi(bot.hp), "mana": roundi(bot.mana), "gold": bot.gold, "alive": bot.is_targetable()}
+	if bot.has_method("log_state"):
+		d.merge(bot.log_state())
+	return d
+
+
+## Each side's totem meter (0–1), or -1 when it has none.
+static func _totems(main: Node) -> Array:
+	var lane: Node = main.lane
+	if lane == null or not lane.has_method("totem"):
+		return []
+	var out := []
+	for team in 2:
+		var t: Node2D = lane.totem(team)
+		out.append(snappedf(t.meter(), 0.01) if t else -1)
+	return out
 
 
 static func screenshot(reason: String) -> void:

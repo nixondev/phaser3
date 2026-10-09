@@ -6,6 +6,8 @@ extends Node2D
 ## for DAMAGE_SHARE of the tower's max health (a fixed chunk: overtime's
 ## growing tower damage doesn't multiply it). Its tower shows what's coming.
 
+const SkinArt := preload("res://scripts/skin.gd")
+const ART_RADIUS := 24.0  # its size for skin art (the drawn body reaches ~30)
 const SPEED := 240.0          # creep pace
 const DAMAGE_SHARE := 0.10    # of the target tower's max health
 const COLOR_CORE := Color(1.0, 0.93, 0.7)
@@ -40,7 +42,7 @@ func _process(delta: float) -> void:
 func _explode() -> void:
 	var t: Node2D = target
 	var chunk: float = t.max_hp * DAMAGE_SHARE / maxf(float(t.get("vulnerability")), 0.01)  # exact chunk, overtime or not
-	t.take_damage(chunk, Color("#ffcc80"), true, false, null)
+	t.take_damage(chunk, Color("#ffcc80"), true, false, self)  # (self: the play log tallies it as siege)
 	if effects:
 		effects.add_child(load("res://scripts/effects.gd").Ghost.new(position, 90.0, Color("#ffb74d")))
 		effects.add_child(load("res://scripts/effects.gd").Ghost.new(position, 50.0, COLOR_CORE))
@@ -52,6 +54,8 @@ func _draw() -> void:
 	var dir := Vector2.RIGHT if team == 0 else Vector2.LEFT
 	var pulse := 0.5 + 0.5 * sin(_t * 8.0)
 	draw_circle(Vector2.ZERO, 34.0 + 6.0 * pulse, Color(c, 0.12))  # a glow: untouchable, unstoppable
+	if SkinArt.draw(self, "siege_%d" % team, Vector2.ZERO, ART_RADIUS, dir):  # painted art (skin.gd)
+		return
 	var body := PackedVector2Array([dir * 30.0, dir.orthogonal() * 18.0 - dir * 16.0, -dir * 8.0, -dir.orthogonal() * 18.0 - dir * 16.0])
 	draw_colored_polygon(body, c.lightened(0.15))
 	var outline := body.duplicate()
