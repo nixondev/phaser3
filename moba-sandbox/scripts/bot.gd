@@ -29,7 +29,8 @@ extends "res://scripts/hero.gd"
 ## It never dives: points under your tower count as unsafe unless creeps are
 ## taking the shots.
 ##
-## PERSONALITIES (`personality`, "" = the standard bot above) reorder steps
+## PERSONALITIES (each hero's own: hero_minds.gd; the old types are templates in
+## personality_templates.gd, pinned only by experiments via `personality`) reorder steps
 ## 3-7 and retune a few thresholds: a different decision tree on the same
 ## skill (aim, reaction, last-hit odds still come from `difficulty`):
 ##   brawler      fights first: trades from far, even behind on health; casts
@@ -76,6 +77,8 @@ extends "res://scripts/hero.gd"
 ## and damage, set on it by main), skill (`difficulty`: how often it casts, how
 ## well it aims, its last-hit / deny odds) and `smartness` (decisions, below).
 
+const PersonalityTemplates := preload("res://scripts/personality_templates.gd")
+const HeroMinds := preload("res://scripts/hero_minds.gd")
 const Lane := preload("res://scripts/lane.gd")
 const ComboBook := preload("res://scripts/combo_book.gd")
 
@@ -116,18 +119,9 @@ const LAST_HIT_SLACK := 1.6  # swing when a creep is within this many hits of dy
 ##   chase_depth  px past the middle (into your half) it'll chase you; deeper
 ##                only to finish you (under 25% health), never under your tower
 ## (Skill — last-hit / deny odds, aim, reaction — is never a personality key.)
-const PERSONALITIES := {
-	"brawler": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"], "retreat_at": 0.3, "healed_at": 0.75,
-		"engage": 650.0, "trade_cap": 0.6, "trade_margin": -0.25, "dash_at": 0.6, "hold_back": 20.0,
-		"race_need": 0.85, "chase_depth": 700.0},
-	"farmer": {"order": ["clear", "farm", "deny", "abilities", "trade", "push", "siege"], "retreat_at": 0.4, "trade_when": "vulnerable",
-		"hero_casts": "vulnerable", "clump": 2, "hold_back": 200.0, "race_need": 1.2, "chase_depth": 0.0},
-	"pusher": {"order": ["leash", "siege", "clear", "abilities", "farm", "push", "trade"], "retreat_at": 0.25, "trade_when": "provoked",
-		"creeps_first": true, "clump": 2, "hold_back": 60.0, "siege_always": true, "siege_reach": 400.0, "chase_depth": 200.0},
-	"opportunist": {"order": ["abilities", "clear", "trade", "farm", "deny", "push", "siege"], "retreat_at": 0.35, "trade_when": "vulnerable",
-		"hero_casts": "poke", "engage": 800.0, "trade_cap": 0.5, "dash_at": 0.5, "hold_back": 160.0,
-		"race_need": 1.1, "chase_depth": 600.0},
-}
+## Personalities live with each hero (hero_minds.gd); the old types are
+## reference templates (personality_templates.gd), used only when an experiment
+## pins one (Run.red_personality).
 const STANDARD_ORDER := ["abilities", "clear", "trade", "farm", "deny", "push", "siege"]
 ## Wave clear ("clear" step): when your wave is pressing it — CLEAR_NEAR px of
 ## its tower holds CLEAR_MIN+ of your creeps and they outnumber its own by
@@ -168,7 +162,6 @@ const PRESS_HEALTHY := 0.45
 ## before what brings it in range, nothing is cast at empty ground (a step
 ## waits until it can reach you), and it drops the combo rather than chase you
 ## under your tower or keep going while your tower shoots it.
-const COMMIT := {"brawler": 1.0, "opportunist": 1.0, "farmer": 0.6, "pusher": 0.4}
 const COMMIT_DEFAULT := 0.8
 const COMMIT_MIN_HEALTH := 0.35  # won't start a combo below this much of its own health
 const COMMIT_BITE := 0.35        # "open" target: worth it if the combo takes this share of your health
@@ -195,7 +188,6 @@ const FASTER_MARGIN := 0.12     # vs a faster enemy it leaves this much health e
 const DUMB := {"think": 0.6, "blunder": 0.3, "healed_at": 0.75, "trade_margin": 0.2, "race_need": 0.8}
 const ULT_SMARTS := 0.4     # uses its ultimate from this smartness
 ## How keen each personality is on stutter-stepping (× smartness = the odds).
-const STUTTER := {"opportunist": 1.0, "farmer": 1.0, "brawler": 0.6, "pusher": 0.3}
 const STUTTER_DEFAULT := 0.8
 const STEP_MIN := 40.0      # px: a step point closer than this isn't worth moving for (no jitter)
 const STEP_FROM_CD := 0.25  # s: only steps out with at least this much reload left
@@ -207,8 +199,12 @@ var lane: Node2D
 var pick := -1
 ## This round's strength (run.gd DIFFICULTY row); empty = full strength.
 var difficulty := {}
-## A PERSONALITIES key, or "" / "standard" for the standard bot.
-var personality := ""
+var personality := ""      # a pinned template type (experiments) — "" plays its hero's own personality
+var mind_name := ""        # its hero mind (hero_minds.gd), e.g. "KAREN · the anchor" — logs only
+var _rules := {}           # its hero mind's rules (_rule)
+var _stance := {}          # its hero mind's stance (where it stands: _hold_back)
+const IN_WAVE := 350.0     # px: its creeps this close = it's in its wave
+const WAVE_BLUNDER := 0.33 # a dull bot skips wave steps (farm / clear / push) this much less often than others
 ## How well it decides, 0..1 (run.gd's ladder; 1 = the personality as tuned).
 var smartness := 1.0
 var _p := {}
@@ -219,6 +215,9 @@ var _retreating := false
 var _lane_y := 0.0  # its own lateral spot in the lane
 var _react_left := -1.0  # counting down to escaping (-1 = no danger noticed yet)
 var _hesitate_left := -1.0  # ignoring the urge to run for this much longer (-1 = not hurt yet)
+var _hesitate_hp := 0.0       # its health share when it started hesitating
+const HESITATE_HURT := 0.1    # losing this much more while hesitating ends it: it runs
+const LOW_MARGIN := 0.1       # outmatched with you near, it won't stay in under retreat_at + this
 var _deny_roll := {}
 ## This decision: does it see that you out-damage it (it noticed — odds =
 ## smartness)? Then it keeps out of your reach and won't farm inside it.
@@ -259,6 +258,9 @@ var _commit_block_until := 0.0
 const CLEAR_MARGIN := 150.0  # px past your reach that counts as clear
 var _tower_hp_seen := -1.0          # its tower's health last frame
 var _defend_left := 0.0             # its tower was hit this recently: defend
+var _hp_marks: Array[float] = []     # its health share every 0.5 s, the last 4 s (for "losing health fast")
+var _hp_mark_at := 0.0
+const IMPATIENT_LOSS := 0.2          # lost this share of health in 4 s: the diver stops waiting for your escape
 var _moving_only := false           # retreating / backing off the tower: never stops to attack
 
 
@@ -276,9 +278,116 @@ func _ready() -> void:
 	apply_personality()
 
 
-## Its personality's settings (also after main.gd repick_bot swaps its hero).
+## Its settings: the hero's MIND (hero_minds.gd — red plays each hero as that
+## hero) layered over its lens personality; or, when an experiment pins a
+## personality type (Run.red_personality), that type alone. Also after
+## main.gd repick_bot swaps its hero.
 func apply_personality() -> void:
-	_p = PERSONALITIES.get(personality, {})
+	_rules = {}
+	_stance = {}
+	mind_name = ""
+	if personality != "" or def.is_empty():  # an experiment pinned a template type (or the plain "standard" bot)
+		_p = (PersonalityTemplates.TEMPLATES.get(personality, {}) as Dictionary).duplicate(true)
+		return
+	var foe := str(enemy_hero.def["name"]) if is_instance_valid(enemy_hero) and not enemy_hero.def.is_empty() else ""
+	var m: Dictionary = HeroMinds.mind_for(str(def["name"]), Run.round_num, foe)
+	_p = m["personality"]
+	_rules = m["rules"]
+	_stance = m.get("stance", {})
+	mind_name = "%s · %s" % [def["name"], m["name"]]
+
+
+## Its POWER PROFILE: where its stats sit right now, after every shop pick —
+## for decisions that should change as it grows (its stance; more to come).
+##   range      attack range now
+##   dps        attack damage per second now
+##   toughness  max health now ÷ its hero's base (1 = no health cards)
+##   lifesteal  its lifesteal share
+func power_profile() -> Dictionary:
+	var base_hp: float = float(def.get("hp", max_hp)) * hp_mult
+	return {"range": attack_range(), "dps": attack_damage() / maxf(attack_interval(), 0.05),
+		"toughness": max_hp / maxf(base_hp, 1.0), "lifesteal": mod("lifesteal")}
+
+
+## Its WORKING RANGE: the shortest reach among the tools it uses on the wave —
+## its attack and its wave-clear abilities (CLEAR_SLOTS), range bonuses
+## included. Standing within it, every one of them reaches the enemy creeps.
+func working_range() -> float:
+	var r := attack_range()
+	var slots: Array = CLEAR_SLOTS[hero_index] if hero_index < CLEAR_SLOTS.size() else []
+	for slot: String in slots:
+		var a: Dictionary = abilities[slot]
+		var reach := -1.0
+		match str(a["kind"]):
+			"ground", "orb":  # dropped at range (or at its feet when range 0), its blast reaching a bit past
+				reach = (float(a["range"]) + float(a.get("radius", 0.0)) * 0.5) if float(a["range"]) > 0.0 else float(a.get("radius", 0.0))
+			"beam", "skillshot", "cone", "dash", "boop":
+				reach = float(a.get("range", 0.0))
+			"spin":  # how far the corners reach once grown
+				reach = radius * corner_factor(def.get("shape", "")) * float(a.get("grow_end", 2.0))
+			"self", "rage":
+				reach = float(a.get("radius", radius * 2.0))
+		if reach > 0.0:
+			r = minf(r, reach)
+	return r
+
+
+## How far behind its own front creep it holds (negative = ahead of it): its
+## hero's stance worked out from its power profile, or its personality's fixed
+## hold_back when it has no stance (a pinned template).
+func _hold_back() -> float:
+	if _stance.is_empty():
+		return float(_pv("hold_back", 140.0))
+	var pp := power_profile()
+	var h: float = float(_stance.get("base", 0.0)) + float(_stance.get("on_wave", 0.0)) * working_range() \
+		- float(_stance.get("tough_pull", 0.0)) * (float(pp["toughness"]) - 1.0) \
+		- float(_stance.get("sustain_pull", 0.0)) * float(pp["lifesteal"])
+	h += float(_rule("stance_add", 0.0))  # a matchup nudge (hero_minds.gd vs)
+	return clampf(h, float(_stance.get("min", -100.0)), float(_stance.get("max", 400.0)))
+
+
+## A hero-mind rule (hero_minds.gd), or `default`.
+func _rule(key: String, default: Variant = null) -> Variant:
+	return _rules.get(key, default)
+
+
+## Standing in its own wave (2+ of its creeps close by)?
+func _in_wave() -> bool:
+	var n := 0
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team == team and c.is_targetable() and position.distance_to(c.position) <= IN_WAVE:
+			n += 1
+	return n >= 2
+
+
+## An enemy hero inside its threat zone while it's in its wave (the anchor rule).
+func _threatened(eh: Node2D) -> bool:
+	var r := float(_rule("threat", 0.0))
+	if r <= 0.0 or eh == null or not _in_wave() or not _safe(eh.position):
+		return false
+	var d := position.distance_to(eh.position)
+	if d <= r:
+		return true
+	# you're contesting its wave from range: hitting one of its creeps near it —
+	# that's stepping up to it too (a ranged hero never came within r before)
+	var t: Variant = eh.get("attack_target")
+	return t != null and is_instance_valid(t) and t.is_in_group("creeps") and t.team == team \
+		and position.distance_to(t.position) <= IN_WAVE and d <= r + eh.attack_range() + 150.0
+
+
+## GRIND on a wave only when it's worth it (grind_for_kills): it finishes 2+
+## creeps, or it needs the heal with 2+ in reach, or the clump is big (4+) —
+## not just softening creeps for its own creeps to take.
+func _grind_worth(a: Dictionary, reach: float) -> bool:
+	var per: float = float(a.get("damage", 0.0)) * float(a.get("vs_creeps", 1.0)) * AbilityInfo.damage_scale(mods, "Q") * damage_mult * 0.8
+	var near := 0
+	var kills := 0
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team != team and c.is_targetable() and position.distance_to(c.position) <= reach + c.radius:
+			near += 1
+			if c.hp <= per:
+				kills += 1
+	return kills >= 2 or (near >= 2 and hp / max_hp < 0.7) or near >= 4
 
 
 ## A personality value (or the standard bot's), blended toward DUMB by smartness.
@@ -347,6 +456,11 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if _react_left > 0.0:
 		_react_left -= delta
+	if _clock >= _hp_mark_at:
+		_hp_mark_at = _clock + 0.5
+		_hp_marks.append(hp / max_hp)
+		if _hp_marks.size() > 9:
+			_hp_marks.pop_front()
 	if _hesitate_left > 0.0:  # (stops at 0 = "done hesitating: run"; going negative read as "not hurt yet" and re-armed it — it never ran with you near)
 		_hesitate_left = maxf(0.0, _hesitate_left - delta)
 	var own_tower: Node2D = lane.tower(team) if lane else null
@@ -536,7 +650,18 @@ func log_state() -> Dictionary:
 	var tk := "none"
 	if t != null and is_instance_valid(t):
 		tk = "hero" if t.is_in_group("heroes") else ("tower" if t.is_in_group("towers") else ("creep" if t.is_in_group("creeps") else "other"))
-	return {"why": why, "flags": _flags(), "target": tk, "leashed": leashed.size()}
+	return {"why": why, "flags": _flags(), "target": tk, "leashed": leashed.size(), "hold": roundi(_hold_back()), "reach": roundi(working_range())}
+
+
+## Just over its retreat line and losing every trade, with you near: a person
+## goes home here rather than walk back in (KAREN pushed into your half at 31%
+## with odds 0.3, and died).
+func _low_and_losing(foe: Node2D, hp_frac: float) -> bool:
+	if foe == null or hp_frac >= float(_pv("retreat_at", RETREAT_AT)) + LOW_MARGIN:
+		return false
+	if position.distance_to(foe.position) > _threat_reach(foe) + 300.0:
+		return false
+	return _race(foe) < float(_pv("race_need", STANDARD_RACE)) * WARY_RACE
 
 
 func _decide_step(trading_with: Node2D) -> void:
@@ -552,13 +677,16 @@ func _decide_step(trading_with: Node2D) -> void:
 			_wary = foe != null
 	elif _retreating and hp_frac >= float(_pv("healed_at", HEALED_AT)):
 		_retreating = false
-	elif not _retreating and (hp_frac < float(_pv("retreat_at", RETREAT_AT)) or _in_danger(foe)):
+	elif not _retreating and (hp_frac < float(_pv("retreat_at", RETREAT_AT)) or _in_danger(foe) or _low_and_losing(foe, hp_frac)):
 		if _hesitate_left < 0.0:  # just got hurt enough to run: early bots fight on a moment first —
-			var near: bool = foe != null and position.distance_to(foe.position) <= _threat_reach(foe)
+			var near: bool = foe != null and position.distance_to(foe.position) <= _threat_reach(foe) 				and hp_frac >= float(_pv("retreat_at", RETREAT_AT)) - HESITATE_HURT  # already well under (hurt mid-combo): no moment to spare
 			_hesitate_left = _jitter(float(difficulty.get("hesitate", 0.0))) if near else 0.0  # (nobody near: just go)
+			_hesitate_hp = hp_frac
+		elif hp_frac < _hesitate_hp - HESITATE_HURT:
+			_hesitate_left = 0.0  # a moment's greed, not standing there frozen while you burst it (KAREN hesitated from 38% to 2%)
 		if _hesitate_left <= 0.0:
 			_retreating = true
-			_danger_retreat = hp_frac >= float(_pv("retreat_at", RETREAT_AT))  # healthy: it's your burst it's running from
+			_danger_retreat = hp_frac >= float(_pv("retreat_at", RETREAT_AT)) and not _low_and_losing(foe, hp_frac)  # healthy: it's your burst it's running from (low and losing: home to heal)
 	if not _retreating:
 		_react_left = -1.0  # out of danger: the next scare starts a fresh reaction
 		if hp_frac >= float(_pv("retreat_at", RETREAT_AT)) and not _in_danger(foe):
@@ -618,14 +746,21 @@ func _decide_step(trading_with: Node2D) -> void:
 	if _pressing() and _press():
 		why = "press"
 		return
+	if _zone_tick(eh):
+		return
+	if _dive_tick(eh):
+		return
+	if _art_tick(eh):
+		return
 	if _key_tick(et, eh):
 		return
 	if _totem_tick(eh):
 		return
 	var blunder: float = _pv("blunder", 0.0)
 	for step: String in _pv("order", STANDARD_ORDER):
-		if _roll("blunder_" + step, blunder):
-			continue  # a dumb bot skips what it should be doing
+		var skip: float = blunder * (WAVE_BLUNDER if step in ["farm", "clear", "push"] else 1.0)
+		if _roll("blunder_" + step, skip):
+			continue  # a dumb bot skips what it should be doing (the wave basics far less often: it misses timing, not the lane)
 		why = step
 		match step:
 			"abilities":
@@ -637,7 +772,7 @@ func _decide_step(trading_with: Node2D) -> void:
 					return
 			"trade":
 				if eh and _wants_trade(eh):
-					if _roll("stutter", smartness * float(STUTTER.get(personality, STUTTER_DEFAULT))):
+					if _roll("stutter", smartness * float(_p.get("stutter", STUTTER_DEFAULT))):
 						_stutter_target = eh  # _stutter_tick fires and steps between attacks
 						if _stepping and trading_with == eh:
 							return  # mid-step: leave it be
@@ -696,9 +831,19 @@ func _push_target(eh: Node2D) -> Node2D:
 			var reach_from := c.position.x * fwd - attack_range() - radius  # where it'd stand to hit it
 			if reach_from > front + PUSH_LEAD or c.position.x * fwd > float(_pv("chase_depth", STANDARD_CHASE)):
 				continue  # would put it in front of its own wave, or deep in your half
-		if best == null or _pick_dist(c) < _pick_dist(best):
+		if best == null or _push_key(c) < _push_key(best):
 			best = c
 	return best
+
+
+## How much it wants to hit creep `c` (lower = sooner): the nearest — or, with
+## front_first (the anchor), the one furthest into its half (pushing its tower).
+func _push_key(c: Node2D) -> float:
+	if _rule("front_first", false) and lane:
+		var own: Node2D = lane.tower(team)
+		if own:
+			return own.position.distance_to(c.position) - (LED_PULL if _led(c) else 0.0)
+	return _pick_dist(c)
 
 
 ## Step 2 of the leash plan: a creep your hero leads is worth more than a lane
@@ -754,10 +899,14 @@ const KEY_MIN_HP := 0.4        # never starts one below this much health
 const KEY_WINDOW := 6.0        # s: you dead at least this much longer, or it's not worth the walk
 const KEY_WALK := 1500.0       # px: farthest it'll walk to the waiting spot (unless you're dead long enough to cover more)
 var _key: Node2D = null        # the creep it's bringing
+var _key_more: Array = []      # a second one, when one alone can't soak enough tower shots
+const KEY_HITS := 3            # its creeps must last long enough for it to walk in and land this many hits on the tower
 var _key_until := 0.0          # held until (KEY_HOLD)
 var _key_end := 0.0            # given up at (KEY_MAX)
 var _key_block_until := 0.0
 var _key_sent := false         # its creep let go at the stage, walking into your tower's range
+var _key_sent_at := 0.0
+const KEY_SEND_WAIT := 2.5     # s after sending: still no shield open → it gives up (it stood there 4 s once)
 var _release_at := -1.0        # retreating: lets its leashed creeps go at this time
 var key_ended := ""            # why the last run ended (autoplay --osc prints it)
 var key_runs := true           # (autoplay --no-key switches them off, for A/B tests)
@@ -799,8 +948,14 @@ func _key_tick(et: Node2D, eh: Node2D) -> bool:
 		_end_key("no tower")
 		return false
 	if _key != null:
+		_key_more = _key_more.filter(func(c: Variant) -> bool: return is_instance_valid(c) and c.is_targetable() and (c.leader == self or _key_sent))
+		if (not is_instance_valid(_key) or not _key.is_targetable() or (_key.leader != self and not _key_sent)) and not _key_more.is_empty():
+			_key = _key_more.pop_front()  # the first one died: the second keeps the shield open
 		if not is_instance_valid(_key) or not _key.is_targetable() or (_key.leader != self and not _key_sent) or _clock >= _key_end:
 			_end_key("creep gone" if _clock < _key_end else "too long")  # the creep died (or got stuck): the shield's back
+			return false
+		if not _key_sent and _key_soak(_key_group()) < _key_need(et):
+			_end_key("not worth it")  # its creeps got hurt on the way: they'd die before it lands a hit
 			return false
 		if et.target == self:
 			_end_key("shot")  # your tower is on it, not its creep: back off (the usual rule) instead of standing in it
@@ -830,37 +985,82 @@ func _key_tick(et: Node2D, eh: Node2D) -> bool:
 		walk_ok = walk / maxf(speed, 1.0) + 3.0 <= float(enemy_hero.respawn_in)
 	if not walk_ok:
 		return false
-	var c := _key_pick(et, KEY_FETCH_OPEN if eh == null else KEY_FETCH)
-	if c == null:
+	var group := _key_pick(et, KEY_FETCH_OPEN if eh == null else KEY_FETCH)
+	if group.is_empty():
 		return false
-	if c.leader != self and not toggle_leash(c):
-		return false
-	_key = c
-	PlayLog.event("red_key", {"creep": c.kind, "you_dead": not enemy_hero.is_targetable(), "overtime": Unit.no_gold})
+	for g: Node2D in group:
+		if g.leader != self and not toggle_leash(g):
+			for h: Node2D in group:  # couldn't take them all: none
+				if h.leader == self:
+					toggle_leash(h)
+			return false
+	_key = group[0]
+	_key_more = group.slice(1)
+	PlayLog.event("red_key", {"creep": "+".join(group.map(func(g: Node2D) -> String: return g.kind)), "soak": snappedf(_key_soak(group), 0.1),
+		"need": snappedf(_key_need(et), 0.1), "you_dead": not enemy_hero.is_targetable(), "overtime": Unit.no_gold})
 	_key_until = _clock + KEY_HOLD
 	_key_end = _clock + KEY_MAX
 	return _key_run(et)
 
 
-## The creep to bring: one it already leads, or a free one in reach it has the
-## points for. The sturdiest (most tower shots) — a sharp bot weighs that, a
-## duller one now and then just takes the nearest.
-func _key_pick(et: Node2D, reach: float) -> Node2D:
+## The creeps to bring: one, or two when one can't soak enough tower shots
+## (its leash points allowing) — ones it already leads, or free ones in reach.
+## [] when nothing in reach lasts long enough: not worth the walk (a hurt
+## creep died to the tower before it landed a hit — nearly every run did).
+## A sharp bot takes the sturdiest set; a duller one the nearest that will do.
+func _key_pick(et: Node2D, reach: float) -> Array:
 	var smart := _roll("key_pick", 0.5 + 0.5 * smartness)
-	var best: Node2D = null
-	var best_score := INF
+	var cands: Array = []
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.team != team or not c.is_targetable() or c.get("risen"):
 			continue
-		var d := position.distance_to(c.position)
-		if c.leader != self and (c.leader != null or d > reach or leash_used() + c.leash_cost() > leash_capacity()):
-			continue
-		var rank: int = {"tank": 0, "melee": 1}.get(c.kind, 2)
-		var score := d + (float(rank) * 1000.0 if smart else 0.0) - (500.0 if c.leader == self else 0.0)
-		if score < best_score:
-			best = c
-			best_score = score
+		if c.leader == self or (c.leader == null and position.distance_to(c.position) <= reach):
+			cands.append(c)
+	var free := leash_capacity() - leash_used()  # (creeps it already leads are counted in used)
+	var need := _key_need(et)
+	var best: Array = []
+	var best_score := INF
+	for i in cands.size():
+		for j in range(i, cands.size()):
+			var group: Array = [cands[i]] if i == j else [cands[i], cands[j]]
+			var cost := 0
+			for g: Node2D in group:
+				cost += 0 if g.leader == self else g.leash_cost()
+			if cost > free or _key_soak(group) < need:
+				continue
+			var d := 0.0
+			for g: Node2D in group:
+				d = maxf(d, position.distance_to(g.position))
+			var score := d + float(group.size() - 1) * 300.0 - (_key_soak(group) * 100.0 if smart else 0.0)  # one creep if it'll do; sharp: the sturdiest
+			if score < best_score:
+				best = group
+				best_score = score
 	return best
+
+
+## Seconds `group` keeps the shield open under your tower's fire (it shoots one at a time).
+func _key_soak(group: Array) -> float:
+	var et := _enemy_tower()
+	if et == null:
+		return 0.0
+	var per_s: float = et.damage * et.creep_damage_mult / (et.INTERVAL * et.attack_time_mult())
+	var total := 0.0
+	for g: Variant in group:
+		if is_instance_valid(g) and g.is_targetable():
+			total += g.hp + g.shield_hp
+	return total / maxf(per_s, 1.0)
+
+
+## Seconds its creeps must last: from the waiting spot into attack range, then KEY_HITS hits.
+func _key_need(et: Node2D) -> float:
+	var walk: float = maxf(0.0, KEY_STAGE + et.RANGE - attack_range())
+	return walk / maxf(speed, 1.0) + KEY_HITS * attack_interval() + 0.5  # (+ the creep's own walk in after it's let go)
+
+
+func _key_group() -> Array:
+	var g: Array = [_key]
+	g.append_array(_key_more)
+	return g
 
 
 ## Walks its creep to your tower: wait just outside the range until it's close,
@@ -875,10 +1075,16 @@ func _key_run(et: Node2D) -> bool:
 		if attack_target != et:
 			order_attack(et.position)
 		return true
+	if _key_sent and _clock - _key_sent_at > KEY_SEND_WAIT:
+		_end_key("creep didn't get there")  # never wait at the stage for ever
+		return false
 	if not _key_sent and at_stage and position.distance_to(_key.position) <= KEY_CLOSE:
-		toggle_leash(_key)  # off it goes, to your tower
-		_key.set("dive_to", et)  # straight there: it mustn't stop to fight your creeps on the way (it did, and the run stalled)
+		for g: Node2D in _key_group():
+			if g.leader == self:
+				toggle_leash(g)  # off they go, to your tower
+			g.set("dive_to", et)  # straight there: they mustn't stop to fight your creeps on the way (they did, and the run stalled)
 		_key_sent = true
+		_key_sent_at = _clock
 		PlayLog.event("red_key_send")
 	why = "leash:key send" if _key_sent else "leash:key wait"
 	_go(Vector2(stage_x, position.y))
@@ -892,6 +1098,7 @@ func _end_key(reason := "") -> void:
 		key_ended = reason
 		PlayLog.event("red_key_end", {"reason": reason})
 	_key = null
+	_key_more = []
 
 
 ## TOTEM (step 3; totem.gd): from lane.gd TOTEM_FROM a keen red — pusher or
@@ -908,6 +1115,7 @@ const TOTEM_TRIP_MAX := 20.0
 const TOTEM_FETCH := 450.0
 const TOTEM_FAR := 1600.0      # px: farther than this from its totem, no trip
 const TOTEM_FULL := 3
+const TOTEM_CLEAR := 250.0   # px past your reach: closer than this to it or its totem, no trip
 const TOTEM_CONTEST_AT := 0.5
 const TOTEM_CONTEST_HOLD := 5.0
 var _trip := false
@@ -917,10 +1125,10 @@ var _contest_until := 0.0
 
 
 func _wants_totem() -> bool:
-	return personality in ["pusher", "farmer"] or Run.round_num >= TOTEM_ALL 		or mod("leash_points") > 0.0 or mod("leash_damage") > 0.0
+	return bool(_p.get("totem_keen", false)) or Run.round_num >= TOTEM_ALL 		or mod("leash_points") > 0.0 or mod("leash_damage") > 0.0
 
 
-func _totem_tick(_eh: Node2D) -> bool:
+func _totem_tick(eh: Node2D) -> bool:
 	if lane == null or not lane.has_method("totem"):
 		return false
 	var mine: Node2D = lane.totem(team)
@@ -949,7 +1157,7 @@ func _totem_tick(_eh: Node2D) -> bool:
 		why = "totem:trip"
 		_go(mine.position)
 		return true
-	if mine == null or _clock < _trip_block_until or not _wants_totem() or _wave_threat() > 0 or _defend_left > 0.0 or _wary 			or position.distance_to(mine.position) > TOTEM_FAR:
+	if mine == null or _clock < _trip_block_until or not _wants_totem() or _wave_threat() > 0 or _defend_left > 0.0 or _wary 			or position.distance_to(mine.position) > TOTEM_FAR or _totem_contested(eh, mine):
 		return false
 	var on := 0
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
@@ -971,6 +1179,16 @@ func _totem_tick(_eh: Node2D) -> bool:
 	why = "totem:trip"
 	_go(mine.position)
 	return true
+
+
+## Would you catch the trip? You within your reach (+ TOTEM_CLEAR) of it or of
+## its totem: it'd leash a creep, take two steps, see your burst and drop it
+## (R7 BECKY: 6 of 12 trips undone within a second) — so it waits instead.
+func _totem_contested(eh: Node2D, mine: Node2D) -> bool:
+	if eh == null:
+		return false
+	var reach := _threat_reach(eh) + TOTEM_CLEAR
+	return position.distance_to(eh.position) <= reach or mine.position.distance_to(eh.position) <= reach
 
 
 ## Pusher: leash the nearest free creep of its own while it has the points.
@@ -1016,7 +1234,8 @@ func _clear_wave(eh: Node2D) -> bool:
 	if threat == 0:
 		return false
 	if eh and _wary and position.distance_to(eh.position) <= _threat_reach(eh):
-		return false  # outmatched with you right there: not the moment
+		_clear_casts(2 if threat == 2 else 3, threat < 2)  # spells from where it stands, though: no walking in (BECKY held at full mana, casting nothing, while your wave hit her tower)
+		return false  # outmatched with you right there: no walking in to attack
 	_clear_casts(2 if threat == 2 else 3, threat < 2)
 	var c := _clear_creep()
 	if c == null:
@@ -1042,11 +1261,26 @@ func _clear_casts(need: int, keep_mana: bool) -> void:
 			continue  # SHOVE is how it starts fights: only on creeps when the wave's at its tower and you're nowhere near
 		if keep_mana and mana - ability_cost(slot) < max_mana * CLEAR_MANA_KEEP:
 			continue  # keeps some mana for you
+		if mana - ability_cost(slot) < _getaway_cost(slot):
+			continue  # you're about: never spends its BOOP / dash mana on creeps (KYLE pushed itself to 2 mana with KAREN in its face, no BOOP to peel)
 		var at: Variant = _clear_point(a, need)
 		if at != null:
 			cast(slot, at)
 			_cast_gap = difficulty.get("cast_gap", CAST_GAP)
 			return
+
+
+## Mana kept for its getaway (a BOOP / dash / blink not being cast now) while
+## your hero is alive within 1200 px; 0 otherwise.
+func _getaway_cost(casting: String) -> float:
+	var foe := _enemy_hero_alive()
+	if foe == null or position.distance_to(foe.position) > 1200.0:
+		return 0.0
+	var keep := 0.0
+	for s: String in SLOT_ORDER:
+		if s != casting and str(abilities[s]["kind"]) in ["boop", "dash", "blink"]:
+			keep = maxf(keep, ability_cost(s))
+	return keep
 
 
 # ------------------------------------------------------------------ commit mode
@@ -1120,11 +1354,20 @@ func _should_commit(eh: Node2D) -> bool:
 		return false  # the combo starts with this: wait for it
 	var dmg := _combo_damage(seq)
 	var ehp: float = (eh.hp + eh.shield_hp) / (1.0 + float(eh.get("_expose")))
+	if _rule("wait_escape", false) and _escape_ready(eh) and eh.hp / eh.max_hp > float(_rule("hunt_at", 0.0)) and _recent_loss() < IMPATIENT_LOSS:
+		_commit_no = "waiting for your escape to be spent"
+		return false  # the diver: patient until you've used it
+	if _threatened(eh):  # the anchor: you came into its zone while it holds the wave
+		_commit_no = "threatened, passed (roll)"
+		return _roll("commit_threat", 0.5 + 0.5 * smartness)
 	if abilities[opener]["kind"] == "boop":  # BOOP only pulls: worth it with something to hit you with after
 		var payoff := false
+		var b: Dictionary = abilities[opener]
+		var after: float = position.distance_to(eh.position) - (float(b["radius"]) * 0.45 + float(b.get("push", 120.0)))  # about where the pull leaves you
 		for s: String in seq:
-			if s != opener and is_ready(s) and can_afford(s) and float(abilities[s].get("damage", 0.0)) > 0.0:
-				payoff = true
+			if s != opener and is_ready(s) and can_afford(s) and float(abilities[s].get("damage", 0.0)) > 0.0 \
+					and _reach_of(abilities[s]) >= after:
+				payoff = true  # (PUNISH counted before though it only reaches ~120 px: pulls with nothing after)
 		if not payoff:
 			_commit_no = "nothing ready to follow BOOP"
 			return false
@@ -1134,7 +1377,7 @@ func _should_commit(eh: Node2D) -> bool:
 	if dmg >= ehp * 0.95:
 		_commit_no = "kill on the table, missed it (roll)"
 		return _roll("commit_kill", 0.5 + 0.5 * smartness)  # a kill on the table: most bots see it
-	var keen: float = float(COMMIT.get(personality, COMMIT_DEFAULT)) * smartness
+	var keen: float = float(_p.get("commit", COMMIT_DEFAULT)) * smartness
 	if _open_target(eh) and dmg >= ehp * COMMIT_BITE:
 		_commit_no = "you were open, passed (roll)"
 		return _roll("commit_open", keen)
@@ -1236,6 +1479,10 @@ func _combo_aim(a: Dictionary, eh: Node2D) -> Variant:
 			var miss := Vector2.from_angle(randf() * TAU) * randf() * float(difficulty.get("aim_error", AIM_ERROR)) * 0.5
 			if a.get("tether", 0.0) > 0.0:
 				return eh.position + eh.velocity * 0.15 + miss  # POUNCE: onto you (where you're going)
+			var seq: Array = _combo.get("seq", [])
+			var nxt: int = int(_combo.get("i", 0)) + 1
+			if nxt < seq.size() and str(abilities[seq[nxt]]["kind"]) == "spin":
+				return eh.position + eh.velocity * 0.15 + miss  # SHOVE into GRIND: end the charge on you, so the spin catches you (aimed 90 px through, the knock-aside left you out of reach: GRIND hit 3 of 14)
 			return eh.position + (eh.position - position).normalized() * 90.0 + miss  # through you (SHOVE)
 		"boop":  # from behind you: you're knocked toward it (into IGNITE / PUNISH next)
 			return _boop_behind(a, eh)
@@ -1422,6 +1669,8 @@ func _clear_point(a: Dictionary, need: int) -> Variant:
 			return best
 		"spin", "self":
 			var reach: float = radius * corner_factor(def.get("shape", "")) * float(a.get("grow_end", 2.0)) if a["kind"] == "spin" else float(a["radius"]) * 0.8
+			if a["kind"] == "spin" and _rule("grind_for_kills", false) and not _grind_worth(a, reach):
+				return null  # the anchor gnaws for kills, not to soften creeps for its own
 			var n := foes.filter(func(c: Node2D) -> bool: return position.distance_to(c.position) <= reach + c.radius).size()
 			return position if n >= mini(need, 2) else null
 		"shield":  # BRACE: its own creeps in the fight
@@ -1613,6 +1862,8 @@ func _go(p: Vector2) -> void:
 
 
 func _wants_trade(eh: Node2D) -> bool:
+	if _threatened(eh) and hp / max_hp >= float(_pv("retreat_at", RETREAT_AT)) + 0.1:
+		return true  # the anchor: you stepped up to its wave — it turns on you
 	var reach: float = maxf(attack_range() + eh.radius + TRADE_PAD, float(_pv("engage", ENGAGE)))
 	if position.distance_to(eh.position) > reach or not _safe(eh.position) or not _may_chase(eh):
 		return false
@@ -1788,7 +2039,7 @@ func _lane_spot() -> Vector2:
 			any = true
 			front = minf(front, c.position.x) if fwd < 0.0 else maxf(front, c.position.x)
 	var own: Node2D = lane.tower(team) if lane else null
-	var x: float = front - fwd * float(_pv("hold_back", 140.0)) if any else (own.position.x if own else Lane.base_of(team).x) + fwd * 260.0
+	var x: float = front - fwd * _hold_back() if any else (own.position.x if own else Lane.base_of(team).x) + fwd * 260.0
 	if _p.has("home_leash") and own:  # opportunist: near its tower unless you're vulnerable
 		var eh := _enemy_hero_alive()
 		if eh == null or not _vulnerable(eh):
@@ -1843,6 +2094,10 @@ func _use_abilities() -> void:
 		if spin_left > 0.0 and abilities[slot]["kind"] == "dash":
 			continue  # a dash would cut its own GRIND short (escapes still may: _escape)
 		var at: Variant = _ability_target(slot, abilities[slot])
+		if at != null and mana - ability_cost(slot) < _getaway_cost(slot):
+			var eh := _enemy_hero_alive()
+			if eh == null or (at as Vector2).distance_to(eh.position) > 160.0:
+				continue  # not at you: keeps its BOOP / dash mana (KYLE spent down to 2–60 mana on creeps from 'hold' and had no BOOP when KAREN reached it, four times)
 		if at != null:
 			cast(slot, at)
 			_cast_gap = difficulty.get("cast_gap", CAST_GAP)
@@ -1858,11 +2113,17 @@ func _ability_target(slot: String, a: Dictionary) -> Variant:
 	elif eh and casts == "poke" and not _vulnerable(eh) and (slot == "R" or a["kind"] in ["self", "cone"]):
 		eh = null  # pokes from range freely; saves the close-up and ultimate for an opening
 	var ult := slot == "R"
+	if _rule("ignite_deny", false) and eh and a["kind"] == "ground" and float(a.get("duration", 0.0)) > 0.0:
+		var deny: Variant = _deny_spot(a, eh)
+		if deny != null:
+			return deny  # the zoner: fire on the creeps you want to farm
 	if _pv("creeps_first", false) and not ult:
 		var c: Variant = _creep_cast(a)
 		if c != null:
 			return c
 	var h: Variant = _hero_cast(a, eh)
+	if h != null and _rule("predictable_only", false) and str(a["kind"]) in ["beam", "ground", "skillshot"] and not _predictable(eh):
+		h = null  # the artillery: you're jinking — save it (or spend it on creeps)
 	if h != null:
 		return _with_creeps(a, h)  # aim so it catches creeps too, still on you
 	var you_away: bool = _enemy_hero_alive() == null or position.distance_to(_enemy_hero_alive().position) > AWAY
@@ -1871,12 +2132,205 @@ func _ability_target(slot: String, a: Dictionary) -> Variant:
 	return _creep_cast(a)
 
 
+## How far ability `a` reaches a hero from the bot (for "can it follow up?").
+func _reach_of(a: Dictionary) -> float:
+	match str(a["kind"]):
+		"ground", "orb":
+			return float(a["range"]) + float(a.get("radius", 0.0)) * 0.5 if float(a["range"]) > 0.0 else float(a.get("radius", 0.0))
+		"beam", "skillshot", "cone", "dash", "boop":
+			return float(a.get("range", 0.0))
+		"self":
+			return float(a.get("radius", 0.0)) * (0.45 if float(a.get("edge_damage", 1.0)) < 1.0 else 0.8)
+		"spin", "rage":
+			return radius * 2.5
+	return 0.0
+
+
 ## BOOP aimed just behind you (from the bot's side), so you sit inside it and
 ## get knocked toward the bot — or null if that's out of its range.
 func _boop_behind(a: Dictionary, eh: Node2D) -> Variant:
 	var back: Vector2 = (eh.position - position).normalized() if eh.position.distance_to(position) > 1.0 else facing
 	var at: Vector2 = eh.position + back * float(a["radius"]) * 0.55
 	return at if position.distance_to(at) <= float(a["range"]) else null
+
+
+# ------------------------------------------------------------------ the zoner (KYLE's mind)
+
+## Its fire on the ground right now (an IGNITE it cast): {at, r, until}, or {}.
+var _fire := {}
+const BOOP_INTO_FIRE := 180.0  # px past its fire's edge an enemy may stand for a BOOP to knock them in
+
+
+## Records where a lingering fire it casts lands (for boop_into_fire).
+func cast(slot: String, point: Vector2) -> void:
+	var a: Dictionary = abilities.get(slot, {})
+	var fire: bool = str(a.get("kind", "")) == "ground" and float(a.get("duration", 0.0)) > 0.0 and is_ready(slot) and can_afford(slot)
+	var from := position
+	super(slot, point)
+	if fire:
+		var to := point - from
+		var reach := clampf(to.length(), float(a.get("min_range", 0.0)), float(a["range"]))
+		_fire = {"at": from + (to.normalized() if to.length() > 1.0 else facing) * reach, "r": float(a["radius"]),
+			"until": _clock + 0.55 + float(a.get("duration", 0.0))}
+
+
+## The zoner's moves, ahead of its usual order (each a hero-mind rule):
+## knock a melee hero out of its face, knock you into its fire, keep you burning.
+func _zone_tick(eh: Node2D) -> bool:
+	if eh == null or _retreating or not _combo.is_empty():
+		return false
+	var boop := ""
+	for s: String in SLOT_ORDER:
+		if str(abilities[s]["kind"]) == "boop" and is_ready(s) and can_afford(s) and _cast_gap <= 0.0:
+			boop = s
+	var d := position.distance_to(eh.position)
+	if boop != "" and float(_rule("boop_peel", 0.0)) > 0.0 and d <= float(_rule("boop_peel", 0.0)) and eh.attack_range() < 250.0:
+		why = "zone:peel"  # a melee hero in its face: knock you both apart
+		cast(boop, position.lerp(eh.position, 0.5))
+		_cast_gap = difficulty.get("cast_gap", CAST_GAP)
+		return true
+	if boop != "" and _rule("boop_into_fire", false) and not _fire.is_empty() and _clock < float(_fire["until"]) and hp / max_hp >= BOOP_KEEP:
+		var z: Vector2 = _fire["at"]
+		var dz := eh.position.distance_to(z)
+		if dz > float(_fire["r"]) and dz <= float(_fire["r"]) + BOOP_INTO_FIRE:
+			var a: Dictionary = abilities[boop]
+			var at: Vector2 = eh.position + (eh.position - z).normalized() * float(a["radius"]) * 0.55
+			if position.distance_to(at) <= float(a["range"]):
+				why = "zone:boop into fire"  # from behind you: knocked into its IGNITE
+				cast(boop, at)
+				_cast_gap = difficulty.get("cast_gap", CAST_GAP)
+				return true
+	var stoke_safe: bool = d > _catch_reach(eh) or (_race(eh) >= float(_pv("race_need", STANDARD_RACE)) and hp / max_hp >= float(_pv("retreat_at", RETREAT_AT)) + LOW_MARGIN)
+	if _rule("keep_burning", false) and eh.is_burning_from(self) and d <= attack_range() + eh.radius and _safe(eh.position) and not _wary and stoke_safe:
+		why = "zone:stoke"  # (only out of your reach, or while it's winning: it stood stoking KAREN while she GRINDed it from 74% to 4%)  # you're burning from its fire: every hit keeps it going
+		if attack_target != eh:
+			order_attack(eh.position)
+		return true
+	return false
+
+
+# ------------------------------------------------------------------ the artillery (BECKY's mind)
+
+var _eh_dir := Vector2.ZERO      # the enemy hero's heading last check
+var _eh_straight_since := 0.0    # since when it has kept that heading
+
+
+func _process_heading(eh: Node2D) -> void:
+	var v: Vector2 = eh.velocity
+	if v.length() < 40.0:
+		_eh_dir = Vector2.ZERO
+		_eh_straight_since = _clock
+		return
+	var dir := v.normalized()
+	if _eh_dir == Vector2.ZERO or dir.dot(_eh_dir) < 0.95:
+		_eh_straight_since = _clock  # it turned: the line starts again
+	_eh_dir = dir
+
+
+## How far `eh` can catch it from: its attack reach, plus a ready gap-closer
+## (a dash: POUNCE, SHOVE) — not a blink or BOOP, which are getaways. (The
+## full threat reach counted BECKY's own GHOST: a mirror BECKY kept 1000+ px
+## away and couldn't farm.)
+func _catch_reach(eh: Node2D) -> float:
+	var reach: float = eh.attack_range() + eh.radius + radius
+	for s: String in SLOT_ORDER:
+		var a: Dictionary = eh.abilities[s]
+		if str(a["kind"]) == "dash" and eh.is_ready(s) and eh.mana >= eh.ability_cost(s):
+			reach = maxf(reach, float(a["range"]) + eh.attack_range() * 0.5 + eh.radius + radius)
+	return reach
+
+
+## Is `eh` predictable — standing still, or holding a straight line ~0.5 s?
+func _predictable(eh: Node2D) -> bool:
+	_process_heading(eh)
+	return eh.velocity.length() < 40.0 or _clock - _eh_straight_since >= 0.5
+
+
+## The artillery's keep-out (keep_out): never inside your threat reach (+ the
+## margin) — it steps back out along the lane, then farms from there.
+func _art_tick(eh: Node2D) -> bool:
+	var pad := float(_rule("keep_out", 0.0))
+	if pad <= 0.0 or eh == null or _retreating or not _combo.is_empty():
+		return false
+	if _rule("predictable_only", false):
+		_process_heading(eh)  # (keeps its read of your heading fresh)
+	var need: float = _catch_reach(eh) + pad
+	var d := position.distance_to(eh.position)
+	if d >= need:
+		return false
+	var away: Vector2 = (position - eh.position).normalized() if d > 1.0 else Vector2(-_forward(), 0.0)
+	why = "art:keep out"  # out of your reach first; farming resumes from there
+	_shy_until = maxf(_shy_until, _clock + SHY_FOR)  # …and stays out: no walking back in to farm (hysteresis)
+	_go(eh.position + away * (need + 20.0))
+	return true
+
+
+# ------------------------------------------------------------------ the diver (CHAD's mind)
+
+const HUNT_CHASE := 900.0  # px: how far it runs down a hurt hero (never under their tower)
+
+
+## Has `eh` an escape ready (a dash, a blink or a BOOP it can afford)?
+func _escape_ready(eh: Node2D) -> bool:
+	for s: String in SLOT_ORDER:
+		var a: Dictionary = eh.abilities[s]
+		if str(a["kind"]) in ["dash", "blink", "boop"] and eh.is_ready(s) and eh.mana >= eh.ability_cost(s):
+			return true
+	return false
+
+
+## The diver's hunt (hunt_at): a hurt hero doesn't walk away — POUNCE when in
+## reach, else run them down with attacks; never under their tower.
+func _dive_tick(eh: Node2D) -> bool:
+	var at := float(_rule("hunt_at", 0.0))
+	if at <= 0.0 or eh == null or _retreating or not _combo.is_empty() or eh.hp / eh.max_hp > at or not _safe(eh.position):
+		return false
+	var d := position.distance_to(eh.position)
+	if d > HUNT_CHASE:
+		return false
+	if hp / max_hp < float(_pv("retreat_at", RETREAT_AT)) and not _sure_kill(eh):
+		return false  # hurt itself: no hunting unless it's a sure kill (it POUNCEd at 7% health once, and died)
+	for s: String in SLOT_ORDER:
+		var a: Dictionary = abilities[s]
+		if str(a["kind"]) == "dash" and is_ready(s) and can_afford(s) and d <= float(a["range"]) + eh.radius and _cast_gap <= 0.0:
+			why = "dive:pounce"  # onto you (where you're going)
+			cast(s, eh.position + eh.velocity * 0.15)
+			_cast_gap = difficulty.get("cast_gap", CAST_GAP)
+			return true
+	why = "dive:chase"
+	if attack_target != eh:
+		order_attack(eh.position)
+	return true
+
+
+## Health share lost over the last 4 s (0 if none).
+func _recent_loss() -> float:
+	if _hp_marks.is_empty():
+		return 0.0
+	return maxf(0.0, _hp_marks.max() - hp / max_hp)
+
+
+## A sure kill: `eh` dies to one ready dash plus one attack.
+func _sure_kill(eh: Node2D) -> bool:
+	var burst := attack_damage()
+	for s: String in SLOT_ORDER:
+		var a: Dictionary = abilities[s]
+		if str(a["kind"]) == "dash" and is_ready(s) and can_afford(s):
+			burst += float(a.get("damage", 0.0))
+	return eh.hp <= burst
+
+
+## ignite_deny: its own low creeps near you (the ones you'd last-hit) — fire on them.
+func _deny_spot(a: Dictionary, eh: Node2D) -> Variant:
+	var best: Node2D = null
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if not c.deniable_by(team) or c.position.distance_to(eh.position) > 350.0:  # (overtime: no denies, so no zoning the farm either)
+			continue
+		if position.distance_to(c.position) > float(a["range"]):
+			continue
+		if best == null or c.position.distance_to(eh.position) < best.position.distance_to(eh.position):
+			best = c
+	return best.position if best else null
 
 
 ## May it spend a charge (SHOVE) on creeps? Only when its wave is at its tower
@@ -2016,6 +2470,8 @@ func _creep_cast(a: Dictionary) -> Variant:
 		"cone":
 			return _creep_clump(a["range"] * 0.8, a["range"] * 0.5)
 		"spin":
+			if _rule("grind_for_kills", false):
+				return position if _grind_worth(a, radius * corner_factor(def.get("shape", "")) * float(a.get("grow_end", 2.0)) + 20.0) else null
 			return position if _creep_clump(0.0, radius * corner_factor(def.get("shape", "")) * float(a.get("grow_end", 2.0)) + 20.0) != null else null
 		"shield":  # its wave pushing into your tower: shield them
 			var et := _enemy_tower()

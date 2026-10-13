@@ -77,6 +77,7 @@ const NO_GOLD_GREY := Color("#9e9e9e")
 ## them dies. `camp_hero` led it there (Rally Cry still counts for it).
 var camp: Node2D = null
 var camp_hero: Node2D = null
+const CAMP_REACH := 40.0  # px: latched creeps hit the totem only from this close, ranged ones included
 ## Sent on a key run (bot.gd): walks straight into this enemy tower's range,
 ## ignoring everything on the way — then Tower Vision takes over.
 var dive_to: Node2D = null
@@ -270,7 +271,7 @@ func _try_latch() -> bool:
 ## Latched: walk into reach of the totem and hit it — nothing else.
 func _on_camp(delta: float) -> void:
 	target = camp
-	if _in_reach(camp):
+	if position.distance_to(camp.position) - radius - camp.radius <= minf(_stats["range"], CAMP_REACH):  # (ranged too: from on the totem, not from 400 px — booped away, it shot on from far off)
 		facing = (camp.position - position).normalized()
 		if _cd <= 0.0:
 			_attack()

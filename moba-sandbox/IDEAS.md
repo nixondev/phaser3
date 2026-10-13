@@ -21,6 +21,74 @@ is judged against it:
   has an answer.
 (`/analyze-run` judges play logs against this.)
 
+**A round's two acts (user, 2026-10-10):** before overtime is *out-farm your
+opponent* — last hits, trades, wave control, building an edge; overtime is
+*now find a way to win the round* — turn that edge into a broken tower.
+Overtime is the expected finish, not a failsafe: a tower barely touched when
+overtime starts is normal, not a stalemate to fix, and a huge late wave
+breaking a tower fast is the earned ending. What should NOT happen is an
+early tower crumbling the moment one normal wave reaches it (hence the +600
+tower floor). Judge tower pacing by this, not by pre-overtime tower damage.
+
+## Power-up drops — shooter-style capsules 💡 (user, 2026-10-13: "ranged minions drop powerups of some kind, like spaceship scrollers or contra")
+
+Working shape (being worked out with the user, not built):
+- **Source**: a ranged creep a hero last-hits drops a capsule, on a fixed rhythm
+  (e.g. every 4th ranged last hit) rather than a random roll: readable, no lucky streaks.
+- **The capsule is yours**: it sits where the creep died, in your colour, with a
+  letter for what's inside (Contra's S / L / F) and a few hits of health (3 pips).
+- **Break it to take it** (user): whoever lands its last hit decides — you → you
+  get the power-up; red → it's gone (denied). No stealing. It's a little last-hit
+  race in the contested middle, like opening Contra's flying capsule.
+- **Creeps ignore it completely** (user); towers too. Likely attacks only, 1 hit
+  each whatever the damage, so damage cards don't trivialise it.
+- Fades after ~8 s if nobody breaks it.
+- **Effect**: temporary (~10 s), a ring on the hero (visual-cue standard), a
+  play-changing spike like a shooter weapon: Spread (attacks also hit one more
+  target), Rapid (+60% attack speed), Pierce (attacks pass through creeps), Mana
+  (free casts). Cards stay permanent; a card could later hook drops (rate, length).
+- **Why**: in overtime kills pay no gold, so last hits stop mattering when the
+  round is decided; drops give them a purpose and give act two a tool to break a
+  stalemate.
+- **Red**: breaks its own capsules and goes for yours like a last hit / deny,
+  weighed against danger (gives up ones under your tower or deep in your reach).
+- Open: overtime only (recommended first) or the whole round; which 3–4 power-ups;
+  a snowball check (the side winning the wave gets more ranged last hits).
+
+## Continue a run (built 2026-10-10)
+
+The run is saved (`user://continue.save`, Run.save_continue — Run.to_dict via
+store_var) at the start of every round and when the shop opens after a win; the
+hero pick shows **Continue · round N (HERO)** / **Continue · shop after round N**
+while a save exists. Losing a round, abandoning from the pause menu or starting
+a New run clears it. Quitting the game mid-round keeps it, so you replay that
+round from its start — a way to dodge a losing round, allowed for now (user).
+Same seed, so the same red hero, build and shop offers.
+
+## Hero minds — each hero is its own entity (2026-10-09, the paradigm)
+
+Red plays every hero as **that hero**: a unique entity with its own
+personality that understands its kit and its matchups and grows sharper over
+the run — the spirit of all the bot work so far (combo book, KAREN's ult combo,
+KYLE's BOOP pulls). Data in `scripts/hero_minds.gd`: each hero's own full
+personality (decision order, retreat line, hold-back, stutter / commit /
+totem keenness, shopping priorities), rules that use its kit, **stages** (how
+it grows by round) and **vs** (matchup tweaks). The four old types (brawler,
+farmer, pusher, opportunist) are kept as reference templates in
+`scripts/personality_templates.gd` — to copy from for future heroes, and for
+experiments (autoplay --personality); nothing reads them in normal play.
+- **KAREN · the anchor** (first full mind): plants herself in the wave
+  (hold-back −30), gnaws it — GRIND on waves only when it finishes creeps,
+  heals her or hits a big clump — clears your front creeps first to hold your
+  push, and turns on anyone inside her threat zone while she holds the wave
+  (250 px; 350 from round 4, 400 from round 8; +50 vs ranged KYLE / BECKY, −50
+  vs CHAD).
+- **KYLE · the zoner, CHAD · the diver, BECKY · the artillery**: personalities
+  copied from the types they played as; their own rules, stages and matchups
+  are next.
+- For all bots: a dull red skips its wave steps (farm / clear / push) a third
+  as often as the rest — beginner mistakes, not forgetting the lane.
+
 **Working rule:** ideas get logged here first and are built toward the
 larger mechanic as they firm up, not all at once. Nothing is locked in
 unless it's marked **Decided**.

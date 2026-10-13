@@ -21,6 +21,11 @@ Judge everything against that:
   player see the wave turning, the siege coming, the tower crumbling)? Was red's
   win earned, never a bug, a stupid-looking bot moment, or an unseen rule? Did
   the player have an answer available?
+- **A round's two acts**: before overtime is out-farming (last hits, trades,
+  wave edge); overtime is finding a way to win. Overtime is the expected
+  finish — a barely-touched tower at overtime is normal, and a huge late wave
+  breaking a tower fast is earned. Flag only early towers crumbling the moment
+  one normal wave arrives (IDEAS.md "A round's two acts").
 - Recommend the change that best moves the game toward this goal, and say which
   part of it (scaling, the end, or feeling fair) a finding touches.
 
@@ -40,6 +45,11 @@ top of `moba-sandbox/scripts/play_log.gd`.
    python moba-sandbox/tools/analyze_log.py --round N    # + one round in detail
    python moba-sandbox/tools/analyze_log.py latest --any # include an unfinished run
    ```
+   A run saved and resumed later (Continue) writes one log per sitting (each
+   resumed part starts with a `continue` event; all share the run's seed). The
+   script stitches them into one run automatically and says so in the header
+   ("stitched from N saved sittings"); a round quit mid-way and resumed from
+   its start counts from the later try. Report the whole stitched run.
    If the newest log is unfinished (a paused or abandoned round, no
    `round_end`), say so in one line and analyse the newest complete run — unless
    the user clearly meant the unfinished one.

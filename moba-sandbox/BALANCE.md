@@ -94,7 +94,7 @@ to 1.0 in round 1) to a model of an average player's damage growth:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Model (average player damage) | 1.00 | 1.12 | 1.22 | 1.31 | 1.41 | 1.50 | 1.59 | 1.67 | 1.76 | 1.85 | 2.02 | 2.29 | 2.74 |
 | **Lane growth (line)** | 1.00 | 1.09 | 1.19 | 1.28 | 1.37 | 1.46 | 1.56 | 1.65 | 1.74 | 1.83 | 2.02 | 2.30 | 2.76 |
-| Tower HP (both) | 2,000 | 2,185 | 2,370 | 2,555 | 2,740 | 2,925 | 3,110 | 3,295 | 3,480 | 3,665 | 4,035 | 4,590 | 5,515 |
+| Tower HP (both) | 2,600 | 2,785 | 2,970 | 3,155 | 3,340 | 3,525 | 3,710 | 3,895 | 4,080 | 4,265 | 4,635 | 5,190 | 6,115 |
 | Creep HP (both, × base) | 70% | 76% | 83% | 89% | 96% | 102% | 109% | 115% | 122% | 128% | 141% | 161% | 193% |
 | …melee / ranged HP | 385 / 224 | 421 / 245 | 456 / 265 | 492 / 286 | 527 / 307 | 563 / 328 | 599 / 348 | 634 / 369 | 670 / 390 | 706 / 410 | 777 / 452 | 884 / 514 | 1,062 / 618 |
 
@@ -358,7 +358,7 @@ Levels belong to the **letter** and carry across hero switches.
 | | Boots | +25 move speed |
 | | Salve | +6 health regen |
 | | Siphon | +15 mana per last hit |
-| | Scavenger | denying a creep: +25 mana, +40 health |
+| | Scavenger | denying a creep: +25 mana, +40 health (before overtime) |
 | | Heavy Hands | attacks +40% damage, 25% longer between them |
 | | Homeguard | inside your tower's range (650): +25% attack speed, +5 health regen |
 | | Rally Cry | leashed creeps +30% damage, −30% damage taken (max 2; damage cut capped at 75%) |
@@ -390,7 +390,7 @@ Levels belong to the **letter** and carry across hero switches.
 | | Reserve | Q holds 2 charges |
 | | Afterimage | a dash / blink leaves a decoy for 2 s: enemy creeps, towers and the bot lose you and go for it |
 | | Hunter's Mark | ability hits mark heroes 4 s; your next attack on a marked hero +15% of its missing health |
-| | Recruit | a creep you deny rises at half health for 6 s (worth no gold) |
+| | Recruit | a creep you deny rises at half health for 6 s (worth no gold; before overtime) |
 
 Cooldown cards (Haste, Overclock) add up to at most −60% (`ability_info.gd` `COOLDOWN_CAP`); Overcharge halves the ultimate on top, never below 20% of it (`ULT_FLOOR`).
 
@@ -422,7 +422,7 @@ epics and wave cards.
 
 | HP | Range | Damage | Interval | Bounty |
 |---|---|---|---|---|
-| 2,000 × lane growth (both; section 2) | 650 (centre to target edge) | 110 | 1.1 s | 250 |
+| 2,000 × lane growth + 600 (both; section 2) | 650 (centre to target edge) | 110 | 1.1 s | 250 |
 
 Targeting: an enemy hero that hits one of its heroes in range → locked until
 it leaves range; otherwise creeps; only with no creep in range, a hero.
@@ -501,9 +501,9 @@ Level I burst if all lands: ~400–420.
 | Q | **STARS** — spinning barbed stars in a spread, range 600; each cuts through creeps (hitting each once) and stops at the first hero or tower | 3 × 55, spread 18°, cd 5, 45 mana | 4 × 60 | 5 × 70 |
 | W | **TRAP** — dropped at your feet, r 55, 3 s: slow (+1 s after leaving), **bleed** (your attacks +20%), final 1 s whips round and cuts in 4 hits | 60 dmg, slow 35%, cd 10, 50 mana, 1 charge | 80, 2 charges, slow 40% | 100, 3 charges, slow 45%, cd 8 |
 | E | **POUNCE** — dash 520 through creeps and friends; stops at the first hero (or tower) and **tethers** it 1.2 s, max 220 apart; your pull wins; E again lets go | 70 dmg, cd 8, 60 mana | 100, range 600 | 140, cd 6 |
-| R | **FLURRY** — barbed pulses r 220 every 0.25 s, following you | 3 × 90, **cd 50**, 120 mana | 4 × 105 | 5 × 120 |
+| R | **FLURRY** — barbed pulses r 220 every 0.25 s, following you | 3 × 70, **cd 50**, 120 mana | 4 × 105 | 5 × 120 |
 
-Level I sequence (POUNCE, TRAP, point-blank STARS, FLURRY) ≈ 500 plus bleed
+Level I sequence (POUNCE, TRAP, point-blank STARS, FLURRY) ≈ 440 plus bleed
 autos (~90 DPS) for 275 of 300 mana.
 
 ### KAREN — tank-bruiser (reworked)
@@ -527,8 +527,8 @@ where the damage is, the area blast can't defend her, and GHOST is her only out.
 
 | | Ability | I | II | III |
 |---|---|---|---|---|
-| Q | **SHADE** — plants for 0.35 s (no move / attack, a line shows the path; a stun or GHOST cancels it), then an instant beam; damage 60% point blank → full at 600+ | 85, range 760, width 40, cd 6, 60 mana | 110, width 55 | 140, cd 4.5 |
-| W | **RUMOR** — ground blast after a warning; **can't land within 250** of her; everyone hit misses their next attack | 140, r 145, range 850, cd 10, 90 mana | 175, r 165 | 220, cd 8 |
+| Q | **SHADE** — plants for 0.35 s (no move / attack, a line shows the path; a stun or GHOST cancels it), then an instant beam; damage 60% point blank → full at 600+ | 120, range 760, width 40, cd 7, 60 mana | 150, width 55 | 190, cd 5.25 |
+| W | **RUMOR** — ground blast after a warning; **can't land within 250** of her; everyone hit misses their next attack | 85, r 145, range 850, cd 10, 90 mana | 110, r 165 | 140, cd 8 |
 | E | **GHOST** — teleport | range 450, cd 12, 70 mana | 550, cd 10 | 650, cd 8 |
 | R | **FALLOUT** — scattered blasts | 6 × 110, r 130, scatter 320, range 800, **cd 80**, 200 mana | 8 × 125 | 10 × 140, scatter 380 |
 
@@ -641,6 +641,28 @@ Run a fresh baseline before the next tuning pass.
 
 Newest first. One line per tuning change: what, from → to, why.
 
+- **2026-10-11** — No denying in overtime: nothing pays then, so denies are off (own creeps get no amber outline, clicking one does nothing, red skips its deny step and KYLE's IGNITE-on-own-low-creeps zoning). Overtime is for winning the round, not the farm. Scavenger and Recruit say "(before overtime)". (The 2026-10-07 note claimed overtime creeps couldn't be denied; they could — now true.)
+- **2026-10-11** — Bot: no totem trip while you're within your reach + 250 px of red or its totem (TOTEM_CLEAR). Round 7 BECKY leashed a creep, took a step, saw your burst and dropped it on 6 of 12 trips; now it waits for an open moment instead.
+- **2026-10-10** — Tower health +600 flat (LANE_TOWER_EXTRA; still +185 a round): round 1 2000 → 2600, R5 2740 → 3340, R8 3295 → 3895, R12 4035 → 4635. A wave's burst on a tower is about the same every round (worst 15 s ≈ 900–1,400 across three runs; creep damage doesn't grow), so early towers crumbled the moment a wave got there (43–62% in 15 s, rounds 1–3). Flat so it helps most early. Watch round length; trim toward +400 if rounds drag.
+- **2026-10-10** — Totem reward 2 → 1 siege minion: two was too much (round 8: red's totems fed 6 siege minions, 40% of the damage to your tower).
+- **2026-10-10** — Totem LATCH_LIFE 80 → 45 s (a latched creep loses 1/45 of its max health a second): two latched melee creeps did 3,360 before dying — one uncontested trip always destroyed it (3,000) for 2 siege minions. Now a melee creep deals ~945 (32%), a 2-melee trip ~63%: two trips at least, with a window to answer it.
+- **2026-10-10** — Totem fix: latched creeps hit the totem only from within 40 px of it, ranged ones included (a latched ranged creep used its 400 px range — BOOPed away, it kept shooting the totem from far off; now it walks back in like a melee one).
+- **2026-10-10** — BECKY SHADE damage 140/175/220 → 120/150/190 (the trim after the SHADE/RUMOR swap): round 8 red BECKY went 6–0 on a KYLE who couldn't reach her — SHADE hit 24 of 45 for ~230 each (5,541). ~14% less per hit; range, cooldown, cost unchanged.
+- **2026-10-10** — From KYLE's round 7 (vs KAREN): the getaway mana reserve (BOOP / dash / blink cost, your hero within 1200 px) now covers every ability a bot casts that isn't aimed at you, not just wave-clear — most of KYLE's drain was IGNITE / SHOCK on creeps from its general ability step; it sat at 2–60 mana for minutes and KAREN reached it with no BOOP four times (1055 → 316, 946 → 291, 850 → 375, 890 → 377 in ~4 s each).
+- **2026-10-10** — Key runs (red leashing a creep to open your tower's shield) now count tower shots: its creeps must soak long enough for it to walk from the waiting spot into attack range and land 3 hits (tower ≈ 100 dmg/s to creeps, scaled with their health; e.g. CHAD needs ~3.9 s = a 390+ hp melee, KAREN ~5.3 s). One creep if it lasts, else two (leash points allowing: two melee); nothing that lasts → no run. A run whose creeps get hurt on the way gives up before sending them ('not worth it'). Why: of 31 sent runs since 10-07, red hit your tower ~0–1.5 s in most — a half-health melee or a ranged creep (3 shots) died before it got there. The red_key event now logs the creeps, soak and need.
+- **2026-10-10** — From CHAD's round 6 (vs BECKY): the diver's patience (wait for your escape to be spent) runs out when it has lost 20% of its health in the last 4 s — it stood in BECKY's poke range waiting out her GHOST and went 48% → 12% in 5 s, twice.
+- **2026-10-10** — From KAREN's round 5 (vs KYLE): in a combo, a SHOVE followed by GRIND ends the charge on you instead of 90 px past — the knock-aside plus the overshoot left you outside the spin (GRIND hit you 3 of 14; her combos took 0–12%).
+- **2026-10-10** — From BECKY's round 4 (vs CHAD): an outmatched bot with you in reach still won't walk in or attack creeps near you, but now casts its wave-clear spells from where it stands — BECKY held 900–1,100 px off at full mana casting nothing while your wave hit her tower (POUNCE's reach kept her 'outmatched, you're in reach' all round).
+- **2026-10-10** — From KYLE's round 3 (vs KAREN): (1) the zoner stokes your burn only from outside your reach, or while it's winning the trade and above retreat_at + 10% — it stood attacking KAREN while she GRINDed it from 74% to 4%, three times; (2) every bot's wave-clear casts keep mana for its getaway (BOOP / dash / blink) while your hero is within 1200 px — KYLE pushed itself to 2–5 mana for ~80 s with KAREN on top of it and no BOOP to peel.
+- **2026-10-10** — Bot retreat, from KAREN's round 1 (0–5, every death a late retreat): (1) its pre-retreat hesitation ends early if it loses 10% more health during it — early bots still fight on a moment, but no longer stand frozen while burst (she went 38% → 2%); (2) under retreat_at + 10% and outmatched (odds below need) with you near, it heads home instead of walking back in (she pushed into your half at 31% with odds 0.3). Sloppiness kept, bug-look removed. (3) no hesitation at all when it first notices already 10%+ under its line (CHAD came out of a combo at 19% and stood a second next to you).
+- **2026-10-10** — CHAD FLURRY damage per pulse 90 → 70 (level 1: 270 → 210 total): with POUNCE's tether, STARS and attacks his round-1 combo did ~470 in 2 s, killing a 700-health KYLE from 70%. Bot fix: the diver no longer hunts below its own retreat line (30%) unless it's a sure kill (one POUNCE + one attack) — it POUNCEd at 7% health and died.
+- **2026-10-10** — From the BECKY run (6–0): (1) BECKY keeps out of your attack reach + real gap-closers (POUNCE, SHOVE) — it counted your GHOST blink too, so a mirror BECKY kept 1000+ px off and barely played (holding 57%, wary 60%); (2) KYLE only opens with a BOOP pull when a follow-up can reach you after it — PUNISH (≈120 px reach) counted, so pulls ended with nothing cast; (3) KAREN's threat zone also counts you hitting her wave's creeps from range (a ranged hero never stepped within it); (4) a key run gives up 2.5 s after sending its creep if your shield is still up (it stood at the waiting spot 4 s). CHAD's STARS: he keeps facing where he fired for 0.3 s (he fired backwards while walking, facing his shot for a single frame).
+- **2026-10-10** — BECKY: SHADE and RUMOR swap damage, SHADE's cooldown up to hold her total. SHADE 85 / 110 / 140 → 140 / 175 / 220, cooldown 6 / 6 / 4.5 → 7 / 7 / 5.25; RUMOR 140 / 175 / 220 → 85 / 110 / 140 (blind unchanged). The harder skill (an aimed long-range line with a windup, 60% up close) now pays the most; RUMOR becomes utility (blind, wave chip). RUMOR had been her main damage (red's RUMOR 1680 vs SHADE 836 in one round). Ability damage per second about where it was (level I ≈ 28.5 vs 28).
+- **2026-10-09** — BECKY · the artillery (hero mind): keeps out of your threat reach + 60 px (steps back out, then farms from there); from round 4 pokes you freely (was only when you're vulnerable) but fires SHADE / RUMOR at you only when you're predictable — standing still, or holding a straight line ~0.5 s — else saves them or spends them on creeps; from round 7 a 100 px margin. Matchups: +100 vs CHAD (POUNCE reach), +40 vs KAREN.
+- **2026-10-09** — CHAD · the diver (hero mind), impulsive → patient: rounds 1–3 trades like a brawler and hunts below 25% health (POUNCE when in reach, else chases up to 900 px with attacks; never under your tower); from round 4 trades only when you're vulnerable, holds his combo until your escape (BOOP / GHOST / SHOVE / POUNCE) is spent, hunts below 35%; from round 7 below 40%. Matchups: hunts 10% sooner vs BECKY, 10% later vs KAREN.
+- **2026-10-09** — KYLE · the zoner (hero mind): keeps you burning — attacks you while you burn from his fire and you're in range (each hit restarts it); BOOPs between you when a melee hero gets within 200 px (260 vs CHAD); from round 4 BOOPs from behind you to knock you into his IGNITE when you stand within 180 px of its edge; from round 7 drops IGNITE on his own low creeps near you (farming them = standing in fire). Matchups: +40 stance vs KAREN (out of her threat zone), −60 vs BECKY (step in to reach her).
+- **2026-10-09** — Hero stances: where each red hero stands relative to its own front creep comes from its WORKING RANGE — the shortest reach among the tools it uses on the wave (its attack and its wave-clear abilities, range bonuses included), so it stands where all of them reach the enemy creeps, never at its longest spell's range with the rest idle — plus bravery from toughness (max health now ÷ base) and lifesteal: hold_back = base + on_wave × working range − tough_pull × (toughness − 1) − sustain_pull × lifesteal, clamped. KYLE 0.7 × his attack reach (≈ 294 fresh); CHAD in the wave (TRAP at his feet); KAREN in the clash; BECKY 0.75 × her attack reach (≈ 390, not SHADE's 760). Was a fixed hold_back per personality type. Snapshots log `hold` and `reach`.
+- **2026-10-09** — Hero minds (IDEAS.md): each red hero plays its own personality (`hero_minds.gd`) — the four old types are reference templates (`personality_templates.gd`, pinned only by experiments). KAREN · the anchor: hold-back 20 → −30 (in the clash), GRIND on waves only for kills / heal / a 4+ clump, front creeps first, threat zone 250 (350 from round 4, 400 from 8; ±50 by matchup). All bots: wave steps (farm / clear / push) skipped by dull bots at a third the rate (KAREN skipped farming 19 times in one round).
 - **2026-10-09** — Red's hero order, two bugs: (1) round 1's red was built by the lane behind the hero-select screen before the run had a seed — right after launching the game that was always CHAD — and picking your hero didn't rebuild it; now `main.gd repick_bot()` rebuilds red from the run's seed when you pick. (2) The per-run shuffle drew from a freshly seeded RNG in a way that often left the order untouched (every run KYLE, CHAD, KAREN, BECKY); it now sorts the heroes by a per-hero hash of the seed (even: ~500 of 2000 runs per hero first). Checked the wider pattern: the shop's and red's seeded rolls draw evenly (no bias), and after a run the game resets before hero select, so round 1's towers / creeps / red build are always fresh — red's hero was the only thing built from the missing seed.
 - **2026-10-09** — Red's hero order: the four heroes are shuffled once per run (seeded) and that order repeats all run — every hero once every 4 rounds, never twice in a row. Was rolled independently each round (the KYLE run met red KYLE in rounds 5–7 and 11–12 back to back).
 - **2026-10-08** — Red KYLE's BOOP (from the 2026-10-08 run: 42 of 52 BOOPs were combo pulls, half with nothing cast after, and none used to escape): it only opens a combo with BOOP when a damage ability is ready to follow; below 50% health it keeps BOOP for getting away (unless it's a kill); its escape BOOP fires when you're chasing within its push reach ×1.2 (was within 1.6× its radius).

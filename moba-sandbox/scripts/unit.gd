@@ -18,7 +18,8 @@ const TEAM_COLORS := [Color("#4f8ff7"), Color("#ef5350")]  # blue (you), red
 ## the victim switch to the attacker (the Dota rule — don't dive for free).
 const HERO_AGGRO := 2.0
 ## Your own creeps below this share of their health can be denied: attack
-## them yourself and the killing blow pays nobody.
+## them yourself and the killing blow pays nobody. Not in overtime (no_gold):
+## nothing pays then, so there's no such thing as a deny.
 const DENY_BELOW := 0.5
 
 ## Damage by target type (balancing dials). An ability hit carries a `hit`
@@ -392,7 +393,7 @@ func attack_time_mult() -> float:
 
 ## Can a hero of `by_team` deny this unit right now?
 func deniable_by(by_team: int) -> bool:
-	return team == by_team and is_in_group("creeps") and is_targetable() and hp < max_hp * DENY_BELOW and bounty > 0  # (a creep worth no gold: nothing to deny)
+	return team == by_team and is_in_group("creeps") and is_targetable() and hp < max_hp * DENY_BELOW and bounty > 0 and not no_gold  # (a creep worth no gold, or overtime: nothing to deny)
 
 
 func is_targetable() -> bool:
@@ -459,8 +460,8 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 		if bounty > 0 and killed_by and killed_by.is_in_group("heroes"):
 			if killed_by.team != team:
 				killed_by.earn_gold(bounty, position, is_in_group("creeps"))
-			elif is_in_group("creeps"):
-				killed_by.on_deny(position, self)  # its own side's blow: denied, nobody is paid
+			elif is_in_group("creeps") and not no_gold:
+				killed_by.on_deny(position, self)  # its own side's blow: denied, nobody is paid (overtime: just a death)
 		_die()
 
 

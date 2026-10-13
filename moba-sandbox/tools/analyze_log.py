@@ -7,6 +7,11 @@
     python tools/analyze_log.py --round 12       # also a detailed look at one round
     python tools/analyze_log.py --list           # recent logs
 
+A run saved and resumed later (Continue) writes a new log per sitting, marked
+with a "continue" event; the parts share the run's seed. They're stitched back
+into one run: a round that appears in two parts (quit mid-round, then resumed
+from its start) counts from the later part.
+
 Sections: run header · per-round table (headline metrics) · why each round went
 the way it did (towers, waves, creep kills, siege) · red's behaviour per round ·
 anomalies worth a look · trends across the run. Works on older logs too: what a
@@ -63,6 +68,56 @@ def load(path):
 
 def complete(events):
     return any(e["type"] == "round_end" for e in events)
+
+
+def run_seed(events):
+    return next((e.get("seed") for e in events if e["type"] == "run_start"), None)
+
+
+def is_continue(events):
+    return any(e["type"] == "continue" for e in events)
+
+
+def chain(path):
+    """The parts of the run `path` belongs to, oldest first: each part that starts
+    with a "continue" event joins on to the newest earlier log with the same seed
+    (a replay shares the seed too, but has no continue event, so it stays separate)."""
+    seed = run_seed(load(path))
+    if seed is None:
+        return [path]
+    same = sorted((p for p in find_logs() if run_seed(load(p)) == seed), key=os.path.basename)
+    key = lambda q: os.path.normcase(os.path.abspath(q))
+    i = next((j for j, q in enumerate(same) if key(q) == key(path)), -1)
+    if i < 0:
+        return [path]
+    lo = i
+    while lo > 0 and is_continue(load(same[lo])):
+        lo -= 1
+    hi = i
+    while hi + 1 < len(same) and is_continue(load(same[hi + 1])):
+        hi += 1
+    return same[lo:hi + 1]
+
+
+def stitch(paths):
+    """One run's events and rounds from its parts; later parts replace a round they replay."""
+    rounds = collections.OrderedDict()
+    events = []
+    replayed = []
+    for p in paths:
+        ev = load(p)
+        events += ev
+        for n, r in split_rounds(ev).items():
+            if n in rounds and r.start:
+                if rounds[n].start:
+                    replayed.append(n)
+                rounds[n] = r
+            elif n not in rounds:
+                rounds[n] = r
+            else:
+                rounds[n].ev += r.ev  # (shop events after a round: same round number, no round_start)
+    rounds = collections.OrderedDict(sorted(rounds.items()))
+    return events, rounds, replayed
 
 
 def pick(arg, any_log):
@@ -183,11 +238,22 @@ def melt(r, side):
 
 # ------------------------------------------------------------------ sections
 
-def header(path, events, rounds):
-    rs = next((e for e in events if e["type"] == "run_start"), {})
+def header(paths, events, rounds, replayed=()):
+    rs = next((e for e in reversed(events) if e["type"] == "run_start"), {})  # (the newest part: its build)
     rp = next((e for e in events if e["type"] == "replay"), None)
-    end = next((e for e in events if e["type"] == "run_end"), None)
-    print("# Run %s" % os.path.basename(path))
+    end = next((e for e in reversed(events) if e["type"] == "run_end"), None)
+    print("# Run %s" % os.path.basename(paths[-1]))
+    if len(paths) > 1:
+        parts = []
+        for p in paths:
+            ev = load(p)
+            ns = sorted({e["round"] for e in ev if e["type"] == "round_start"})
+            v = next((e.get("version") for e in ev if e["type"] == "run_start"), "?")
+            span = ("rounds %d–%d" % (ns[0], ns[-1]) if len(ns) > 1 else "round %d" % ns[0]) if ns else "no rounds"
+            parts.append("%s (%s, %s)" % (os.path.basename(p), span, v))
+        print("- stitched from %d saved sittings: %s" % (len(paths), " → ".join(parts)))
+        if replayed:
+            print("- replayed after a continue (quit mid-round; the later try counts): round %s" % ", ".join(map(str, replayed)))
     heroes = sorted({r.start.get("hero", "?") for r in rounds.values() if r.start})
     print("- hero(es): %s · seed %s · version %s · cast indicator %s" % (
         ", ".join(heroes) or rs.get("hero", "?"), rs.get("seed", "?"), rs.get("version", "not logged (before 2026-10-08)"),
@@ -403,13 +469,13 @@ def main():
         for p in find_logs()[:15]:
             ev = load(p)
             ends = [e for e in ev if e["type"] == "round_end"]
-            print("%s  %s  rounds %d  %s" % (os.path.basename(p), next((e.get("hero") for e in ev if e["type"] == "run_start"), "?"),
-                                          len(ends), "complete" if ends else "unfinished"))
+            print("%s  %s  rounds %d  %s%s" % (os.path.basename(p), next((e.get("hero") for e in ev if e["type"] == "run_start"), "?"),
+                                          len(ends), "complete" if ends else "unfinished",
+                                          "  (continues an earlier log)" if is_continue(ev) else ""))
         return
-    path = pick(a.log, a.any)
-    events = load(path)
-    rounds = split_rounds(events)
-    header(path, events, rounds)
+    paths = chain(pick(a.log, a.any))
+    events, rounds, replayed = stitch(paths)
+    header(paths, events, rounds, replayed)
     round_table(rounds)
     for r in rounds.values():
         if r.start:

@@ -210,7 +210,7 @@ func _play_round() -> Dictionary:
 		"deaths": lane.deaths,
 		"waves": lane.wave,
 		"bot_hero": bot.def["name"] if bot else "",
-		"bot_personality": bot.personality if bot else "",
+		"bot_personality": (bot.mind_name if bot.mind_name != "" else bot.personality) if bot else "",
 		"bot_smartness": snappedf(bot.smartness, 0.01) if bot else 0.0,
 		"your_tower": snappedf(yours.hp / yours.max_hp, 0.01),
 		"enemy_tower": snappedf(theirs.hp / theirs.max_hp, 0.01),

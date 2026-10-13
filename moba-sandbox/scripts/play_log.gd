@@ -138,7 +138,7 @@ static func round_start(main: Node) -> void:
 		red = {"upgrades": Run.red_upgrades.duplicate(), "levels": Run.red_levels.duplicate(), "gold": bot.gold,
 			"smartness": snappedf(float(bot.get("smartness")), 0.01)}
 		if dev():
-			red["personality"] = str(bot.get("personality"))
+			red["personality"] = str(bot.get("mind_name")) if str(bot.get("mind_name")) != "" else str(bot.get("personality"))  # its hero's own personality (or a pinned template)
 	event("round_start", {"hero": _round["hero"], "bot_hero": _round["bot_hero"], "gold": main.hero.gold,
 		"levels": Run.levels.duplicate(), "upgrades": Run.upgrades.duplicate(), "difficulty": Run.difficulty(), "red": red})
 

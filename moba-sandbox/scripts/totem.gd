@@ -7,13 +7,13 @@ extends "res://scripts/unit.gd"
 ## it — no hero, ability or other creep can touch it — and it wears each of
 ## them down (a creep lasts ~LATCH_LIFE s on it). Its ring fills like a power
 ## meter as it's hurt (both sides see it); destroying it pays its `reward`
-## (lane.gd TOTEM_REWARD / totem_reward_for — 2 siege minions today; the reward
+## (lane.gd TOTEM_REWARD / totem_reward_for — 1 siege minion today; the reward
 ## is data, so it can be swapped for another type), and a new one rises later.
 
 const RADIUS := 44.0
-const MAX_HP := 3000.0     # ~75 s for 2 latched melee creeps (21 damage a second each)
+const MAX_HP := 3000.0     # 2 latched melee creeps (21 damage a second each) get ~63% before it wears them down: two trips at least
 const LATCH := 110.0       # px past its edge: a creep you lead this close latches on
-const LATCH_LIFE := 80.0   # s a creep lasts on it (it takes 1/80 of its max health a second)
+const LATCH_LIFE := 45.0   # s a creep lasts on it (it takes 1/45 of its max health a second; was 80 — one 2-creep trip destroyed it)
 const CHIP_EVERY := 0.5
 const SHAPES := ["circle", "triangle", "square", "hexagon"]  # the pole: one of each hero's shape
 
@@ -21,6 +21,7 @@ var owner_team := 0        # whose side it's on (only that side's creeps latch a
 var reward := {}           # what destroying it pays: {"kind": ..., + that kind's fields} (lane.gd TOTEM_REWARDS)
 var _chip := 0.0
 var _rise := 0.0           # 0 → 1 as it appears
+var _glow_t := 0.0         # drives the glow's slow pulse
 
 
 func _init(owner: int, at: Vector2) -> void:
@@ -61,6 +62,7 @@ func in_latch(c: Node2D) -> bool:
 func _process(delta: float) -> void:
 	tick_unit(delta)
 	_rise = minf(1.0, _rise + delta * 1.5)
+	_glow_t += delta
 	_chip -= delta
 	if _chip <= 0.0 and is_targetable():
 		_chip += CHIP_EVERY
@@ -75,6 +77,13 @@ func _draw() -> void:
 	var a := _rise
 	# the latch ring: where a creep you lead latches on
 	draw_arc(Vector2.ZERO, radius + LATCH, 0.0, TAU, 64, Color(col, 0.18 * a), 2.0)
+	# the glow: soft layered halo in its side's colour, pulsing slowly — stronger as its meter fills
+	var pulse := 0.5 + 0.5 * sin(_glow_t * 2.2)
+	var glow_r := radius * (1.55 + 0.12 * pulse)
+	var strength := (0.55 + 0.45 * meter()) * (0.75 + 0.25 * pulse) * a
+	for i in 6:
+		var f := 1.0 - float(i) / 6.0
+		draw_circle(Vector2.ZERO, glow_r * (0.45 + 0.55 * f), Color(col.lightened(0.35), 0.05 * strength))
 	# the power meter: a ring that fills clockwise from the top as it's hurt
 	draw_arc(Vector2.ZERO, radius + 12.0, 0.0, TAU, 48, Color(0, 0, 0, 0.45 * a), 8.0)
 	var m := meter()
@@ -100,6 +109,10 @@ func _draw() -> void:
 	for i in 32:
 		oval.append(Vector2(hw * cos(TAU * i / 32.0), top + eh * sin(TAU * i / 32.0)))
 	draw_colored_polygon(oval, Color(col.lightened(0.25), a))
+	var shine := PackedVector2Array()  # a glowing core on the top, breathing with the pulse
+	for i in 24:
+		shine.append(Vector2(hw * 0.55 * cos(TAU * i / 24.0), top + eh * 0.55 * sin(TAU * i / 24.0)))
+	draw_colored_polygon(shine, Color(col.lightened(0.7), (0.35 + 0.35 * pulse) * a))
 	var rim := Color(0, 0, 0, 0.65 * a)
 	oval.append(oval[0])
 	draw_polyline(oval, rim, 2.5)

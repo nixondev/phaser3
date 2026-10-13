@@ -84,7 +84,7 @@ const TOTEM_X := 1000.0
 const TOTEM_Y := 560.0
 const TOTEM_FIRST := 90.0
 const TOTEM_RESPAWN := 45.0
-const TOTEM_REWARD := {"kind": "siege", "count": 2}
+const TOTEM_REWARD := {"kind": "siege", "count": 1}  # was 2 — too much (round 8: 6 siege minions did 40% of your tower damage)
 const TOTEM_REWARDS := {
 	"siege": {"pay": "_reward_siege", "text": "+%d SIEGE"},  # siege minions out with that side's next wave
 }

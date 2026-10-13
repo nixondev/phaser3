@@ -96,6 +96,7 @@ const CHARGE_GAP := 0.5
 
 ## The current hero (an entry of heroes.gd LIST) and its stats.
 var hero_index := 0
+var _face_hold := 0.0  # s left facing the way it last fired (abilities with face_hold)
 var def: Dictionary
 var abilities: Dictionary
 var speed := 360.0
@@ -251,6 +252,7 @@ func set_hero(i: int) -> void:
 func _process(delta: float) -> void:
 	tick_unit(delta)
 	hero_aggro = maxf(0.0, hero_aggro - delta)
+	_face_hold = maxf(0.0, _face_hold - delta)
 	for k: String in cooldowns:  # cooldowns and charges keep running while dead
 		var cd_delta := delta
 		if Unit.ability_haste > 0.0 and (k != "R" or Unit.haste_ult):  # overtime: cooldowns run shorter
@@ -314,9 +316,10 @@ func _process(delta: float) -> void:
 			position = _target
 			_target = null
 		else:
-			facing = to.normalized()
+			if _face_hold <= 0.0:
+				facing = to.normalized()
 			var before := position
-			position += facing * step
+			position += to.normalized() * step
 			var blocker := push_out()
 			# Blocked: walk round the obstacle along its edge. Pick a side once
 			# (the one that turns you towards the destination; right if dead
@@ -858,7 +861,8 @@ func _update_attack() -> void:
 		_target = attack_target.position  # close in
 		return
 	_target = null
-	facing = to.normalized()
+	if _face_hold <= 0.0:
+		facing = to.normalized()
 	if _attack_cd <= 0.0:
 		_attack_cd = attack_interval()
 		_volley += 1
@@ -945,6 +949,8 @@ func cast(slot: String, point: Vector2) -> void:
 		_log_cast(slot, a, point)
 		return
 	_cast_effects(a, point, dmg)
+	if float(a.get("face_hold", 0.0)) > 0.0:
+		_face_hold = float(a["face_hold"])  # keeps facing where it fired for a moment (STARS: shots read as coming from where it points)
 	_log_cast(slot, a, point)
 	if slot == "Q" and mod("echo") > 0.0:  # Echo: the same shot again, half strength
 		var aim_dir := (point - position).normalized()

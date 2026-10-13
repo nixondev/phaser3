@@ -55,7 +55,7 @@ const LIST := [
 	{"id": "boots", "tier": "common", "name": "Boots", "text": "+25 move speed", "mods": {"speed": 25.0}},
 	{"id": "salve", "tier": "common", "name": "Salve", "text": "+6 health regen", "mods": {"hp_regen": 6.0}},
 	{"id": "siphon", "tier": "common", "name": "Siphon", "text": "+15 mana per last hit", "mods": {"last_hit_mana": 15.0}},
-	{"id": "scavenger", "tier": "common", "name": "Scavenger", "text": "Denying a creep restores 25 mana and 40 health", "mods": {"deny_mana": 25.0, "deny_heal": 40.0}},
+	{"id": "scavenger", "tier": "common", "name": "Scavenger", "text": "Denying a creep restores 25 mana and 40 health (before overtime)", "mods": {"deny_mana": 25.0, "deny_heal": 40.0}},
 	{"id": "heavy_hands", "tier": "common", "name": "Heavy Hands", "text": "Attacks deal +40% damage but take 25% longer", "mods": {"attack_damage_pct": 0.4, "attack_interval_pct": 0.25}},
 	{"id": "homeguard", "tier": "common", "name": "Homeguard", "text": "Inside your tower's range: +25% attack speed, +5 health regen", "mods": {"home_attack_speed": 0.25, "home_regen": 5.0}},
 	{"id": "rally_cry", "tier": "common", "max": 2, "name": "Rally Cry", "text": "Leashed creeps, and ones latched on your totem, deal +30% damage and take 30% less", "mods": {"leash_damage": 0.3, "leash_armor": 0.3}},
@@ -89,7 +89,7 @@ const LIST := [
 	{"id": "reserve", "tier": "epic", "name": "Reserve", "text": "Your Q holds 2 charges", "mods": {"q_charges": 1.0}},
 	{"id": "afterimage", "tier": "epic", "name": "Afterimage", "text": "Dashes and blinks leave a decoy: enemies chase it for 2 s, not you", "mods": {"afterimage": 2.0}},
 	{"id": "hunters_mark", "tier": "epic", "name": "Hunter's Mark", "text": "Abilities mark heroes 4 s; your next attack on one deals +15% of its missing health", "mods": {"hunters_mark": 0.15}},
-	{"id": "recruit", "tier": "epic", "name": "Recruit", "text": "Creeps you deny rise at half health and fight for 6 s (worth no gold)", "mods": {"recruit": 6.0}},
+	{"id": "recruit", "tier": "epic", "name": "Recruit", "text": "Creeps you deny rise at half health and fight for 6 s, worth no gold (before overtime)", "mods": {"recruit": 6.0}},
 
 	{"id": "reinforcement", "tier": "wave", "price": 500, "max": 3, "name": "Reinforcement", "text": "+1 melee creep in each of your waves", "mods": {}, "wave": {"extra_melee": 1}},
 	{"id": "healing_aura", "tier": "wave", "price": 350, "max": 1, "name": "Healing Aura", "text": "Ranged creeps heal nearby allies 8/s (you too)", "mods": {}, "wave": {"heal_aura": 8.0, "heal_radius": 250.0}},

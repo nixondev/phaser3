@@ -61,6 +61,8 @@ func _ready() -> void:
 	_panel.draw.connect(_draw_screen)
 	_panel.gui_input.connect(_on_gui_input)
 	add_child(_panel)
+	if Run.phase == "play":
+		Run.save_continue()  # a round is starting: Continue comes back here
 	_refresh()
 
 
@@ -101,6 +103,7 @@ func _round_over(won: bool) -> void:
 	if not won:
 		Run.phase = "over"
 		Run.record_best()
+		Run.clear_continue()  # the run is over: nothing to continue
 	else:  # endless: every win leads to the shop
 		Run.gold += Run.WIN_GOLD
 		Run.phase = "shop"
@@ -108,6 +111,7 @@ func _round_over(won: bool) -> void:
 	_refresh()
 	if Run.phase == "shop":
 		Run.red_shop()  # red spends too; its next bot plays the build
+		Run.save_continue()  # quit in the shop: Continue comes back to it (not to the round you just won)
 		PlayLog.event("shop_open", {"gold": Run.gold})
 		PlayLog.event("red_shop", {"bought": Run.red_bought.duplicate(), "red_upgrades": Run.red_upgrades.duplicate(),
 			"red_levels": Run.red_levels.duplicate(), "red_gold_left": Run.red_gold})
@@ -124,6 +128,7 @@ func pick(i: int) -> void:
 	hero.start_ult_cooldown()  # picking rebuilt the hero (cooldowns reset): round 1 opens with the ultimate cooling down too
 	if get_parent().has_method("repick_bot"):
 		get_parent().repick_bot()  # red for round 1, from this run's seed
+	Run.save_continue()
 	_refresh()
 	if PlayLog.is_on():
 		PlayLog.run_start()
@@ -210,7 +215,21 @@ func open_history() -> void:
 	get_parent().add_child(h)
 
 
+## Continue the saved run: back to the start of the round it was on.
+func continue_run() -> void:
+	var d := Run.load_continue()
+	if d.is_empty():
+		return
+	Run.from_dict(d)  # (its phase: "play" = the start of a round, "shop" = the shop after a win)
+	if PlayLog.is_on():  # a continued run gets its own play log (marked as one)
+		PlayLog.run_start()
+		PlayLog.event("continue", {"round": Run.round_num, "phase": Run.phase})
+	get_tree().paused = false
+	reload.emit()
+
+
 func new_run() -> void:
+	Run.clear_continue()
 	Run.reset()
 	get_tree().paused = false
 	reload.emit()
@@ -336,10 +355,21 @@ func _draw_pick(view: Vector2) -> void:
 	# under the cards: Training (practice, no run), and the play log switch in dev builds
 	var both := PlayLog.available()
 	var bw := 360.0
-	var bx := view.x / 2.0 - bw - 12.0  # first row, for everyone: Training and How to Play
-	_button(Rect2(Vector2(bx, 615 + dy + below), Vector2(bw, 48)), "Training mode", func() -> void: get_parent().start_training(),
-		true, Color("#80cbc4"))
-	_button(Rect2(Vector2(view.x / 2.0 + 12.0, 615 + dy + below), Vector2(bw, 48)), "How to play", open_help, true, Color("#90a4ae"))
+	var row1: Array = []  # first row, for everyone: Continue (a saved run), Training and How to Play
+	var saved := Run.load_continue()
+	if not saved.is_empty():
+		var where := "shop after round %d" % int(saved["round"]) if str(saved.get("phase", "")) == "shop" else "round %d" % int(saved["round"])
+		row1.append(["Continue  ·  %s  (%s)" % [where, Heroes.LIST[int(saved["hero"])]["name"]], continue_run, Color("#66bb6a")])
+	row1.append(["Training mode", func() -> void: get_parent().start_training(), Color("#80cbc4")])
+	row1.append(["How to play", open_help, Color("#90a4ae")])
+	var widths: Array = row1.map(func(b: Array) -> float: return maxf(bw, ThemeDB.fallback_font.get_string_size(b[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 40.0))
+	var total := 24.0 * (row1.size() - 1)
+	for wd: float in widths:
+		total += wd
+	var bx := view.x / 2.0 - total / 2.0
+	for i in row1.size():
+		_button(Rect2(Vector2(bx, 615 + dy + below), Vector2(widths[i], 48)), row1[i][0], row1[i][1], true, row1[i][2])
+		bx += float(widths[i]) + 24.0
 	# second row: the play log switch (dev / playtest builds: record this run), Run history, Cards (dev)
 	var row2: Array = []
 	if both:

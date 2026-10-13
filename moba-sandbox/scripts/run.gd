@@ -20,6 +20,8 @@ extends RefCounted
 
 const Upgrades := preload("res://scripts/upgrades.gd")
 const Heroes := preload("res://scripts/heroes.gd")
+const HeroMinds := preload("res://scripts/hero_minds.gd")
+const PersonalityTemplates := preload("res://scripts/personality_templates.gd")
 
 ## Rounds the hand-tuned DIFFICULTY table covers; past it, endless growth.
 const ROUNDS := 5
@@ -80,13 +82,18 @@ const SUPER := {"reaction": 0.12, "cast_gap": 0.35, "aim_error": 4.0, "last_hit_
 ## LANE GROWTH: the lane itself gets tougher over a run — the SAME for both
 ## sides (heroes don't scale) — in a straight line:
 ##   growth = 1 + LANE_GROWTH_STEP × (round − 1)
-##   tower HP = LANE_TOWER_HP × growth      creep HP = base × LANE_CREEP_START × growth
+##   tower HP = LANE_TOWER_HP × growth + LANE_TOWER_EXTRA      creep HP = base × LANE_CREEP_START × growth
 ## LANE_GROWTH_STEP is the best straight-line fit (rounds 1–20, starting at 1)
 ## to a model of an average player's damage growth: 1000 gold a round buys
 ## average picks (base 258, +3.14% damage each) at prices rising PRICE_RISE a
 ## pick → damage 1.0314^picks. Within 0.04 of that curve every round. See
 ## BALANCE.md; re-fit if the economy or the cards change.
 const LANE_TOWER_HP := 2000.0
+## A flat floor on top (2026-10-10): a wave's burst on a tower is about the same
+## every round (creep damage doesn't grow), so small early towers crumbled the
+## moment a wave reached them (worst 15 s: 43–62% of the tower in rounds 1–3).
+## Flat, not ×: the most help early, fading as the growth takes over.
+const LANE_TOWER_EXTRA := 600.0
 const LANE_CREEP_START := 0.7
 const LANE_GROWTH_STEP := 0.0925
 ## Late rounds: red's waves get +1 melee creep from RED_EXTRA_FROM, and another
@@ -95,6 +102,10 @@ const RED_EXTRA_FROM := 15
 const RED_EXTRA_EVERY := 5
 ## Where best_round is saved (tests point this elsewhere).
 static var settings := "user://settings.cfg"
+## Where the run in progress is saved at the start of every round (Continue on
+## the hero pick). Cleared when the run is lost or abandoned; quitting the game
+## mid-round keeps it (you replay that round — allowed for now).
+static var continue_file := "user://continue.save"
 const REROLL_COST := 50
 const REROLL_STEP := 25   # each reroll costs this much more — for the whole run (never resets), so chasing a combo gets dear
 ## Rising prices: every pick (card or ability level) makes everything cost
@@ -133,11 +144,10 @@ const DIFFICULTY := [
 	{"cast_gap": 0.9, "aim_error": 25.0},
 ]
 
-## The personality ladder: each red hero always plays its strongest
-## personality (bot.gd PERSONALITIES; picked from the 2026-10-01 autoplay
-## matrix), and gets smarter round by round: smartness SMART_START in round 1
+## The personality ladder: each red hero plays its own personality
+## (hero_minds.gd; each started from the type it played best in the 2026-10-01
+## autoplay matrix), and gets smarter round by round: smartness SMART_START in round 1
 ## up to 1.0 by SMART_FULL_ROUND. Personalities are never shown to the player.
-const SIGNATURE := ["opportunist", "brawler", "brawler", "farmer"]  # by hero: KYLE, CHAD, KAREN, BECKY
 const SMART_START := 0.3
 const SMART_FULL_ROUND := 6
 
@@ -168,9 +178,9 @@ static var red_bought: Array = []   # what red bought in the latest shop
 static var red_no_economy := false
 static var bot_stats_from := 0
 ## Autoplay experiments: pin red's hero (-1 = rolled per round as usual) and
-## give red's bot a personality (bot.gd PERSONALITIES; "" = standard).
+## pin a personality template (personality_templates.gd; "" = each hero's own).
 static var red_hero_fixed := -1
-static var red_personality := ""   # "" = the ladder (SIGNATURE); "standard" = the plain bot
+static var red_personality := ""   # "" = each hero's mind (hero_minds.gd); a type name pins that type (experiments); "standard" = the plain bot
 static var red_smartness := -1.0   # -1 = the ladder's per-round value
 const ECONOMY_CARDS := []  # none left: Midas removed 2026-10-02, Bounty Hunter gives no gold since 2026-10-04
 ## Highest round ever reached (saved in `settings`).
@@ -369,12 +379,21 @@ static func bot_hero_for(r: int) -> int:
 	return int(order[(maxi(r, 1) - 1) % order.size()])
 
 
-## Red's bot personality for hero `i`: its SIGNATURE (unless an experiment
+## A pinned personality template for red (unless an experiment
 ## pins one).
-static func red_personality_for(i: int) -> String:
+static func red_personality_for(_i: int) -> String:
+	return red_personality  # "" = the hero's own personality (hero_minds.gd); a type name = that template (experiments)
+
+
+## Red's card priorities when it shops for hero `i`: its own personality's
+## (or the pinned template's).
+static func red_shop_list(i: int) -> Array:
+	var p: Dictionary = {}
 	if red_personality != "":
-		return red_personality
-	return SIGNATURE[i] if i < SIGNATURE.size() else "standard"
+		p = PersonalityTemplates.TEMPLATES.get(red_personality, {})
+	elif i < Heroes.LIST.size():
+		p = HeroMinds.MINDS.get(str(Heroes.LIST[i]["name"]), {}).get("personality", {})
+	return p.get("shop", PersonalityTemplates.TEMPLATES["standard"]["shop"])
 
 
 ## Red's bot smartness this round (0 = dumb, 1 = its tuned personality).
@@ -392,7 +411,7 @@ static func lane_growth() -> float:
 
 ## Both towers' health this round.
 static func lane_tower_hp() -> float:
-	return LANE_TOWER_HP * lane_growth()
+	return LANE_TOWER_HP * lane_growth() + LANE_TOWER_EXTRA
 
 
 ## Both sides' creep health multiplier this round.
@@ -422,30 +441,6 @@ static func red_allowance() -> int:
 ## the pusher's, the only one that leashes; Midas and Bounty Hunter on none —
 ## red's short rounds can't repay economy cards). Simple, but it scales: damage
 ## and survival first, then the rest.
-const RED_PRIORITY := {
-	"standard": ["arcane_edge", "vigor", "whetstone", "quickdraw", "haste", "spellblade", "second_wind", "overcharge",
-		"colossus", "twin_shot", "echo", "hunters_mark", "reserve", "vampirism", "salve", "boots", "clean_finish",
-		"keen_eye", "adrenaline", "focus", "wellspring", "executioner", "bounty_hunter", "longbow", "tank_minion",
-		"reinforcement", "vanguard", "siege_training", "standard_bearer", "healing_aura", "sappers", "pathfinders",
-		"scavenger", "siphon"],
-	"brawler": ["vigor", "whetstone", "quickdraw", "serrated", "vampirism", "second_wind", "colossus", "spellblade",
-		"cold_read", "twin_shot", "arcane_edge", "aftershock", "hunters_mark", "salve", "haste", "spite", "boots",
-		"overcharge", "echo", "reserve", "afterimage", "kindling", "executioner", "clean_finish", "adrenaline",
-		"scavenger", "tank_minion", "reinforcement", "vanguard", "standard_bearer", "siege_training", "healing_aura",
-		"focus", "wellspring", "longbow", "siphon"],
-	"farmer": ["arcane_edge", "haste", "focus", "wellspring", "siphon", "keen_eye", "clean_finish", "bounty_hunter",
-		"echo", "reserve", "overcharge", "executioner", "adrenaline", "homeguard", "afterimage", "second_wind",
-		"scavenger", "recruit", "vigor", "whetstone", "quickdraw", "longbow", "salve", "boots", "colossus", "twin_shot",
-		"healing_aura", "reinforcement", "tank_minion", "siege_training", "vampirism"],
-	"pusher": ["reinforcement", "siege_training", "tank_minion", "command", "rally_cry", "sappers", "vanguard",
-		"standard_bearer", "pathfinders", "healing_aura", "siege_breaker", "quickdraw", "whetstone", "twin_shot",
-		"arcane_edge", "vigor", "haste", "boots", "colossus", "overcharge", "echo", "salve", "focus", "wellspring",
-		"longbow", "vampirism", "executioner", "siphon"],
-	"opportunist": ["arcane_edge", "overcharge", "echo", "haste", "hunters_mark", "kindling", "cold_read", "spellblade",
-		"reserve", "afterimage", "focus", "vigor", "boots", "wellspring", "colossus", "second_wind", "vampirism",
-		"whetstone", "quickdraw", "salve", "twin_shot", "executioner", "keen_eye", "clean_finish", "adrenaline",
-		"scavenger", "longbow", "tank_minion", "reinforcement", "siege_training", "healing_aura", "siphon"],
-}
 
 
 static func red_shop() -> Array:
@@ -463,7 +458,7 @@ static func red_shop() -> Array:
 			var to: int = red_levels[slot] + 1
 			if to <= Heroes.MAX_LEVEL and red_level_cost(slot, to) <= red_gold:
 				lv.append(slot)
-		var wanted: Array = RED_PRIORITY.get(red_personality_for(bot_hero_for(round_num + 1)), RED_PRIORITY["standard"])
+		var wanted: Array = red_shop_list(bot_hero_for(round_num + 1))
 		var cs := cards.filter(func(u: Dictionary) -> bool:
 			return red_card_cost(u) <= red_gold and Upgrades.can_offer(u, red_upgrades) and wanted.has(u["id"]) \
 				and not (red_no_economy and ECONOMY_CARDS.has(u["id"])))
@@ -492,6 +487,30 @@ static func red_shop() -> Array:
 static func next_round() -> void:
 	round_num += 1
 	phase = "play"
+
+
+## Save the run as it stands — at the start of a round, or as the shop opens
+## after a win (for Continue).
+static func save_continue() -> void:
+	if phase not in ["play", "shop"] or round_num < 1:
+		return
+	var f := FileAccess.open(continue_file, FileAccess.WRITE)
+	if f:
+		f.store_var(to_dict())  # (store_var keeps the types: ints stay ints)
+
+
+## The saved run in progress, or {} if there isn't one.
+static func load_continue() -> Dictionary:
+	if not FileAccess.file_exists(continue_file):
+		return {}
+	var f := FileAccess.open(continue_file, FileAccess.READ)
+	var d: Variant = f.get_var() if f else null
+	return d if d is Dictionary and d.has("round") and d.has("hero") else {}
+
+
+static func clear_continue() -> void:
+	if FileAccess.file_exists(continue_file):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(continue_file))
 
 
 static func to_dict() -> Dictionary:

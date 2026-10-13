@@ -63,6 +63,7 @@ func _show(open: bool) -> void:
 func _do_restart() -> void:
 	if in_run:
 		PlayLog.run_end("abandoned R%d" % Run.round_num)
+		Run.clear_continue()  # abandoned on purpose: nothing to continue
 		Run.reset()  # abandon: back to the hero pick
 	_show(false)
 	restart.emit()
