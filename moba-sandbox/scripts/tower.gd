@@ -105,7 +105,7 @@ func _pick_target() -> Node2D:
 	var best: Node2D = null
 	var best_hero := true
 	for u: Node2D in get_tree().get_nodes_in_group("units"):
-		if u.team == team or u.team < 0 or not _in_range(u) or u.is_in_group("towers"):
+		if u.team == team or u.team < 0 or not _in_range(u) or u.is_in_group("towers") or u.is_in_group("bullets"):
 			continue
 		if u.is_in_group("heroes") and u.hidden_by_decoy():
 			continue  # Afterimage: lost track of it

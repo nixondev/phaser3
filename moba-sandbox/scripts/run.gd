@@ -106,8 +106,6 @@ static var settings := "user://settings.cfg"
 ## the hero pick). Cleared when the run is lost or abandoned; quitting the game
 ## mid-round keeps it (you replay that round — allowed for now).
 static var continue_file := "user://continue.save"
-const REROLL_COST := 50
-const REROLL_STEP := 25   # each reroll costs this much more — for the whole run (never resets), so chasing a combo gets dear
 ## Rising prices: every pick (card or ability level) makes everything cost
 ## this much more for the rest of the run — for you and red alike. Buy what
 ## matters first, while it's cheap.
@@ -157,9 +155,8 @@ static var hero_index := 0
 static var gold := 0
 static var upgrades: Array = []
 static var run_seed := 0
-static var rerolls := 0   # this run so far (prices the next reroll)
-static var reroll_off := 0  # Bargain: gold off every reroll from now on
-## "Once" cards (Bargain): id -> the shop roll ("round:rerolls") that showed it.
+static var rerolls := 0   # this run so far (Gamble; seeds the shop roll)
+## "Once" cards: id -> the shop roll ("round:rerolls") that showed it.
 ## Shown once per run — skip it and it's gone.
 static var once_seen := {}
 ## Ability levels by LETTER — they stay when you pick a different hero.
@@ -193,7 +190,6 @@ static func reset() -> void:
 	gold = 0
 	upgrades = []
 	rerolls = 0
-	reroll_off = 0
 	once_seen = {}
 	levels = {"Q": 1, "W": 1, "E": 1, "R": 1}
 	red_gold = 0
@@ -276,10 +272,6 @@ static func load_best() -> int:
 	return best_round
 
 
-static func reroll_cost() -> int:
-	return maxi(5, REROLL_COST + REROLL_STEP * rerolls - reroll_off)
-
-
 ## The shop's offers after this round: OFFERS_PER_TIER per tier, the same for
 ## the same run seed, round and reroll count.
 static func shop_offers() -> Dictionary:
@@ -304,7 +296,7 @@ static func shop_offers() -> Dictionary:
 ## Spend gold on upgrade `id`. False when it can't be afforded or offered.
 ## Picks made so far (cards + ability levels bought) — drives rising prices.
 static func picks(ups: Array, lvls: Dictionary) -> int:
-	var cards := ups.filter(func(id: String) -> bool: return not Upgrades.find(id).has("on_buy")).size()  # (one-time shop cards like Bargain don't count)
+	var cards := ups.filter(func(id: String) -> bool: return not Upgrades.find(id).has("on_buy")).size()  # (one-time shop cards like Gamble don't count)
 	return cards + int(lvls.values().reduce(func(a, b): return a + b, 0)) - 4
 
 
@@ -337,16 +329,8 @@ static func buy(id: String) -> bool:
 		return false
 	gold -= card_cost(u)
 	upgrades.append(id)
-	if u.get("on_buy", "") == "halve_reroll":  # Bargain: the reroll price drops by half of what it is now (the climb carries on from there)
-		reroll_off += reroll_cost() / 2
-	return true
-
-
-static func reroll() -> bool:
-	if gold < reroll_cost():
-		return false
-	gold -= reroll_cost()
-	rerolls += 1
+	if u.get("on_buy", "") == "reroll":  # Gamble: the shop rolls new offers (run_screen.gd refreshes them)
+		rerolls += 1
 	return true
 
 
@@ -515,7 +499,7 @@ static func clear_continue() -> void:
 
 static func to_dict() -> Dictionary:
 	return {"round": round_num, "phase": phase, "hero": hero_index, "gold": gold,
-		"upgrades": upgrades.duplicate(), "seed": run_seed, "rerolls": rerolls, "reroll_off": reroll_off, "once_seen": once_seen.duplicate(), "levels": levels.duplicate(),
+		"upgrades": upgrades.duplicate(), "seed": run_seed, "rerolls": rerolls, "once_seen": once_seen.duplicate(), "levels": levels.duplicate(),
 		"red": {"gold": red_gold, "upgrades": red_upgrades.duplicate(), "levels": red_levels.duplicate()}}
 
 
@@ -528,7 +512,6 @@ static func from_dict(d: Dictionary) -> void:
 	run_seed = d["seed"]
 	rerolls = d["rerolls"]
 	once_seen = d.get("once_seen", {})
-	reroll_off = int(d.get("reroll_off", 0))
 	levels = d.get("levels", {"Q": 1, "W": 1, "E": 1, "R": 1}).duplicate()
 	var red: Dictionary = d.get("red", {})
 	red_gold = red.get("gold", 0)

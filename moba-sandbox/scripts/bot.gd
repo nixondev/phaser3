@@ -219,6 +219,7 @@ var _hesitate_hp := 0.0       # its health share when it started hesitating
 const HESITATE_HURT := 0.1    # losing this much more while hesitating ends it: it runs
 const LOW_MARGIN := 0.1       # outmatched with you near, it won't stay in under retreat_at + this
 var _deny_roll := {}
+var _capsule_roll := {}  # capsule id -> whether it bothers going for that one of yours
 ## This decision: does it see that you out-damage it (it noticed — odds =
 ## smartness)? Then it keeps out of your reach and won't farm inside it.
 var _wary := false
@@ -379,7 +380,7 @@ func _threatened(eh: Node2D) -> bool:
 ## creeps, or it needs the heal with 2+ in reach, or the clump is big (4+) —
 ## not just softening creeps for its own creeps to take.
 func _grind_worth(a: Dictionary, reach: float) -> bool:
-	var per: float = float(a.get("damage", 0.0)) * float(a.get("vs_creeps", 1.0)) * AbilityInfo.damage_scale(mods, "Q") * damage_mult * 0.8
+	var per: float = float(a.get("damage", 0.0)) * float(a.get("vs_creeps", 1.0)) * ability_scale("Q") * 0.8
 	var near := 0
 	var kills := 0
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
@@ -454,6 +455,8 @@ func _process(delta: float) -> void:
 		return
 	_cast_gap -= delta
 	_clock += delta
+	if is_instance_valid(enemy_hero) and enemy_hero.status_immune > 0.0:
+		_foe_guard_at = _clock  # saw your D go up (the public ring): it guesses the 60 s
 	if _react_left > 0.0:
 		_react_left -= delta
 	if _clock >= _hp_mark_at:
@@ -664,10 +667,37 @@ func _low_and_losing(foe: Node2D, hp_frac: float) -> bool:
 	return _race(foe) < float(_pv("race_need", STANDARD_RACE)) * WARY_RACE
 
 
+## Guard (D): red reaches for it like a person would — a beat after it gets
+## locked down (stunned, tethered, slowed hard) with you close, or when it's
+## low and being hit. Sharper bots react quicker.
+var _guard_seen := -1.0  # when the current trouble started (-1 = none)
+const GUARD_SLOWED := 0.3
+
+
+func _guard_tick(foe: Node2D, hp_frac: float) -> void:
+	if guard_cd > 0.0 or not is_targetable():
+		_guard_seen = -1.0
+		return
+	var close: bool = foe != null and position.distance_to(foe.position) <= _threat_reach(foe) + 100.0
+	var locked: bool = is_stunned() or (tether_left > 0.0 and not tether_owner) or move_slow >= GUARD_SLOWED  # its own POUNCE tether is no trouble
+	var trouble: bool = close and (locked or (hp_frac < 0.35 and _since_hit < 0.5))
+	if not trouble:
+		_guard_seen = -1.0
+		return
+	if _guard_seen < 0.0:
+		_guard_seen = _clock
+		return
+	if _clock - _guard_seen >= lerpf(0.6, 0.15, clampf(smartness, 0.0, 1.0)):
+		why = "guard"
+		guard()
+		_guard_seen = -1.0
+
+
 func _decide_step(trading_with: Node2D) -> void:
 	var home := Lane.base_of(team)
 	var hp_frac := hp / max_hp
 	var foe := _enemy_hero_alive()
+	_guard_tick(foe, hp_frac)
 	_wary = foe != null and (_clock < _shy_until or (_roll("notice_outmatched", smartness) and _race(foe) < float(_pv("race_need", STANDARD_RACE)) * WARY_RACE))
 	if _retreating and _danger_retreat:  # backing off from your burst: until clear of your reach, then shy for a moment
 		if foe == null or position.distance_to(foe.position) > _threat_reach(foe) + CLEAR_MARGIN:
@@ -715,6 +745,7 @@ func _decide_step(trading_with: Node2D) -> void:
 
 	_release_at = -1.0
 	var et := _enemy_tower()
+	_tow_guard(foe, et)
 	if _key != null and _key_tick(et, _enemy_hero_alive()):
 		return  # a key run in progress (before backoff: its creep takes the tower's shots in a moment)
 	if et and et.target == self:
@@ -725,6 +756,8 @@ func _decide_step(trading_with: Node2D) -> void:
 		return
 
 	var eh := _enemy_hero_alive()
+	if eh != null:
+		_hunt_decided = false  # you're up: the next time you die it decides afresh
 	if not _combo.is_empty():
 		why = "combo"
 		return  # mid-combo: _combo_tick drives it
@@ -743,8 +776,14 @@ func _decide_step(trading_with: Node2D) -> void:
 		return
 	if eh:
 		_log_pass(eh, _commit_no)
+	if _hunt_tick():
+		return
 	if _pressing() and _press():
 		why = "press"
+		return
+	if _bullet_tick():
+		return
+	if _capsule_tick(eh):
 		return
 	if _zone_tick(eh):
 		return
@@ -1125,7 +1164,7 @@ var _contest_until := 0.0
 
 
 func _wants_totem() -> bool:
-	return bool(_p.get("totem_keen", false)) or Run.round_num >= TOTEM_ALL 		or mod("leash_points") > 0.0 or mod("leash_damage") > 0.0
+	return bool(_p.get("totem_keen", false)) or Run.round_num >= TOTEM_ALL 		or mod("leash_points") > 0.0
 
 
 func _totem_tick(eh: Node2D) -> bool:
@@ -1178,6 +1217,293 @@ func _totem_tick(eh: Node2D) -> bool:
 	PlayLog.event("red_totem_trip", {"creeps": leashed.size(), "on_it": on, "meter": snappedf(mine.meter(), 0.01)})
 	why = "totem:trip"
 	_go(mine.position)
+	return true
+
+
+## THE CAPSULE BRAIN (power_capsule.gd). Red plays its own capsules with
+## reasons and contests yours; smartness is the ceiling. A dull red keeps the
+## old habit — candy on sight — through the "simple" roll. A sharp one opens
+## TWIN / SHIELD at once (permanent until spent: banking them is all downside),
+## banks RAMPAGE until a fight is brewing or its tower needs holding, PIERCE
+## until it's healthy and pushing, and SHELL until a kill window — you low, or
+## your D just seen (the ring is public; it guesses the 60 s), or you far from
+## your well. It spends a bank before it rots (BANK_ROT × its mind's
+## bank_nerve) or when it's about to have to run (death opens the bank to you),
+## walks back as far as CAPSULE_RETURN for one when the lane is quiet, and
+## lurks by your cracked capsule for the deny (deny_lurk × smartness). A sharp
+## red also TOWS a banked SHELL or RAMPAGE along (the player's leash: 2 points;
+## capsule_tow × smartness) so the open is at hand when its window comes —
+## and parks it (_tow_guard) the moment you close in (leashed it's open at any
+## health), it gets hurt, or a key run needs the points. Opening
+## takes seconds (300 hp), so windows are read a beat early, never mid-fight —
+## and never with you nearly dead (the kill outranks candy; SHELL is that
+## kill, so it's exempt) or with you healthy within CAPSULE_CONTEST of the
+## capsule (cracking it to half under your nose just hands you the deny).
+## Every call is logged — red_capsule_bank / red_capsule_open (reason + how
+## long it was banked) / red_capsule_lurk / red_capsule_tow / red_capsule_park
+## (why) / red_shell_block — for analyze-run.
+const CAPSULE_SEEK := 650.0
+const CAPSULE_DENY := 0.35
+const CAPSULE_RETURN := 1500.0  # how far it walks back for a banked one, lane quiet
+const BANK_ROT := 50.0          # s (× bank_nerve): a bank older than this is spent anyway
+const SHELL_LOW := 0.55         # your health share that opens its SHELL window
+const FOE_GUARD_CD := 60.0      # it saw your D: assumes it's down about this long
+const LURK_RANGE := 420.0       # where it waits by your cracked capsule for the deny
+const CAPSULE_CONTEST := 500.0  # you this close to its capsule: opening it hands you the deny
+const TOW_REACH := 300.0        # close enough to clip the leash on (red's stand-in for your screen-range click)
+const TOW_DANGER := 700.0       # you this close to the towed capsule (or to red): park it — protection back
+const TOW_START := 900.0        # it only picks one up with you at least this far from it and from red
+var _foe_guard_at := -1000.0    # when it last saw your D up (status_immune, the public ring)
+var _bank_logged := {}          # capsule id -> true: each decision logged once
+var _tow_roll := {}             # capsule id -> bool: whether this red tows this one (capsule_tow × smartness)
+var _open_logged := {}
+var _lurk_logged := {}
+
+
+func _capsule_tick(eh: Node2D) -> bool:
+	var best: Node2D = null
+	var best_why := ""
+	var lurk: Node2D = null
+	var tow: Node2D = null
+	for c: Node2D in get_tree().get_nodes_in_group("capsules"):
+		if not c.is_targetable() or not _safe(c.position):
+			continue
+		if _wary and _too_close_to_foe(c.position):
+			continue
+		var d := position.distance_to(c.position)
+		if c.owner_team == team:
+			var reason := _open_reason(c, eh)
+			if reason == "":
+				if not _bank_logged.get(c.get_instance_id(), false):
+					_bank_logged[c.get_instance_id()] = true
+					PlayLog.event("red_capsule_bank", {"power": c.power})
+				if tow == null and _tow_worth(c, eh, d):
+					tow = c
+				continue
+			if eh != null and c.power != "bullet" and eh.hp / eh.max_hp < SHELL_LOW:
+				continue  # you're nearly dead: the kill outranks candy (SHELL alone IS that kill)
+			if eh != null and c.position.distance_to(eh.position) < CAPSULE_CONTEST and eh.hp / eh.max_hp > 0.3:
+				continue  # you're on it and healthy enough to dare the deny: keep banking
+			if d > CAPSULE_RETURN:
+				continue
+			if d > CAPSULE_SEEK and eh != null and position.distance_to(eh.position) < 900.0:
+				continue  # the walk back is for a quiet lane, not a standoff
+			if best == null or d < position.distance_to(best.position):
+				best = c
+				best_why = reason
+		else:
+			if d > CAPSULE_SEEK:
+				continue
+			if not c.breakable_by(team):
+				if lurk == null and _lurk_worth(c, eh):
+					lurk = c  # above the line, but you're working on it: wait for the window
+				continue
+			var id := c.get_instance_id()
+			if not _capsule_roll.has(id):
+				_capsule_roll[id] = randf() < CAPSULE_DENY + (1.0 - CAPSULE_DENY) * smartness * 0.8
+			if not _capsule_roll[id]:
+				continue
+			if best == null or d < position.distance_to(best.position):
+				best = c
+				best_why = "deny"
+	if best != null:
+		why = "capsule:open" if best.owner_team == team else "capsule:deny"
+		if best.owner_team == team and not _open_logged.get(best.get_instance_id(), false):
+			_open_logged[best.get_instance_id()] = true
+			PlayLog.event("red_capsule_open", {"power": best.power, "why": best_why, "age": snappedf(best.age(), 0.1)})
+		if best.owner_team == team and best.leader == self:
+			toggle_leash(best)  # park it first: cracking it leashed is cracking it unprotected
+			PlayLog.event("red_capsule_park", {"power": best.power, "why": "opening"})
+		if attack_target != best:
+			order_attack(best.position)
+		return true
+	if lurk != null:
+		why = "capsule:lurk"
+		if not _lurk_logged.get(lurk.get_instance_id(), false):
+			_lurk_logged[lurk.get_instance_id()] = true
+			PlayLog.event("red_capsule_lurk", {"power": lurk.power, "left": snappedf(lurk.hp / lurk.max_hp, 0.01)})
+		var spot: Vector2 = lurk.position + (position - lurk.position).normalized() * LURK_RANGE
+		if position.distance_to(spot) > 40.0:
+			_go(spot)
+		return true
+	if tow != null:
+		why = "capsule:tow"
+		if position.distance_to(tow.position) <= TOW_REACH:
+			if toggle_leash(tow):
+				PlayLog.event("red_capsule_tow", {"power": tow.power})
+		else:
+			_go(tow.position)
+		return true
+	return false
+
+
+## Worth towing its banked capsule `c` (at distance `d`) along? Only the
+## forward-window powers — SHELL (a shorter, harder-to-stop walk) and RAMPAGE
+## (a grenade carried to the fight brewing) — picked up in passing while
+## healthy and unbothered, with the leash points free, by a red keen and sharp
+## enough (capsule_tow × smartness, rolled once per capsule).
+func _tow_worth(c: Node2D, eh: Node2D, d: float) -> bool:
+	if not (c.power == "bullet" or c.power == "rampage") or c.leader != null:
+		return false
+	if d > CAPSULE_SEEK:
+		return false
+	if hp / max_hp < 0.7 or _wary or _key != null:
+		return false
+	if leash_used() + c.leash_cost() > leash_capacity():
+		return false
+	if eh != null and (eh.position.distance_to(c.position) < TOW_START or eh.position.distance_to(position) < TOW_START):
+		return false
+	var id := c.get_instance_id()
+	if not _tow_roll.has(id):
+		_tow_roll[id] = randf() < float(_rule("capsule_tow", 0.5)) * smartness
+	return _tow_roll[id]
+
+
+## Towing housekeeping, every decision: park a towed capsule (unleash — its
+## half-health protection comes back) the moment dragging turns risky or the
+## leash points are needed. Parking is instant, so it isn't a behaviour slot.
+func _tow_guard(eh: Node2D, et: Node2D) -> void:
+	for c: Variant in leashed.duplicate():
+		if not (is_instance_valid(c) and c.is_in_group("capsules")):
+			continue
+		var park := ""
+		if eh != null and (eh.position.distance_to(c.position) < TOW_DANGER or eh.position.distance_to(position) < TOW_DANGER):
+			park = "you're close"
+		elif hp / max_hp < 0.55:
+			park = "hurt"
+		elif _key != null or (key_runs and et != null and et.is_targetable() and _key_open(et, true)):
+			park = "key run"
+		if park != "":
+			toggle_leash(c)
+			PlayLog.event("red_capsule_park", {"power": c.power, "why": park})
+
+
+## Why red opens its own capsule `c` now — "" banks it. Windows are read a
+## beat early because the break itself takes a few seconds.
+func _open_reason(c: Node2D, eh: Node2D) -> String:
+	var p: String = c.power
+	if p == "twin" or p == "shield":
+		return "keep"  # permanent until spent: waiting is all downside
+	if _roll("capsule_simple", clampf(1.0 - smartness * 1.1, 0.0, 1.0)):
+		return "simple"  # a dull red just takes the candy (the old habit)
+	if c.age() > BANK_ROT * float(_rule("bank_nerve", 1.0)):
+		return "rot"  # held long enough: spend it before it looks forgotten
+	if hp / max_hp < float(_pv("retreat_at", RETREAT_AT)) + 0.15:
+		return "before retreat"  # about to have to run — and dying opens the bank
+	match p:
+		"rampage":
+			if eh != null and position.distance_to(eh.position) < 900.0 and hp / max_hp > 0.6 and not _wary:
+				return "fight brewing"
+			if _defend_left > 0.0:
+				return "defending"  # its tower is being pressed: melt the wave on it
+		"pierce":
+			if hp / max_hp > 0.6 and not _wary and (eh == null or position.distance_to(eh.position) < 1100.0):
+				return "pushing"
+		"bullet":
+			if eh == null:
+				return ""
+			var window: bool = eh.hp / eh.max_hp <= SHELL_LOW
+			var since_d: float = _clock - _foe_guard_at
+			window = window or (since_d > 3.0 and since_d < FOE_GUARD_CD and eh.hp / eh.max_hp < 0.85)
+			if window and (lane == null or eh.position.distance_to(lane.base_of(eh.team)) > 900.0):
+				return "kill window"  # low, or D down — and no well to hide in
+	return ""
+
+
+## Worth lurking your capsule `c` (above the line) for the deny? Only once
+## you've chipped it and you're there working on it, and only while red's
+## healthy — standing by it mid-fight would look stupid, not patient.
+func _lurk_worth(c: Node2D, eh: Node2D) -> bool:
+	if eh == null or hp / max_hp < 0.55 or _wary:
+		return false
+	if c.hp > c.max_hp * 0.95 or eh.position.distance_to(c.position) > 350.0:
+		return false
+	return _roll("capsule_lurk", smartness * float(_rule("deny_lurk", 0.6)))
+
+
+## POWER-UPS while you're dead: your capsules lose their protection until you
+## respawn, and its map shows them (it knows of no others: alive, you're only
+## seen within CAPSULE_SEEK). Once per death it weighs breaking them against
+## pressing your tower — what they hold (HUNT_VALUE, × its mind's capsule_hunt)
+## against the push (more with its wave already at your tower) — counting only
+## ones it can reach and break with HUNT_SPARE s to spare; a dull bot may not
+## think of it. Logged as red_capsule_choice; then it sticks with the choice.
+const HUNT_VALUE := {"bullet": 2.5, "twin": 1.2, "rampage": 1.0, "pierce": 1.0, "shield": 0.9}
+const HUNT_PUSH := 1.0           # what pressing your tower is worth against that
+const HUNT_PUSH_AT_TOWER := 2.0  # … with its wave already at your tower
+const HUNT_SPARE := 1.0          # seconds to spare before you're back
+var _hunt_decided := false
+var _hunting := false
+
+
+func _hunt_tick() -> bool:
+	if not is_instance_valid(enemy_hero) or enemy_hero.is_targetable():
+		_hunting = false
+		return false
+	var left: float = float(enemy_hero.respawn_in)
+	var dps: float = maxf(attack_damage() / maxf(attack_interval(), 0.1), 1.0)
+	var yours := 0
+	var reach: Array = []
+	var value := 0.0
+	for c: Node2D in get_tree().get_nodes_in_group("capsules"):
+		if c.owner_team == team or not c.is_targetable():
+			continue
+		yours += 1
+		if not c.breakable_by(team) or not _safe(c.position):
+			continue
+		var walk: float = maxf(0.0, position.distance_to(c.position) - attack_range())
+		if walk / maxf(speed, 1.0) + c.hp / dps + HUNT_SPARE > left:
+			continue  # can't get it before you're back
+		reach.append(c)
+		value += float(HUNT_VALUE.get(c.power, 1.0))
+	if not _hunt_decided:
+		_hunt_decided = true
+		_hunting = false
+		if yours == 0:
+			return false
+		var push := HUNT_PUSH
+		var et := _enemy_tower()
+		if et:
+			for o: Node2D in get_tree().get_nodes_in_group("creeps"):
+				if o.team == team and o.is_targetable() and o.position.distance_to(et.position) <= et.RANGE + 200.0:
+					push = HUNT_PUSH_AT_TOWER
+					break
+		var hunt: float = value * float(_pv("capsule_hunt", 1.0))
+		_hunting = not reach.is_empty() and hunt >= push and _roll("notice_hunt", lerpf(0.5, 1.0, smartness))
+		PlayLog.event("red_capsule_choice", {"choice": "hunt" if _hunting else "push", "capsules": yours,
+			"reachable": reach.size(), "value": snappedf(hunt, 0.01), "push": push, "respawn": snappedf(left, 0.1)})
+	if not _hunting or reach.is_empty():
+		return false
+	var best: Node2D = _closest_to(position, reach)
+	why = "capsule:hunt"
+	if attack_target != best:
+		order_attack(best.position)
+	return true
+
+
+## Your Bullet (bullet_minion.gd) is coming for it: turn and shoot it down
+## before it lands (it walks a little slower than any hero, so there's time).
+const BULLET_NOTICE := 700.0
+
+
+func _bullet_tick() -> bool:
+	var best: Node2D = null
+	for b: Node2D in get_tree().get_nodes_in_group("bullets"):
+		if b.team != team and b.is_targetable() and position.distance_to(b.position) <= BULLET_NOTICE 				and (best == null or position.distance_to(b.position) < position.distance_to(best.position)):
+			best = b
+	if best == null:
+		return false
+	# Too close to clear in time: D just before contact eats the 2 s stun (the
+	# damage lands anyway; the shield soaks a little). Immunity is only 0.5 s,
+	# so it's a near-contact press — and a dull red fumbles the timing (roll).
+	var gap := maxf(0.0, position.distance_to(best.position) - radius - best.radius)
+	if gap / best.SPEED <= 0.45 and best.hp / maxf(attack_damage() / attack_interval(), 1.0) > gap / best.SPEED \
+			and guard_cd <= 0.0 and _roll("shell_block", 0.25 + 0.75 * smartness):
+		if guard():
+			PlayLog.event("red_shell_block", {"gap": roundi(gap)})
+	why = "bullet"
+	_attack_move = null
+	attack_target = best
 	return true
 
 
@@ -1313,7 +1639,7 @@ func _slot_damage(slot: String) -> float:
 			d = d * 4.0 + float(a.get("burn_dps", 0.0)) * 2.0  # a few seconds of contact
 		"shield", "blink":
 			d = 0.0
-	return d * AbilityInfo.damage_scale(mods, slot) * damage_mult
+	return d * ability_scale(slot)
 
 
 ## What the combo would do to `eh` with what's ready (plus a few attacks).
@@ -1354,6 +1680,8 @@ func _should_commit(eh: Node2D) -> bool:
 		return false  # the combo starts with this: wait for it
 	var dmg := _combo_damage(seq)
 	var ehp: float = (eh.hp + eh.shield_hp) / (1.0 + float(eh.get("_expose")))
+	if is_instance_valid(eh.get("twin")):  # your TWIN soaks 35% of each hit: a kill costs more than your bar shows
+		ehp += minf(eh.twin.hp, eh.hp * 0.54)
 	if _rule("wait_escape", false) and _escape_ready(eh) and eh.hp / eh.max_hp > float(_rule("hunt_at", 0.0)) and _recent_loss() < IMPATIENT_LOSS:
 		_commit_no = "waiting for your escape to be spent"
 		return false  # the diver: patient until you've used it
@@ -1927,8 +2255,8 @@ static func _fight_dps(u: Node2D) -> float:
 			var hits: float = float(a.get("pulses", a.get("count", 1)))
 			if a["kind"] == "rage":  # contact damage is per second: a window's worth, plus the burn
 				hits = minf(float(a.get("duration", 4.0)), RACE_WINDOW)
-				burst += float(a.get("burn_dps", 0.0)) * 2.0 * AbilityInfo.damage_scale(u.mods, slot) * u.damage_mult
-			burst += a["damage"] * hits * AbilityInfo.damage_scale(u.mods, slot) * u.damage_mult
+				burst += float(a.get("burn_dps", 0.0)) * 2.0 * u.ability_scale(slot)
+			burst += a["damage"] * hits * u.ability_scale(slot)
 	return dps + burst / RACE_WINDOW
 
 

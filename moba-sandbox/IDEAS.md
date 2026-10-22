@@ -30,9 +30,128 @@ breaking a tower fast is the earned ending. What should NOT happen is an
 early tower crumbling the moment one normal wave reaches it (hence the +600
 tower floor). Judge tower pacing by this, not by pre-overtime tower damage.
 
-## Power-up drops — shooter-style capsules 💡 (user, 2026-10-13: "ranged minions drop powerups of some kind, like spaceship scrollers or contra")
+## A buyable F ability (2026-10-14, idea)
 
-Working shape (being worked out with the user, not built):
+User: "I think there might be an F ability or something you can buy as a future idea."
+
+Guard (D) is every hero's free, fixed utility button (built 2026-10-14). An F slot
+would be the bought one: a small pool of hero-agnostic actives in the shop
+(a dash, a heal, a ward, a creep call…), pick one per run (or swap between
+rounds), so the build gets an active choice and not only stats.
+Open: its own shop row, an epic-style once-per-run pick, or swappable; whether
+red buys one too (it should, eventually); same small slot style as D.
+
+**2026-10-16 — firmed up.** User: "it should be new ability you can pick from a
+pool after level five… a nice pool of sort of modifier/utility type abilities
+that can help round things out… you can change heroes per round, so the idea of
+changing per counter exists so your F isn't just for one hero, but I guess
+that's what also makes it interesting."
+- Unlocks after round 5; pick from a pool of utility / modifier actives (not
+  damage nukes). Hero-agnostic: it stays when you switch hero.
+- The tension is the point: heroes are what you swap to counter red; F is
+  what you carry through the run. An F that suits one hero better is a reason
+  to stay on it, or to pick a hero around it.
+- Pool sketch (draws on what the logs show matters — trips home, key runs,
+  stalemates): Blink (short teleport), Recall (channel home), Fortify (your
+  tower takes less for a few s), Rally (your nearby creeps hit harder / move
+  faster), Smite (big hit on a creep or Bullet), Exhaust (a hero deals less
+  and moves slower), Haste, Mend (heal over time), Mana burst.
+- Decided (user, 2026-10-16): unlocks at **round 5**; you pick from the
+  **whole pool** (everyone can take any of them). Not built yet: on hold.
+- The aim behind it (user): "I am trying to make the game more dynamic, a
+  flood of possibilities that make this more than a single lane moba, we are
+  innovating."
+- Still open: swappable later (round 10?) or fixed for the run; red gets one
+  at the same round (and shows it, like D, so you can play around it).
+- **2026-10-20 (user):** F is the last button — "a choosable new power from a
+  smallish pool at level five". Example: **Recall** — a return to base on a
+  long cooldown, with a 1 s channel that can be interrupted. Still on hold.
+
+## More than a single-lane MOBA — riff (2026-10-16, ideas only)
+
+User: "I am trying to make the game more dynamic, a flood of possibilities that
+make this more than a single lane moba, we are innovating… so riff on the more
+dynamic thing." Nothing here is decided; picked ones get their own section.
+
+**The run's shape**
+- **Branching run map** (Slay the Spire): after each round choose the next
+  node: a normal round, an elite red (tougher, better reward), a shop, an
+  event, a rest (heal the tower?), a treasure (free F / card). The run gets a
+  route, not just a counter.
+- **Round twists, shown before hero pick**: each round rolls a rule — night
+  (tower range shrinks), flood (mid of the lane slows), gold rush (every creep
+  pays double), siege day (siege every wave), fog. You see it before choosing
+  a hero, so swapping heroes to counter the *round* is a choice too.
+- **Boss rounds** (builds on "Bosses / special maps"): every 5th round red
+  brings something unusual — two heroes, a hero that grows during the round, a
+  walking tower.
+
+**The lane itself**
+- **Side pockets**: a small camp off the lane (a neutral, a shrine, a capsule
+  spawner). Leaving the lane to take it is a risk, and red can do it too.
+- **Terrain that changes per round**: brush to hide in, a wall that splits the
+  lane in two paths for a stretch, a narrow choke near a tower.
+- **A mid-lane objective on a timer**: spawns at e.g. 2:00, both race for it;
+  taking it gives the wave a buff, a free siege, or a tower shield.
+- **Escort**: a payload / relic that walks toward a tower while a hero stands
+  near it (the key runs grown up).
+
+**Your side of the map**
+- **Tower mods**: spend gold on your tower — a slow on its shot, more range,
+  a shield it gives you. Defending becomes a build.
+- **Choose your wave**: pick the next wave's mix (more ranged, a siege, a
+  tank) — wave cards widened into a decision each round.
+- **Hire**: a mercenary creep camp you pay to join your wave.
+
+**Risk / reward**
+- **Contracts**: before a round take one ("don't die", "take the tower before
+  overtime", "deny 10") — pull it off for a bonus card or gold.
+- **Pacts** (Hades heat): take a curse for this round (red's creeps +20%,
+  your D off) for a better reward.
+- **Bounties**: one marked creep per wave worth a lot — red goes for it too.
+
+**Red as a rival**
+- **Red counters you**: red's next hero picked against your last one (and
+  shown), so the hero swap becomes a back-and-forth.
+- **Grudges**: red remembers what beat it last round (your hero, your F) and
+  shows a hint it's ready for it.
+
+**Heroes over a run**
+- **Mastery**: play the same hero N rounds and it unlocks a passive — pulls
+  against swapping to counter, the same tension F has.
+- **Tag-team**: bring two heroes into a round and swap at your well.
+
+## Status stacking — cards must never be eaten by your own kit (2026-10-14; BUILT same day — rules in BALANCE.md section 6 "Stacking rules"; caps loose on purpose per user: "I like the stacking maybe being possible to be kinda game breaking", trim later)
+
+User: "if you take a card it basically replaces something in your kit that might
+do the same — we need to keep this in mind when making new cards."
+
+Today every status keeps the bigger strength and the longer time, each on its own
+(unit.gd). So a card that gives a status your kit already gives often does nothing:
+- Serrated (+10% bleed) on CHAD: dead inside TRAP (+20%); only counts outside it.
+- Spellblade's 20% slow on CHAD: dead inside TRAP (35–45%).
+- Second Wind's 150 shield on KAREN: dead while BRACE (120–220) is up.
+- Snap on CHAD: his hit ends his own TRAP slow's after-linger (inside, TRAP re-slows each frame).
+- Quirk: strength and time kept separately, so a weak long slow + a strong short
+  one = a strong long slow neither gave.
+
+Proposed rule (it's 1v1, so nearly everything on you comes from one enemy hero):
+- **Same source again → refresh** (as now).
+- **Different sources of the same hero (kit + card) → add**, capped per status:
+  bleed adds; slows add, cap ~60%; shields add, cap (e.g. 40% of max health).
+- **Control never stacks**: stun keeps the longest; blind is on/off; tether replaces.
+- **Fix the quirk**: a stronger application replaces and brings its own time; a
+  weaker one only tops up time if it lasts longer at its own strength.
+- **Card rule (for /cards)**: a card that grants a status some kit already has
+  must add to it (or say plainly in its text that it doesn't).
+
+## Power-up drops — shooter-style capsules (BUILT 2026-10-13; user: "ranged minions drop powerups of some kind, like spaceship scrollers or contra")
+
+Built: overtime only (user; since 2026-10-18 by chance instead — 1 in 10 ranged last hits before overtime, 1 in 3 in overtime), Spread / Rapid (became Rampage 2026-10-14: move speed, damage area, armor) / Pierce (user) / Bullet (added 2026-10-14: a minion that walks at the enemy hero for 20% of its health), a football-shaped
+capsule — not a Contra copy (user). Two ways to break it are both in
+power_capsule.gd MODE so they can be tried (user: "I kinda like both ideas"):
+"hits" (3 pips, attacks only — the default) and "health" (300 hp, hurt by
+anything from either hero). Shape as worked out:
 - **Source**: a ranged creep a hero last-hits drops a capsule, on a fixed rhythm
   (e.g. every 4th ranged last hit) rather than a random roll: readable, no lucky streaks.
 - **The capsule is yours**: it sits where the creep died, in your colour, with a
@@ -52,8 +171,96 @@ Working shape (being worked out with the user, not built):
   stalemate.
 - **Red**: breaks its own capsules and goes for yours like a last hit / deny,
   weighed against danger (gives up ones under your tower or deep in your reach).
-- Open: overtime only (recommended first) or the whole round; which 3–4 power-ups;
-  a snowball check (the side winning the wave gets more ranged last hits).
+- Still open: "hits" vs "health" after playtests; a snowball check (the side
+  winning the wave gets more ranged last hits); more powers later.
+
+**Banked capsules (2026-10-20, built): "health" won.** 300 hp, the other hero
+can't touch yours until it's below half (a deny window, like a creep), and it
+never fades. User: "if you choose to ignore your powerup for now the other
+player cannot affect it, maybe creating opportunities to wait for better
+positioning and counterplay to that". So a capsule is a held card on the map:
+- **Banking**: leave it whole and break it when it pays — before a dive, when
+  red's D is down, when your wave is about to hit the tower. Bullet especially:
+  send it when red is low or busy.
+- **Pre-cracking**: chip it to just above half so one hit opens it later — a
+  faster pop, at no risk until you cross the line.
+- **The tell**: once you start breaking it, you're standing still on a known
+  spot doing nothing else. Red can wait for that moment to engage, or to get in
+  range for the deny.
+- **Counterplay ideas** (not built): red zones the capsule (stands near it so
+  breaking it costs you a trade); red baits you into opening it, then guards
+  with D through the power; capsules near a tower are safer to open; a card
+  that lets you hit enemy capsules above half (or raises the line); Rampage /
+  Spread / IGNITE near your own capsule can knock it under the line — your own
+  clear can hand red the deny.
+- **Red today** breaks its own at once (never banks) and only goes for yours
+  below half. To make it play this game: bank with a reason (save Bullet until
+  you're low, open Rampage as it commits), and hover near a capsule you're
+  breaking to snipe the deny.
+- **Watch**: capsules pile up in long overtimes (nothing fades) — maybe a cap
+  per side, the oldest gone when a new one drops.
+- **Mini-me twin instead of Spread (BUILT 2026-10-20 as TWIN — replaced Spread, damage share, copies stats + Pierce, 800 hp, never heals; see BALANCE.md)**: a small copy
+  of your hero at your side that fires a second auto at your target until it
+  dies; its own health bar, takes a share of the damage you take; your damage /
+  speed cards and Twin Shot apply to it. Lasts till it dies (user also weighed
+  just making Spread last till death). Shooter roots: Gradius's Option.
+  Open: replace Spread or add it; what it copies (stats only vs on-hit cards,
+  and whether it copies Pierce); soak share vs directly targetable; dies with
+  you?; its last hits count as yours?; second capsule = second twin or a heal.
+- **Another power-up — brainstorm (2026-10-20)**. Today: Twin (extra shots),
+  Rampage (tanky body + aura), Pierce (line damage), Shell (homing hit). Gaps:
+  nothing for spells, nothing for the wave, nothing about death. Candidates:
+  - **Overdrive** — 10 s of cooldowns 3× faster and no mana cost: the
+    spell heroes' power (the current four mostly boost attacks).
+  - **1-Up** (Mario) — your next death within the round doesn't count: you
+    get up where you fell at half health, keeping your capsules and Twin.
+    Plays straight into the death rules (capsules exposed, powers lost).
+  - **Bomb** (shmup screen-clear) — every enemy creep within ~900 dies at
+    once (yours to last-hit? no gold in overtime anyway): a wave swing that
+    opens a tower.
+  - **Force** (R-Type / Gradius barrier) — 3 orbs circle you for 10 s,
+    eating enemy skillshots and projectiles they touch and nicking enemies.
+  - **Freeze** (Mario clock) — enemy creeps and hero slowed 60% for 3 s.
+  - **Missiles** (Gradius M) — a homing missile at the enemy hero every 1 s
+    for 10 s, wherever they are on screen.
+  - **Rally** — your creeps in the lane hit 2× and move faster for 10 s.
+- **"A 10 second power-up is only as good as one wave" (user, 2026-10-20).**
+  A timer spends itself on whatever's in front of you, and that's usually a
+  wave, so every timed power collapses into "clear one wave faster". Powers
+  should be spent on a *decision*, not a clock. Shapes that escape it:
+  - **RULE (user, 2026-10-20): power-ups add no buttons.** F is the last
+    button and it's the round-5 pick. So no press-to-fire charges: a power
+    activates by breaking its capsule (the banking timing *is* the button),
+    by a trigger, or by itself. Charges are fine only if they spend
+    themselves smartly: e.g. Pierce as 5 shots that only spend when an enemy
+    hero is on the line behind your target (normal shots otherwise).
+  - **Hero-only**: effects that can't touch creeps (Shell; Missiles; a Mark:
+    red takes +30% from you until it dies).
+  - **Triggers**: they fire on an event — 1-Up (next death), Mirror (the next
+    enemy spell that hits you bounces back), Revenge (when red hits you below
+    30%, you're shielded and it's slowed).
+  - **Structures and the map**: Breach (your next attack on their tower
+    ignores its shield and does 500), Turret (plant a little turret that
+    stays), Key (a totem key / ghost creep that opens their tower's shield
+    for 20 s), Recall (teleport to any of your capsules or creeps).
+  - **Tempo and death**: Bounty (red's next respawn +10 s), Second Wind (your
+    next respawn is instant), Reset (your ultimate's cooldown ends now — bank
+    it till it pays).
+  - **Information**: Scout (red's cooldowns, D and banked capsules shown for
+    the rest of the round).
+  - **Theft / denial**: Snatch (break one of red's capsules from anywhere),
+    Dispel (red's timed power ends).
+  - **Run-long**: a capsule that becomes a small permanent card, or adds an
+    offer to the next shop — the only kind that reaches past the round.
+- **Leash a capsule (BUILT 2026-10-21; idea 2026-10-20, user: "is the ability to leash and drag
+  powerups crazy?")**: T on your capsule and it floats after you like a leashed
+  creep. Plays: carry Bullet up the lane so its walk is short (less time to shoot
+  it down), carry Rampage into the fight and pop it on arrival, or pull a
+  capsule back to your tower to open it safely. To keep counterplay: it costs
+  leash points (2, like a ranged creep, so it competes with keys and pushes),
+  and **while leashed it's open to the other hero at any health** — moving it
+  is the risk, parking it is the safety. Maybe it drags slower than you, or
+  slows you a little.
 
 ## Continue a run (built 2026-10-10)
 
@@ -1421,3 +1628,51 @@ Context: red's hero order is now a per-run shuffle of the four that repeats all
 run (no hero twice in a row) — bosses or special maps could slot into that
 cycle (e.g. every Nth round) as the stage markers of the north star's steady
 escalation.
+
+## Sound effects (2026-10-22, idea)
+
+User: "I was just thinking about sound effects, how could we fold those in."
+Today: one looping music MP3 (`music.gd` autoload, Esc-menu slider); zero SFX.
+The sketch:
+- **An `Sfx` autoload** beside Music: a pool of ~16 reusable players
+  (AudioStreamPlayer2D for world sounds so off-screen fights sit quieter,
+  plain for UI/shop), round-robin, headless-skipped like music.
+- **A registry**, name → file + defaults: volume, a little random pitch
+  (±5% so a creep fight doesn't machine-gun), and a per-sound throttle
+  (min interval / max simultaneous) — the lane is dense.
+- **Call sites ride the visuals**: wherever effects.gd spawns a visual
+  (shot, hit, Ghost, Helix, capsule break) is where the one-liner
+  `Sfx.play("x", position)` goes — sound and sight agree, which serves
+  "never feels bad" (audio telegraphs: shell launched, capsule cracked,
+  tower low).
+- **Mixing**: Master → Music / Effects buses; the Esc menu gains an
+  Effects slider next to Music (same settings.cfg pattern).
+- **Starter set (~15)**: attack fire + hit, last-hit gold, deny, capsule
+  drop / open / break, shell launch / hit, leash on/off, death, respawn,
+  tower hit / half / down, overtime starts, round won/lost, shop buy.
+- **Assets open question**: placeholder-first fits us — a `tools/` script
+  can synthesize retro sfxr-style WAVs so everything is wired and audible,
+  then swap files in `audio/sfx/` for real ones later (same trim-later
+  ethos as balance).
+
+**The catalogue (2026-10-22 talk).** Three tiers:
+- *Stingers* (short musical sequences, flat, duck the music): round won /
+  lost (win bright, loss low but kind), run over, **overtime begins** (the
+  act-two telegraph), capsule opened (a tiny power-up arpeggio, ideally one
+  variant per power), later the round-5 F pick.
+- *World SFX* (positional, throttled — the readability layer): attack fire /
+  hit, last-hit gold ching (the farm loop's anchor), deny, hero death,
+  respawn; spells **by kind not by hero** (~8 kinds: skillshot, ground-AoE
+  warning tick + blast — a fairness feature when red casts at you —, dash,
+  blink, self-burst, shield up, spin loop, tether snap); D-guard block clang
+  (blocked must sound blocked), stun / blind land, knockback thump; capsule
+  drop plink, leash on/off, capsule breaking + break, shell launch /
+  approach rumble / hit / killed / fizzled, twin break, shield spent,
+  pierce-flavoured shots; tower hit (creep hits heavily throttled), tower
+  at half (one crack — melt readability by ear), tower down, totem trip.
+- *UI* (flat, small): shop buy, can't-afford, pause.
+- *Deliberately silent*: creep-on-creep combat, burn ticks, gold counter,
+  red's farming (red's last hits dull or silent so yours stays special).
+~22 one-shots + 5 stingers + 2–3 loops. Open: red's casts = same sounds
+positional (lean yes, AoE warnings loudest); capsule stingers five real
+variants vs one jingle re-pitched.

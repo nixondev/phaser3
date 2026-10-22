@@ -33,6 +33,7 @@ const PlayLog := preload("res://scripts/play_log.gd")
 const Unit := preload("res://scripts/unit.gd")
 const AbilityInfo := preload("res://scripts/ability_info.gd")
 const Bounds := preload("res://scripts/bounds.gd")
+const CapsuleScript := preload("res://scripts/power_capsule.gd")
 
 const SLOT := 78.0
 const GAP := 12.0
@@ -239,6 +240,7 @@ func _draw_hud() -> void:
 		_panel.draw_string(font, cost_r.position + Vector2(0, 14), cost, HORIZONTAL_ALIGNMENT_CENTER, cost_w, 14, MANA_BLUE if affordable else Color("#ef5350"))
 
 	_draw_mana_bar(font, Rect2(origin + Vector2(0, SLOT + 10.0), Vector2(width, 16.0)))
+	_draw_guard_slot(font, Rect2(origin + Vector2(width + GAP * 2.0, SLOT * 0.4), Vector2(SLOT * 0.6, SLOT * 0.6)))
 	if hero.leashing:  # pick mode
 		_panel.draw_string_outline(font, Vector2(0, origin.y - 70.0), "LEASH: click one of your creeps   ·   T or right-click to cancel", HORIZONTAL_ALIGNMENT_CENTER, view.x, 18, 6, Color(0, 0, 0, 0.8))
 		_panel.draw_string(font, Vector2(0, origin.y - 70.0), "LEASH: click one of your creeps   ·   T or right-click to cancel", HORIZONTAL_ALIGNMENT_CENTER, view.x, 18, Color("#80deea"))
@@ -252,6 +254,28 @@ func _draw_hud() -> void:
 			var msg := "OVERTIME  —  kills pay no gold, abilities %d%% cheaper and quicker. Finish it!" % roundi(Unit.ability_haste * 100.0) if Unit.ability_haste > 0.0 else "OVERTIME  —  kills no longer pay gold. Finish it!"
 			_panel.draw_string_outline(font, Vector2(0, view.y * 0.3), msg, HORIZONTAL_ALIGNMENT_CENTER, view.x, 30, 8, Color(0, 0, 0, 0.8 * a))
 			_panel.draw_string(font, Vector2(0, view.y * 0.3), msg, HORIZONTAL_ALIGNMENT_CENTER, view.x, 30, Color(1.0, 0.54, 0.4, a))
+
+
+## D (Guard in code): a small slot right of R — every hero's own shield. Hover: what it does.
+func _draw_guard_slot(font: Font, r: Rect2) -> void:
+	var col: Color = hero.GUARD_COLOR
+	_panel.draw_rect(r, Color("#10151a"))
+	_panel.draw_rect(r.grow(-4), Color(col, 0.85))
+	_panel.draw_string(font, r.position + Vector2(0, r.size.y * 0.66), "D", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 18, Color("#10151a"))
+	var left: float = hero.guard_cd
+	if left > 0.0:  # dark cover over the part still cooling down, top down
+		var frac: float = clampf(left / hero.GUARD_COOLDOWN, 0.0, 1.0)
+		var inner := r.grow(-4)
+		_panel.draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * frac)), Color(0, 0, 0, 0.62))
+		_panel.draw_string(font, r.position + Vector2(0, r.size.y * 0.66), str(ceili(left)), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 18, Color.WHITE)
+	_panel.draw_rect(r, Color("#37474f"), false, 2.0)
+	if hero.aiming == "" and r.has_point(_panel.get_local_mouse_position()):
+		var msg := "D — %d shield for %s s. Clears bad effects and blocks new ones for %s s. %d s cooldown." % [
+			int(hero.GUARD_SHIELD), str(hero.GUARD_TIME), str(hero.GUARD_IMMUNE), int(hero.GUARD_COOLDOWN)]
+		var w := font.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x + 20.0
+		var at := Vector2(clampf(r.get_center().x - w / 2.0, 8.0, _panel.get_viewport_rect().size.x - w - 8.0), r.position.y - 40.0)
+		_panel.draw_rect(Rect2(at, Vector2(w, 28.0)), Color(0.05, 0.07, 0.09, 0.95))
+		_panel.draw_string(font, at + Vector2(10, 19), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color.WHITE)
 
 
 ## Hover tooltips: an ability slot (above it), or the build panel's hero box
@@ -441,6 +465,17 @@ func _draw_minimap(view: Vector2) -> void:
 		_panel.draw_colored_polygon(tri, TEAM_COLORS[m.team].lightened(0.2))
 		tri.append(tri[0])
 		_panel.draw_polyline(tri, Color("#ffcc80"), 1.5)
+	# power-up capsules: a diamond in the power's colour, rimmed in its owner's —
+	# yours always; red's only while red is dead (open to you until it's back)
+	for c: Node2D in get_tree().get_nodes_in_group("capsules"):
+		var mine: bool = c.owner_hero != null and is_instance_valid(c.owner_hero) and not c.owner_hero.is_bot
+		if not c.is_targetable() or not (mine or c.owner_down()):
+			continue
+		var cp := _to_map(r, c.position)
+		var dia := PackedVector2Array([cp + Vector2(0, -5), cp + Vector2(5, 0), cp + Vector2(0, 5), cp + Vector2(-5, 0)])
+		_panel.draw_colored_polygon(dia, CapsuleScript.POWER_COLOR[c.power])
+		dia.append(dia[0])
+		_panel.draw_polyline(dia, TEAM_COLORS[c.owner_team], 1.5)
 	# heroes: you with a white ring
 	for h: Node2D in get_tree().get_nodes_in_group("heroes"):
 		if not h.is_targetable():

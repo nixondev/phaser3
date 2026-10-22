@@ -55,16 +55,28 @@ static var no_gold := false
 ## Overtime (lane.gd): abilities cost this much less mana and their cooldowns
 ## run this much shorter (0 outside overtime); haste_ult = the ultimate too.
 static var ability_haste := 0.0
+## Training (main.gd sets it): every ranged creep a hero last-hits drops a
+## power-up capsule, overtime or not (power_capsule.gd), to try them out.
+static var training_drops := false
 static var haste_ult := true
 ## Whatever dealt the killing blow (a hero, or null for creeps / towers).
 var killed_by: Node2D = null
 
+## Stacking (IDEAS.md "Status stacking"): a status is kept per source `key`
+## (an ability or card name). The same source again refreshes it: stronger
+## replaces (with its own time), equal tops the time up, weaker is ignored.
+## Different sources ADD, so a card never goes dead next to a kit ability that
+## gives the same thing. Caps are loose on purpose (stacking may get wild; trim
+## later). Control (stun, blind, tether) never stacks.
+const MOVE_SLOW_CAP := 0.8     # all move slows together: never rooted outright
+const ATTACK_SLOW_CAP := 2.0   # all attack slows together: attacks at most 3x as long
+const SHIELD_CAP_PCT := 1.0    # shields together: at most this share of max health (or the biggest one alone)
 ## Attack-speed slow: attacks take (1 + attack_slow) times as long while it lasts.
 var attack_slow := 0.0
-var _slow_left := 0.0
+var _attack_slows := {}  # key -> [amount, time left]
 ## Movement slow: moves at (1 - move_slow) speed while it lasts.
 var move_slow := 0.0
-var _move_slow_left := 0.0
+var _move_slows := {}
 ## Bleed (standing in a CHAD's TRAP): that hero's auto-attacks hit this
 ## unit for +bleed_amt. Refreshed every frame while inside, so it ends on leaving.
 var _bleed_by: Node2D = null
@@ -98,8 +110,8 @@ var _burn_len := 0.0  # the length the current burn was given (Kindling's spread
 const BURN_TICK := 0.5
 ## Shield (KAREN's BRACE): absorbs damage before health, until used up or
 ## its time runs out. A new shield keeps the bigger amount and longer time.
-var shield_hp := 0.0
-var _shield_left := 0.0
+var shield_hp := 0.0  # all shields together (add_shield / take_damage keep it)
+var _shields := {}  # key -> [amount left, time left]
 var _shield_by: Node2D = null  # who gave it (Spite: shields send damage back)
 ## Hunter's Mark: an ability from `_mark_by` marked this hero; its next attack
 ## on it deals a share of the missing health.
@@ -112,10 +124,12 @@ var damage_taken_mult := 1.0
 const SHIELD_COLOR := Color(0.78, 0.92, 1.0, 0.9)  # the shield bubble (shiny white-blue)
 ## Status cues: one colour per status, the same on the zone that applies it
 ## and on the unit that has it; rings round the unit, nested by distance
-## (burn innermost, then bleed, slow, and the shield bubble outermost).
+## (burn innermost, then exposed, bleed, slow, attack slow, blind, and the
+## shield bubble outermost).
 const BURN_COLOR := Color(1.0, 0.45, 0.1)   # burning: matches IGNITE's fire zone
 const BLEED_COLOR := Color(0.9, 0.12, 0.15) # bleeding (TRAP: the caster's attacks hit harder)
 const SLOW_COLOR := Color(0.7, 0.4, 1.0)    # slowed: violet (pale blue read as the shield)
+const ATTACK_SLOW_COLOR := Color(0.6, 0.85, 0.25)  # attacks slowed (GRIND): lime
 const SHIELD_PER_PX := 20.0  # shield points per extra px of bubble thickness (max +8)
 ## Phasing (CHAD's POUNCE in flight): passes through every unit — nothing
 ## pushes it and it pushes nothing; only its own hit check stops it.
@@ -132,6 +146,10 @@ var _missed_volley := -1  # the round of attacks the blind landed on: its other 
 const MISS_COLOR := Color(0.85, 0.87, 0.9)  # blinded: a dashed pale ring
 ## Stun: while it lasts the unit can't move, attack or cast.
 var stun_left := 0.0
+## Status-immune (a hero's Guard, D): no harmful status lands while it lasts —
+## slows, burn, bleed, exposed, blind, stun, tether, marks. Damage still does.
+var status_immune := 0.0
+const IMMUNE_COLOR := Color(1.0, 0.92, 0.55)  # status-immune: a bright gold ring
 
 var _flash := 0.0
 var _stack := 0.0  # recent hits: each new number starts higher so they don't overlap
@@ -144,17 +162,15 @@ func _enter_tree() -> void:
 
 func tick_unit(delta: float) -> void:
 	_since_hit += delta
-	_slow_left = maxf(0.0, _slow_left - delta)
 	stun_left = maxf(0.0, stun_left - delta)
-	if _slow_left <= 0.0:
-		attack_slow = 0.0
-	_move_slow_left = maxf(0.0, _move_slow_left - delta)
+	status_immune = maxf(0.0, status_immune - delta)
+	attack_slow = minf(ATTACK_SLOW_CAP, _tick_stack(_attack_slows, delta))
+	move_slow = minf(MOVE_SLOW_CAP, _tick_stack(_move_slows, delta))
 	_bleed_left = maxf(0.0, _bleed_left - delta)
 	_zbleed_left = maxf(0.0, _zbleed_left - delta)
 	_zone_left = maxf(0.0, _zone_left - delta)
-	_shield_left = maxf(0.0, _shield_left - delta)
-	if _shield_left <= 0.0:
-		shield_hp = 0.0
+	shield_hp = _tick_stack(_shields, delta)
+	if shield_hp <= 0.0:
 		_shield_by = null
 	_mark_left = maxf(0.0, _mark_left - delta)
 	_expose_left = maxf(0.0, _expose_left - delta)
@@ -173,28 +189,68 @@ func tick_unit(delta: float) -> void:
 	tether_left = maxf(0.0, tether_left - delta)
 	if tether_left > 0.0 and (not is_instance_valid(tether_to) or not tether_to.is_targetable() or not is_targetable()):
 		tether_left = 0.0  # the other end died (or we did): the tether snaps
-	if _move_slow_left <= 0.0:
-		move_slow = 0.0
 	_flash = maxf(0.0, _flash - delta * 6.0)
 	_stack = maxf(0.0, _stack - delta * 1.5)  # a stacked slot frees after ~0.65 s
 
 
-## Slow this unit's attacks by `amount` (0.4 = 40% longer between attacks) for `time` s.
-func slow_attacks(amount: float, time: float) -> void:
-	attack_slow = maxf(attack_slow, amount)
-	_slow_left = maxf(_slow_left, time)
+## Put `amount` for `time` s on `stack` under `key`: stronger replaces (its
+## own time), equal tops the time up, weaker is ignored.
+static func _stack_add(stack: Dictionary, key: String, amount: float, time: float) -> void:
+	var cur: Variant = stack.get(key)
+	if cur == null or amount > cur[0] + 0.001:
+		stack[key] = [amount, time]
+	elif amount >= cur[0] - 0.001:
+		cur[1] = maxf(cur[1], time)
+
+
+static func _stack_total(stack: Dictionary) -> float:
+	var total := 0.0
+	for e: Array in stack.values():
+		total += e[0]
+	return total
+
+
+## Run `stack`'s timers down and drop what ran out; returns the total.
+static func _tick_stack(stack: Dictionary, delta: float) -> float:
+	for key: String in stack.keys():
+		var e: Array = stack[key]
+		e[1] -= delta
+		if e[1] <= 0.0 or e[0] <= 0.0:
+			stack.erase(key)
+	return _stack_total(stack)
+
+
+## Slow this unit's attacks by `amount` (0.4 = 40% longer between attacks) for
+## `time` s. `key` names the source: different sources add, up to ATTACK_SLOW_CAP.
+func slow_attacks(amount: float, time: float, key := "") -> void:
+	if status_immune > 0.0:
+		return
+	_stack_add(_attack_slows, key, amount, time)
+	attack_slow = minf(ATTACK_SLOW_CAP, _stack_total(_attack_slows))
 
 
 ## Slow this unit's movement by `amount` (0.35 = 35% slower) for `time` s.
-func slow_moves(amount: float, time: float) -> void:
-	move_slow = maxf(move_slow, amount)
-	_move_slow_left = maxf(_move_slow_left, time)
+func slow_moves(amount: float, time: float, key := "") -> void:
+	if status_immune > 0.0:
+		return
+	_stack_add(_move_slows, key, amount, time)
+	move_slow = minf(MOVE_SLOW_CAP, _stack_total(_move_slows))
+
+
+## End every slow on this unit (Snap).
+func clear_slows() -> void:
+	_attack_slows.clear()
+	_move_slows.clear()
+	attack_slow = 0.0
+	move_slow = 0.0
 
 
 ## Mark this unit as bleeding to `by`'s auto-attacks (+`amount`) for `time` s
 ## (TRAP refreshes a moment every frame; Serrated's attacks give 2 s). The two
-## are tracked apart; the bigger one that's running counts.
+## are tracked apart and add up while both run.
 func bleed(by: Node2D, amount: float, time := 0.15) -> void:
+	if status_immune > 0.0:
+		return
 	if by != _bleed_by:
 		_bleed_left = 0.0
 		_zbleed_left = 0.0
@@ -209,6 +265,8 @@ func bleed(by: Node2D, amount: float, time := 0.15) -> void:
 
 ## Bind this unit and `other` together for `time` s, at most `length` apart.
 func tether_with(other: Node2D, time: float, length: float) -> void:
+	if status_immune > 0.0 or other.status_immune > 0.0:
+		return
 	for pair: Array in [[self, other, true], [other, self, false]]:
 		var u: Node2D = pair[0]
 		u.tether_to = pair[1]
@@ -249,12 +307,20 @@ func _physics_process(_delta: float) -> void:
 
 ## Set this unit burning (or keep it burning) for `time` s at `dps`, credited to `by`.
 func burn(by: Node2D, dps: float, time: float) -> void:
-	if _burn_left <= 0.0:
-		_burn_tick = BURN_TICK
-	_burn_by = by
-	burn_dps = maxf(burn_dps, dps)
-	_burn_left = maxf(_burn_left, time)
-	_burn_len = maxf(_burn_len if _burn_left > time else 0.0, time)
+	if status_immune > 0.0:
+		return
+	if _burn_left <= 0.0 or dps > burn_dps + 0.001:  # a fresh or stronger burn: its own strength and time
+		if _burn_left <= 0.0:
+			_burn_tick = BURN_TICK
+		_burn_by = by
+		burn_dps = dps
+		_burn_left = time
+		_burn_len = time
+	elif dps >= burn_dps - 0.001:  # the same burn again: top the time up
+		_burn_by = by
+		_burn_left = maxf(_burn_left, time)
+		_burn_len = maxf(_burn_len, time)
+	# a weaker burn while a stronger one runs: ignored (one burn at a time)
 
 
 ## KYLE's attacks: `by`'s burn on this unit starts over at its full length.
@@ -276,23 +342,34 @@ func is_burning_from(by: Node2D) -> bool:
 
 
 ## Give this unit a shield of `amount` for `time` s (from hero `by`, if any).
-func add_shield(amount: float, time: float, by: Node2D = null) -> void:
+func add_shield(amount: float, time: float, by: Node2D = null, key := "") -> void:
 	if shield_hp <= 0.0:
 		_shield_by = null  # a fresh shield: only its own giver counts (Spite)
-	shield_hp = maxf(shield_hp, amount)
-	_shield_left = maxf(_shield_left, time)
+	_stack_add(_shields, key, amount, time)
+	var cap := maxf(max_hp * SHIELD_CAP_PCT, amount)  # stacking can't pass the cap; one big shield alone still can
+	var over := _stack_total(_shields) - cap
+	if over > 0.0 and _shields.has(key):
+		_shields[key][0] = maxf(0.0, _shields[key][0] - over)
+	shield_hp = _stack_total(_shields)
 	if by != null:
 		_shield_by = by
 
 
 ## SHOVE: take `amount` more damage from everything for `time` s.
 func expose(amount: float, time: float) -> void:
-	_expose = maxf(_expose, amount)
-	_expose_left = maxf(_expose_left, time)
+	if status_immune > 0.0:
+		return
+	if _expose_left <= 0.0 or amount > _expose + 0.001:  # stronger: its own strength and time
+		_expose = amount
+		_expose_left = time
+	elif amount >= _expose - 0.001:
+		_expose_left = maxf(_expose_left, time)
 
 
 ## RUMOR: the next attack this unit makes misses.
 func blind() -> void:
+	if status_immune > 0.0:
+		return
 	miss_next = true
 
 
@@ -320,6 +397,8 @@ func clear_mark() -> void:
 
 
 func mark_zone(by: Node2D) -> void:
+	if status_immune > 0.0:
+		return
 	_zone_by = by
 	_zone_left = 0.15
 
@@ -333,7 +412,7 @@ func in_zone_of(by: Node2D) -> bool:
 func bleed_bonus(by: Node2D) -> float:
 	if by == null or _bleed_by != by:
 		return 0.0
-	return maxf(_bleed_amt if _bleed_left > 0.0 else 0.0, _zbleed_amt if _zbleed_left > 0.0 else 0.0)
+	return (_bleed_amt if _bleed_left > 0.0 else 0.0) + (_zbleed_amt if _zbleed_left > 0.0 else 0.0)
 
 
 ## Multiplier on this unit's movement speed.
@@ -344,6 +423,8 @@ func move_speed_mult() -> float:
 ## Stun for `time` s; `by` = the hero it's credited to (its own stun, or its
 ## Tank Minion's) — Aftershock answers it.
 func stun(time: float, by: Node2D = null) -> void:
+	if status_immune > 0.0:
+		return
 	stun_left = maxf(stun_left, time)
 	if by != null and is_instance_valid(by) and by.has_method("on_stunned") and by.team != team:
 		by.on_stunned(self)
@@ -367,12 +448,17 @@ func draw_stun_mark() -> void:
 		draw_arc(Vector2.ZERO, radius + 7.0, 0.0, TAU, 32, Color(BLEED_COLOR, 0.85), 2.5)
 	if move_slow > 0.0:  # slowed: a violet ring
 		draw_arc(Vector2.ZERO, radius + 11.0, 0.0, TAU, 32, Color(SLOW_COLOR, 0.8), 3.0)
+	if attack_slow > 0.0:  # attacks slowed: a lime ring
+		draw_arc(Vector2.ZERO, radius + 14.0, 0.0, TAU, 32, Color(ATTACK_SLOW_COLOR, 0.85), 2.5)
 	if _expose_left > 0.0:  # exposed (SHOVE): a teal ring — takes more damage
 		draw_arc(Vector2.ZERO, radius + 5.0, 0.0, TAU, 32, Color(EXPOSE_COLOR, 0.85), 2.0)
 	if miss_next:  # blinded (RUMOR): a dashed pale ring — its next attack misses
 		for i in 8:
 			var a0 := i * TAU / 8.0
-			draw_arc(Vector2.ZERO, radius + 15.0, a0, a0 + TAU / 16.0, 4, Color(MISS_COLOR, 0.9), 2.5)
+			draw_arc(Vector2.ZERO, radius + 17.0, a0, a0 + TAU / 16.0, 4, Color(MISS_COLOR, 0.9), 2.5)
+	if status_immune > 0.0:  # status-immune (Guard): a bright gold ring, pulsing
+		var p := 0.6 + 0.4 * sin(Time.get_ticks_msec() / 60.0)
+		draw_arc(Vector2.ZERO, radius + 22.0, 0.0, TAU, 40, Color(IMMUNE_COLOR, p), 3.5)
 	if _mark_left > 0.0:  # marked (Hunter's Mark): four short ticks pointing in
 		for i in 4:
 			var d := Vector2.from_angle(PI / 4.0 + i * TAU / 4.0)
@@ -404,6 +490,11 @@ func is_enemy_of(other_team: int) -> bool:
 	return team != other_team
 
 
+## Something else takes part of a hit (a hero's TWIN, hero.gd): what's left for this unit.
+func _share_damage(amount: float) -> float:
+	return amount
+
+
 ## `quiet` skips the floating number — creeps and towers trading hits would
 ## otherwise bury the screen in them.
 ## The damage multiplier for a hit on this unit (see the dials above).
@@ -420,20 +511,42 @@ func hit_mult(source: Node2D, hit: Dictionary) -> float:
 	return 1.0
 
 
+## Armor: the share of a hit this unit takes (1 = all). Every damage cut
+## multiplies in here, so stacked cuts shrink and never reach immunity. Units
+## with their own cuts extend it (hero.gd: RAGE, Homebody; creep.gd: Wonderpets).
+func armor_mult(_source: Node2D, _hit: Dictionary) -> float:
+	return damage_taken_mult
+
+
+## Take `amount` off the shields, the one running out soonest first.
+func _soak_shields(amount: float) -> void:
+	var keys := _shields.keys()
+	keys.sort_custom(func(p: String, q: String) -> bool: return _shields[p][1] < _shields[q][1])
+	for key: String in keys:
+		if amount <= 0.0:
+			break
+		var take: float = minf(_shields[key][0], amount)
+		_shields[key][0] -= take
+		amount -= take
+	shield_hp = _stack_total(_shields)
+
+
 func take_damage(amount: float, colour: Color, big := false, quiet := false, source: Node2D = null, hit: Dictionary = {}) -> void:
 	if not is_targetable():
 		return
-	amount *= hit_mult(source, hit) * damage_taken_mult * (1.0 + _expose)
+	amount *= hit_mult(source, hit) * armor_mult(source, hit) * (1.0 + _expose)
+	amount = _share_damage(amount)
 	var by_hero: bool = source != null and is_instance_valid(source) and source.is_in_group("heroes")
-	if by_hero and (move_slow > 0.0 or attack_slow > 0.0) and not is_in_group("towers"):  # Cold Read: slowed enemies take more from you
-		amount *= 1.0 + source.mod("slowed_damage")
-	if by_hero and not hit.is_empty() and is_in_group("heroes") and source.mod("hunters_mark") > 0.0:
+	if by_hero and (move_slow > 0.0 or attack_slow > 0.0) and not is_in_group("towers") and source.mod("slowed_damage") > 0.0:
+		amount *= 1.0 + source.mod("slowed_damage")  # Snap (cold_read): a slowed enemy takes more from you…
+		clear_slows()  # …and the hit snaps it out of every slow
+	if by_hero and not hit.is_empty() and is_in_group("heroes") and source.mod("hunters_mark") > 0.0 and status_immune <= 0.0:
 		_mark_by = source  # Hunter's Mark: an ability marks the hero
 		_mark_left = 4.0
 	var dealt := minf(amount, maxf(0.0, hp) + shield_hp)  # what the hit really took: shield included, overkill not
 	if shield_hp > 0.0:  # a shield soaks it first
 		var soaked := minf(shield_hp, amount)
-		shield_hp -= soaked
+		_soak_shields(soaked)
 		amount -= soaked
 		_spite(soaked, source)
 	if source != null and is_instance_valid(source) and source.is_in_group("heroes") \
@@ -460,6 +573,8 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 		if bounty > 0 and killed_by and killed_by.is_in_group("heroes"):
 			if killed_by.team != team:
 				killed_by.earn_gold(bounty, position, is_in_group("creeps"))
+				if get("kind") == "ranged" and killed_by.has_method("on_ranged_last_hit"):
+					killed_by.on_ranged_last_hit(self)  # ranged last hits may drop a power-up capsule (power_capsule.gd)
 			elif is_in_group("creeps") and not no_gold:
 				killed_by.on_deny(position, self)  # its own side's blow: denied, nobody is paid (overtime: just a death)
 		_die()
@@ -469,16 +584,31 @@ func _die() -> void:
 	died.emit(self)
 
 
+## Guard: every harmful status comes off (shields stay).
+func cleanse() -> void:
+	_burn_left = 0.0
+	burn_dps = 0.0
+	_bleed_left = 0.0
+	_zbleed_left = 0.0
+	clear_slows()
+	_expose_left = 0.0
+	_expose = 0.0
+	miss_next = false
+	_missed_volley = -1
+	_mark_left = 0.0
+	_zone_left = 0.0
+	stun_left = 0.0
+	if tether_left > 0.0 and not tether_owner:  # a tether you made (POUNCE) is yours, not a bad effect
+		break_tether()
+
+
 ## Death wipes what's on you: burns, bleeds, slows, blind, marks, stun, shield.
 func clear_statuses() -> void:
 	_burn_left = 0.0
 	burn_dps = 0.0
 	_bleed_left = 0.0
 	_zbleed_left = 0.0
-	_slow_left = 0.0
-	attack_slow = 0.0
-	_move_slow_left = 0.0
-	move_slow = 0.0
+	clear_slows()
 	_expose_left = 0.0
 	_expose = 0.0
 	miss_next = false
@@ -487,7 +617,7 @@ func clear_statuses() -> void:
 	_zone_left = 0.0
 	stun_left = 0.0
 	shield_hp = 0.0
-	_shield_left = 0.0
+	_shields.clear()
 	_shield_by = null
 
 

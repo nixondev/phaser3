@@ -11,11 +11,12 @@ var _next := 0.0
 
 func _ready() -> void:
 	PlayLog.viewport = get_viewport()
-	PlayLog.round_start(main)
+	if main.lane != null:
+		PlayLog.round_start(main)  # Training (no lane) logs a session, not a round
 
 
 func _process(delta: float) -> void:
 	PlayLog.clock += delta
-	if PlayLog.clock >= _next and main.lane.winner < 0:
+	if PlayLog.clock >= _next and (main.lane == null or main.lane.winner < 0):
 		_next = PlayLog.clock + PlayLog.SNAPSHOT_EVERY
 		PlayLog.snapshot(main)

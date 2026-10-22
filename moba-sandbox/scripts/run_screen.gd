@@ -5,7 +5,7 @@ extends CanvasLayer
 ##   pick   choose your hero for the run (click a card, or 1–4)
 ##   shop   after a won round: pick your hero for the next round (levels
 ##          carry over by letter), buy ability levels (Q/W/E/R +1), three
-##          priced tiers of upgrades, reroll, then Next round (Enter)
+##          priced tiers of upgrades (Gamble rerolls them), then Next round (Enter)
 ##   over   lost a round — the run ends (endless: score = round reached);
 ##          New run (Enter)
 ##
@@ -149,6 +149,10 @@ func buy(tier: String, index: int) -> bool:
 		return false
 	_bought.append(key)
 	PlayLog.event("buy", {"id": u["id"], "tier": u["tier"], "gold_left": Run.gold})
+	if u.get("on_buy", "") == "reroll":  # Gamble: every offer rolls again
+		_offers = Run.shop_offers()
+		_bought = []
+		PlayLog.event("reroll", {"gold_left": Run.gold})
 	return true
 
 
@@ -164,15 +168,6 @@ func buy_level(slot: String) -> bool:
 func choose_hero(i: int) -> void:
 	Run.choose_hero(i)
 	PlayLog.event("choose_hero", {"hero": Heroes.LIST[i]["name"]})
-
-
-func reroll() -> bool:
-	if not Run.reroll():
-		return false
-	_offers = Run.shop_offers()
-	_bought = []
-	PlayLog.event("reroll", {"gold_left": Run.gold})
-	return true
 
 
 func next_round() -> void:
@@ -442,9 +437,7 @@ func _draw_shop(view: Vector2) -> void:
 
 	_draw_build(Vector2(label_x, y + 22), view.x - 2.0 * label_x)
 	var by := view.y - 96.0
-	var cost := Run.reroll_cost()
-	_button(Rect2(Vector2(view.x / 2.0 - 330, by), Vector2(300, 56)), "Reroll  (%d gold)" % cost, reroll, Run.gold >= cost, GOLD.darkened(0.3))
-	_button(Rect2(Vector2(view.x / 2.0 + 30, by), Vector2(300, 56)), "Next round  ▶   (Enter)", next_round, true, Color("#66bb6a"))
+	_button(Rect2(Vector2(view.x / 2.0 - 150, by), Vector2(300, 56)), "Next round  ▶   (Enter)", next_round, true, Color("#66bb6a"))
 	if not _tip.is_empty():
 		AbilityInfo.draw(_panel, ThemeDB.fallback_font, _tip["info"], _tip["rect"], view, true)
 

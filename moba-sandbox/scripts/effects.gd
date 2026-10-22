@@ -130,6 +130,52 @@ class Zap extends Node2D:
 		draw_polyline(pts, Color(_colour.lightened(0.5), 1.0 - _t), 4.0 * (1.0 - _t) + 1.0)
 
 
+## Pierce power-up's shot: two strands of dots twisting round the line like a
+## double helix (the shooter "wave gun"), racing out to the tip, spinning, then
+## fading. Dots on the near side of the twist are bigger and brighter.
+class Helix extends Node2D:
+	const LIFE := 0.55     # s on screen
+	const TRAVEL := 0.45   # share of LIFE the head takes to reach the tip
+	const AMP := 14.0      # px either side of the line
+	const STEP := 11.0     # px between dots along the line
+	const TWIST := 0.045   # radians per px: how tight the spiral is
+	var _to: Vector2
+	var _colour: Color
+	var _t := 0.0
+
+	func _init(from: Vector2, to: Vector2, colour: Color) -> void:
+		position = from
+		_to = to - from
+		_colour = colour
+		z_index = 5
+
+	func _process(delta: float) -> void:
+		_t += delta / LIFE
+		if _t >= 1.0:
+			queue_free()
+		queue_redraw()
+
+	func _draw() -> void:
+		var length := _to.length()
+		if length <= 0.0:
+			return
+		var dir := _to / length
+		var side := dir.orthogonal()
+		var head := minf(1.0, _t / TRAVEL) * length
+		var fade := 1.0 - maxf(0.0, (_t - TRAVEL) / (1.0 - TRAVEL))
+		var spin := _t * 30.0
+		var d := 0.0
+		while d <= head:
+			for strand: float in [0.0, PI]:
+				var ph := d * TWIST - spin + strand
+				var near := 0.5 + 0.5 * cos(ph)  # 1 = the near side of the twist
+				var col: Color = _colour.lightened(0.55 if strand == 0.0 else 0.25)
+				draw_circle(dir * d + side * sin(ph) * AMP, 1.8 + 1.8 * near, Color(col, fade * (0.45 + 0.55 * near)))
+			d += STEP
+		draw_circle(dir * head, 5.0, Color(1, 1, 1, 0.9 * fade))  # the head
+		draw_circle(dir * head, 8.0, Color(_colour.lightened(0.4), 0.35 * fade))
+
+
 ## A shrinking ring where you clicked: green for move, red for attack-move.
 class MoveMarker extends Node2D:
 	var _t := 0.0
@@ -169,8 +215,12 @@ class AttackShot extends Node2D:
 	var extra_damage := 0.0   # Spellblade: this shot carries a bonus…
 	var on_hit_slow := 0.0    # …and slows what it hits for 1 s
 	var volley := -1          # which round of attacks it's from (a blind misses the whole round)
+	var bounce := false       # Excess: this shot bounces on to nearby enemies when it lands
+	var twin: Node2D = null   # a TWIN's shot (twin.gd): no on-hit cards; its own Pierce line
+	var _from := Vector2.ZERO
 
 	func _init(from: Vector2, target: Node2D, damage: float, colour := Color("#fff3c4"), quiet := false, size := 6.0, source: Node2D = null) -> void:
+		_from = from
 		position = from
 		_target = target
 		_damage = damage
@@ -199,9 +249,12 @@ class AttackShot extends Node2D:
 			var tgt := _target
 			tgt.take_damage(dmg * (1.0 + bonus), Color("#ff8a80") if bonus > 0.0 else Color.WHITE, big, _quiet, src)
 			if on_hit_slow > 0.0 and is_instance_valid(tgt) and tgt.is_targetable() and not tgt.is_in_group("towers"):
-				tgt.slow_moves(on_hit_slow, 1.0)
-			if src != null and src.has_method("on_attack_landed") and is_instance_valid(tgt):
-				src.on_attack_landed(tgt, extra_damage > 0.0)
+				tgt.slow_moves(on_hit_slow, 1.0, "spellblade")
+			if twin != null:
+				if src != null and src.has_method("on_twin_landed") and is_instance_valid(tgt):
+					src.on_twin_landed(tgt, twin.position if is_instance_valid(twin) else _from)
+			elif src != null and src.has_method("on_attack_landed") and is_instance_valid(tgt):
+				src.on_attack_landed(tgt, extra_damage > 0.0, bounce)
 			queue_free()
 			return
 		position += to.normalized() * step
@@ -211,6 +264,8 @@ class AttackShot extends Node2D:
 	func _draw() -> void:
 		draw_line(Vector2(-3.0 * _size, 0), Vector2.ZERO, Color(_colour, 0.4), _size * 0.7)
 		draw_circle(Vector2.ZERO, _size, _colour)
+		if bounce:  # Excess: a bouncing shot
+			draw_arc(Vector2.ZERO, _size + 8.0, 0.0, TAU, 16, Color(_colour, 0.6), 2.0)
 		if extra_damage > 0.0:  # Spellblade: a charged shot
 			draw_arc(Vector2.ZERO, _size + 4.0, 0.0, TAU, 16, Color(_colour.lightened(0.5), 0.9), 2.0)
 
@@ -352,7 +407,7 @@ class Blast extends Node2D:
 					if is_instance_valid(source):
 						d.mark_zone(source)
 					if move_slow > 0.0:
-						d.slow_moves(move_slow, slow_time)
+						d.slow_moves(move_slow, slow_time, "zone")
 					if burn_dps > 0.0:
 						d.burn(source if is_instance_valid(source) else null, burn_dps, burn_time)
 					if bleed > 0.0 and is_instance_valid(source):
@@ -389,7 +444,7 @@ class Blast extends Node2D:
 			if doused and is_instance_valid(d):
 				d.douse(source)
 				if float(hit.get("douse_slow", 0.0)) > 0.0 and d.is_targetable():
-					d.slow_moves(float(hit["douse_slow"]), float(hit.get("douse_slow_time", 1.5)))
+					d.slow_moves(float(hit["douse_slow"]), float(hit.get("douse_slow_time", 1.5)), "douse")
 			if blind and is_instance_valid(d) and d.is_targetable():
 				d.blind()
 
@@ -539,7 +594,7 @@ class Spin extends Node2D:
 				if source.has_method("rage_contact"):
 					source.rage_contact(u)  # during RAGE, GRIND's cuts burn like a touch
 				if attack_slow > 0.0:
-					u.slow_attacks(attack_slow, slow_time)
+					u.slow_attacks(attack_slow, slow_time, "spin")
 				if creep_heal > 0.0 and u.is_in_group("creeps") and source.is_targetable():
 					source.hp = minf(source.max_hp, source.hp + creep_heal)
 		if _t >= duration:

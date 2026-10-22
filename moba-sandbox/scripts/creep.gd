@@ -74,7 +74,7 @@ var risen := false
 var bonus := false
 const NO_GOLD_GREY := Color("#9e9e9e")
 ## Latched on a totem (totem.gd): attacks it and nothing else until one of
-## them dies. `camp_hero` led it there (Rally Cry still counts for it).
+## them dies. `camp_hero` led it there.
 var camp: Node2D = null
 var camp_hero: Node2D = null
 const CAMP_REACH := 40.0  # px: latched creeps hit the totem only from this close, ranged ones included
@@ -142,7 +142,7 @@ func _process(delta: float) -> void:
 		else:
 			if vanguard > 0.0 and not _vanguard_done and kind == "melee" and _tower_vision():  # Vanguard, leashed too
 				_vanguard_done = true
-				add_shield(vanguard, 8.0)
+				add_shield(vanguard, 8.0, null, "vanguard")
 			_follow_leader(delta)
 			queue_redraw()
 			return
@@ -154,7 +154,7 @@ func _process(delta: float) -> void:
 	var focus := _tower_vision()
 	if focus and vanguard > 0.0 and not _vanguard_done and kind == "melee":  # Vanguard: shield up at the tower
 		_vanguard_done = true
-		add_shield(vanguard, 8.0)
+		add_shield(vanguard, 8.0, null, "vanguard")
 	if focus:  # Tower Vision: inside an enemy tower's range, the tower and nothing else
 		target = focus
 	elif dive_to != null and is_instance_valid(dive_to) and dive_to.is_targetable():
@@ -226,7 +226,7 @@ func _pick_target() -> Node2D:
 	var best_rank := 99
 	var best_d := INF
 	for u: Node2D in get_tree().get_nodes_in_group("units"):
-		if u.team == team or u.team < 0 or not u.is_targetable() or _safe_in_well(u):
+		if u.team == team or u.team < 0 or not u.is_targetable() or _safe_in_well(u) or u.is_in_group("bullets"):  # (a Bullet is a heroes-only problem)
 			continue
 		if u.is_in_group("heroes") and u.hidden_by_decoy():
 			continue  # Afterimage: that hero is lost; its decoy is the hero now
@@ -283,13 +283,11 @@ func _on_camp(delta: float) -> void:
 	push_out()
 
 
-## The hero whose leash cards count for this creep: the one leading it, or the
-## one who latched it on a totem.
+## The hero whose leash cards count for this creep: the one leading it
+## (totem-latched creeps don't count).
 func _boss() -> Node2D:
 	if leader != null and is_instance_valid(leader):
 		return leader
-	if camp != null and is_instance_valid(camp_hero):
-		return camp_hero
 	return null
 
 
@@ -333,7 +331,7 @@ func _team_hero() -> Node2D:
 func _try_stun() -> bool:
 	var best: Node2D = null
 	for u: Node2D in get_tree().get_nodes_in_group("units"):
-		if u.team == team or u.team < 0 or not u.is_targetable() or u.is_in_group("towers") or u.is_in_group("decoys"):
+		if u.team == team or u.team < 0 or not u.is_targetable() or u.is_in_group("towers") or u.is_in_group("decoys") or u.is_in_group("bullets"):
 			continue
 		var d: float = position.distance_to(u.position) - u.radius
 		if d <= _stats["stun_range"] and (best == null or d < position.distance_to(best.position) - best.radius):
@@ -350,7 +348,7 @@ func _attack() -> void:
 	var quiet: bool = not target.loud
 	var dmg: float = _stats["damage"] * power * (1.0 + siege if target.is_in_group("towers") else 1.0)
 	var boss := _boss()
-	if boss != null:  # Rally Cry: leashed (or latched) creeps hit harder
+	if boss != null:  # Wonderpets (rally_cry): leashed creeps hit harder
 		dmg *= 1.0 + boss.mod("leash_damage")
 	if kind != "ranged":
 		_lunge = 1.0
@@ -371,12 +369,13 @@ func _banner_bonus() -> float:
 	return best
 
 
-## Rally Cry: a leashed creep takes less damage.
-func take_damage(amount: float, colour: Color, big := false, quiet := false, source: Node2D = null, hit: Dictionary = {}) -> void:
+## Armor (unit.gd): Wonderpets (rally_cry), a leashed creep takes less damage.
+func armor_mult(source: Node2D, hit: Dictionary) -> float:
+	var m := super(source, hit)
 	var boss := _boss()
 	if boss != null:
-		amount *= 1.0 - minf(boss.mod("leash_armor"), 0.75)  # never immune (or healed) by stacking
-	super(amount, colour, big, quiet, source, hit)
+		m *= 1.0 - minf(boss.mod("leash_armor"), 0.75)  # never immune (or healed) by stacking
+	return m
 
 
 func _die() -> void:

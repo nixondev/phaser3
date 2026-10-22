@@ -16,6 +16,7 @@ extends Node2D
 
 const GroundScript := preload("res://scripts/ground.gd")
 const HeroScript := preload("res://scripts/hero.gd")
+const Unit := preload("res://scripts/unit.gd")
 const AimScript := preload("res://scripts/aim.gd")
 const AbilityBarScript := preload("res://scripts/ability_bar.gd")
 const DummyScript := preload("res://scripts/dummy.gd")
@@ -139,6 +140,7 @@ func _ready() -> void:
 	bar.cooldowns_clicked.connect(toggle_no_cooldowns)
 	bar.mana_clicked.connect(toggle_no_mana)
 	hero.no_cooldowns = lane == null and training_no_cooldowns
+	Unit.training_drops = lane == null  # Training: ranged last hits always drop a power-up
 	hero.no_mana = lane == null and training_no_mana
 	add_child(bar)
 
@@ -152,6 +154,9 @@ func _ready() -> void:
 
 	if lane and not autoplay and PlayLog.recording() and Run.phase == "play":
 		start_play_log_probe()
+	elif lane == null and not autoplay and PlayLog.is_on():  # Training logs too (try_*.jsonl), same switch
+		PlayLog.training_start(self)
+		start_play_log_probe()
 
 	if not autoplay:
 		var pause: CanvasLayer = PauseMenuScript.new()  # Esc
@@ -160,6 +165,7 @@ func _ready() -> void:
 		pause.in_run = lane != null
 		pause.restart.connect(func() -> void:
 			if lane == null:  # Training's Restart: back to the hero-pick screen
+				PlayLog.training_end("left training")
 				mode = "lane"
 				Run.reset()
 			get_tree().reload_current_scene())

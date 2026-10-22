@@ -97,13 +97,13 @@ const LIST := [
 	{
 		"name": CIRCLE_NAME, "shape": "circle", "color": Color("#e0e6ea"),
 		"speed": 360.0, "radius": 26.0, "hp": 700.0, "mana": 500.0, "regen": 6.0,
-		"attack": {"range": 420.0, "damage": 25.0, "interval": 0.8, "stoke": true},  # stoke: each attack restarts his burn on the target at its full length
+		"attack": {"range": 420.0, "damage": 30.0, "interval": 0.8, "stoke": true},  # stoke: each attack restarts his burn on the target at its full length
 		"bot": {},
 		"abilities": {
-			"Q": {"name": CIRCLE_Q, "desc": "Fires an orb toward the cursor. It explodes at the end of its path — press Q again to set it off early. An enemy burning from your " + CIRCLE_W + " takes 30% more, stops burning and is slowed 15% for 1.5 s.", "kind": "orb", "douse": 0.3, "douse_slow": 0.15, "douse_slow_time": 1.5, "fx": "lightning", "range": 450.0, "speed": 900.0, "linger": 0.0, "radius": 80.0, "cooldown": 5.0, "cost": 50.0, "damage": 80.0, "color": Color("#4fc3f7"),
+			"Q": {"name": CIRCLE_Q, "desc": "Fires an orb toward the cursor. It explodes at the end of its path — press Q again to set it off early. An enemy burning from your " + CIRCLE_W + " takes 50% more, stops burning and is slowed 15% for 1.5 s.", "kind": "orb", "douse": 0.5, "douse_slow": 0.15, "douse_slow_time": 1.5, "fx": "lightning", "range": 450.0, "speed": 900.0, "linger": 0.0, "radius": 80.0, "cooldown": 5.0, "cost": 50.0, "damage": 80.0, "color": Color("#4fc3f7"),
 				"levels": [{"damage": 105.0, "radius": 95.0}, {"damage": 130.0, "radius": 110.0, "cooldown": 4.0}]},
-			"W": {"name": CIRCLE_W, "desc": "Marks an area at the cursor; after a warning it burns for a moment. The enemy nearest the centre takes the most. Anyone it touches keeps burning a while after they get out; each of your attacks on them restarts their burn.", "kind": "ground", "fx": "fire", "range": 700.0, "radius": 128.0, "cooldown": 8.0, "cost": 80.0, "damage": 80.0, "splash": 0.5, "duration": 1.5, "ticks": 6, "burn_dps": 10.0, "burn_time": 2.0, "color": Color("#ff7a1a"),
-				"levels": [{"radius": 150.0, "damage": 96.0, "burn_dps": 14.0}, {"damage": 112.0, "splash": 0.75, "cooldown": 6.5, "burn_dps": 18.0}]},
+			"W": {"name": CIRCLE_W, "desc": "Marks an area at the cursor; after a warning it burns for a moment. The enemy nearest the centre takes the most. Anyone it touches keeps burning a while after they get out; each of your attacks on them restarts their burn.", "kind": "ground", "fx": "fire", "range": 700.0, "radius": 128.0, "cooldown": 8.0, "cost": 80.0, "damage": 80.0, "splash": 0.5, "duration": 1.5, "ticks": 6, "burn_dps": 14.0, "burn_time": 2.0, "color": Color("#ff7a1a"),
+				"levels": [{"radius": 150.0, "damage": 96.0, "burn_dps": 18.0}, {"damage": 112.0, "splash": 0.75, "cooldown": 6.5, "burn_dps": 22.0}]},
 			"E": {"name": CIRCLE_E, "desc": "A circle at the cursor: after a beat a ring bursts out from its centre and carries everything it meets to the edge — enemies, creeps, and you if you're in it — nicking the enemies. Cast it behind someone to knock them toward you (or into your " + CIRCLE_W + "), or between you and them to knock you both apart. Breaks tethers.",
 				"kind": "boop", "range": 700.0, "radius": 160.0, "push": 120.0, "windup": 0.2, "cooldown": 10.0, "cost": 60.0, "damage": 30.0, "color": Color("#81c784"),
 				"levels": [{"damage": 40.0, "radius": 180.0, "cooldown": 9.0}, {"damage": 50.0, "radius": 200.0, "push": 160.0, "cooldown": 8.0}]},
@@ -113,8 +113,8 @@ const LIST := [
 	},
 	{
 		"name": TRIANGLE_NAME, "shape": "triangle", "color": Color("#ef9a9a"),
-		"speed": 400.0, "radius": 24.0, "hp": 900.0, "mana": 500.0, "regen": 7.0,
-		"attack": {"range": 150.0, "damage": 40.0, "interval": 0.65},
+		"speed": 400.0, "radius": 24.0, "hp": 800.0, "mana": 500.0, "regen": 7.0,
+		"attack": {"range": 150.0, "damage": 35.0, "interval": 0.65},
 		"bot": {},
 		"abilities": {
 			"Q": {"name": TRIANGLE_Q, "desc": "Throws a fan of spinning barbed stars toward the cursor. They cut through creeps, hitting each one, and stop at the first hero.", "face_hold": 0.3, "kind": "skillshot", "fx": "star", "pierce_creeps": true, "range": 600.0, "count": 3, "spread": 18.0, "cooldown": 5.0, "cost": 45.0, "damage": 55.0, "color": Color("#ff8a65"),
@@ -132,7 +132,7 @@ const LIST := [
 	},
 	{
 		"name": SQUARE_NAME, "shape": "square", "color": Color("#90a4ae"),
-		"speed": 320.0, "radius": 32.0, "hp": 1100.0, "mana": 450.0, "regen": 5.0,
+		"speed": 320.0, "radius": 32.0, "hp": 1000.0, "mana": 450.0, "regen": 5.0,
 		"attack": {"range": 140.0, "damage": 35.0, "interval": 1.0},
 		"bot": {},
 		"abilities": {

@@ -12,16 +12,16 @@ extends RefCounted
 ##   last_hit_gold  gold_mult (+fraction on last hits)  last_hit_mana
 ##   twin_shot  echo  execute (hp fraction)  ult_cd (−fraction)  ult_damage
 ##   deny_mana  deny_heal (Scavenger)   attack_damage_pct  attack_interval_pct
-##   home_attack_speed  home_regen (near your tower)   leash_damage  leash_armor
+##   home_attack_speed  home_regen  home_ability_damage  home_spell_armor (near your tower)   leash_damage  leash_armor
 ##   last_hit_ult (s off R)   shot_speed (+fraction)   finish_damage (vs creeps < ½)
 ##   burn_time (+s)  burn_spread (px)   slowed_damage   serrated (bleed share, 2 s)
 ##   spite (shield reflect share)   second_wind (shield, once / 40 s)
 ##   tower_attack (+fraction)   mana_cost (+fraction)   spellblade (+dmg next attack)
 ##   aftershock (dmg)   q_charges   afterimage   hunters_mark (missing-hp share)
-##   recruit (s)   snap_finish (hp fraction: attacks land instantly)
+##   recruit (s)   bounce (Excess: every 5th attack jumps on, this damage share)
 ##
-## `on_buy`: a one-time effect when bought, no mods (run.gd buy): "halve_reroll"
-## (Bargain). Such cards aren't offered in Training (nothing to do there).
+## `on_buy`: a one-time effect when bought, no mods (run.gd buy): "reroll"
+## (Gamble: the shop rolls new offers). Such cards aren't offered in Training (nothing to do there).
 ## `once`: shown in at most one shop roll per run (run.gd once_seen) — skip it
 ## and it's gone.
 
@@ -48,30 +48,30 @@ const R_MULT := 1.4
 const LEVEL_COLOR := Color("#ffd54f")
 
 const LIST := [
-	{"id": "whetstone", "tier": "common", "name": "Whetstone", "text": "+8 attack damage", "mods": {"attack_damage": 8.0}},
-	{"id": "quickdraw", "tier": "common", "name": "Quickdraw", "text": "+12% attack speed", "mods": {"attack_speed": 0.12}},
-	{"id": "vigor", "tier": "common", "name": "Vigor", "text": "+200 max health", "mods": {"max_hp": 200.0}},
-	{"id": "focus", "tier": "common", "name": "Focus", "text": "+150 max mana", "mods": {"max_mana": 150.0}},
-	{"id": "boots", "tier": "common", "name": "Boots", "text": "+25 move speed", "mods": {"speed": 25.0}},
-	{"id": "salve", "tier": "common", "name": "Salve", "text": "+6 health regen", "mods": {"hp_regen": 6.0}},
-	{"id": "siphon", "tier": "common", "name": "Siphon", "text": "+15 mana per last hit", "mods": {"last_hit_mana": 15.0}},
+	{"id": "whetstone", "tier": "common", "name": "Chunk", "text": "+10 attack damage", "mods": {"attack_damage": 10.0}},
+	{"id": "quickdraw", "tier": "common", "name": "Hands", "text": "+10% attack speed", "mods": {"attack_speed": 0.1}},
+	{"id": "vigor", "tier": "common", "name": "Red Drink", "text": "+200 max health", "mods": {"max_hp": 200.0}},
+	{"id": "focus", "tier": "common", "name": "Blue Drink", "text": "+150 max mana", "mods": {"max_mana": 150.0}},
+	{"id": "boots", "tier": "common", "name": "Shoes", "text": "+20 move speed", "mods": {"speed": 20.0}},
+	{"id": "salve", "tier": "common", "name": "Drip", "text": "+8 health regen", "mods": {"hp_regen": 8.0}},
+	{"id": "siphon", "tier": "common", "name": "Refund", "text": "+20 mana per last hit", "mods": {"last_hit_mana": 20.0}},
 	{"id": "scavenger", "tier": "common", "name": "Scavenger", "text": "Denying a creep restores 25 mana and 40 health (before overtime)", "mods": {"deny_mana": 25.0, "deny_heal": 40.0}},
 	{"id": "heavy_hands", "tier": "common", "name": "Heavy Hands", "text": "Attacks deal +40% damage but take 25% longer", "mods": {"attack_damage_pct": 0.4, "attack_interval_pct": 0.25}},
-	{"id": "homeguard", "tier": "common", "name": "Homeguard", "text": "Inside your tower's range: +25% attack speed, +5 health regen", "mods": {"home_attack_speed": 0.25, "home_regen": 5.0}},
-	{"id": "rally_cry", "tier": "common", "max": 2, "name": "Rally Cry", "text": "Leashed creeps, and ones latched on your totem, deal +30% damage and take 30% less", "mods": {"leash_damage": 0.3, "leash_armor": 0.3}},
-	{"id": "adrenaline", "tier": "common", "max": 2, "name": "Adrenaline", "text": "Each last hit takes 1 s off your ultimate's cooldown", "mods": {"last_hit_ult": 1.0}},
+	{"id": "homeguard", "tier": "common", "name": "Homebody", "text": "Inside your tower's range: +20% ability damage, take 20% less ability damage", "mods": {"home_ability_damage": 0.2, "home_spell_armor": 0.2}},
+	{"id": "rally_cry", "tier": "common", "max": 2, "name": "Wonderpets", "text": "Leashed creeps deal +20% damage and take 20% less", "mods": {"leash_damage": 0.2, "leash_armor": 0.2}},
+	{"id": "adrenaline", "tier": "common", "max": 2, "name": "Elegance", "text": "Each last hit takes 1 s off your ultimate's cooldown", "mods": {"last_hit_ult": 1.0}},
 	{"id": "keen_eye", "tier": "common", "name": "Keen Eye", "text": "Your attack shots fly 50% faster", "mods": {"shot_speed": 0.5}},
 	{"id": "clean_finish", "tier": "common", "name": "Clean Finish", "text": "Your attacks deal +15% damage to creeps below half health", "mods": {"finish_damage": 0.15}},
-	{"id": "bargain", "tier": "common", "max": 1, "once": true, "name": "Bargain", "text": "Halves your current reroll cost (once, when bought)", "mods": {}, "on_buy": "halve_reroll"},
+	{"id": "bargain", "tier": "common", "max": 1, "name": "Gamble", "text": "Buying it rerolls every offer in the shop. Once per run", "mods": {}, "on_buy": "reroll"},
 
-	{"id": "arcane_edge", "tier": "rare", "name": "Arcane Edge", "text": "+20% ability damage", "mods": {"ability_damage": 0.2}},
-	{"id": "haste", "tier": "rare", "name": "Haste", "text": "−15% cooldowns", "mods": {"cooldown": 0.15}},
-	{"id": "longbow", "tier": "rare", "name": "Longbow", "text": "+120 attack range", "mods": {"attack_range": 120.0}},
-	{"id": "vampirism", "tier": "rare", "name": "Vampirism", "text": "Heal 8% of damage to creeps, 16% to heroes", "mods": {"lifesteal": 0.08}},
-	{"id": "bounty_hunter", "tier": "rare", "name": "Bounty Hunter", "text": "Your attacks on creeps below 25% health land instantly", "mods": {"snap_finish": 0.25}},
-	{"id": "wellspring", "tier": "rare", "name": "Wellspring", "text": "+5 mana regen", "mods": {"mana_regen": 5.0}},
-	{"id": "kindling", "tier": "rare", "max": 2, "name": "Kindling", "text": "Burns last 2 s longer; an enemy dying while burning ignites another within 150", "mods": {"burn_time": 2.0, "burn_spread": 150.0}},
-	{"id": "cold_read", "tier": "rare", "max": 3, "name": "Cold Read", "text": "Slowed enemies take +12% damage from you", "mods": {"slowed_damage": 0.12}},
+	{"id": "arcane_edge", "tier": "rare", "max": 3, "name": "Amp", "text": "+20% ability damage", "mods": {"ability_damage": 0.2}},
+	{"id": "haste", "tier": "rare", "name": "Efficiency", "text": "−15% cooldowns", "mods": {"cooldown": 0.15}},
+	{"id": "longbow", "tier": "rare", "name": "Kobe", "text": "+100 attack range", "mods": {"attack_range": 100.0}},
+	{"id": "vampirism", "tier": "rare", "name": "Suck", "text": "Heal 8% of damage to creeps, 16% to heroes", "mods": {"lifesteal": 0.08}},
+	{"id": "bounty_hunter", "tier": "rare", "name": "Excess", "text": "Every 5th attack bounces to up to 3 enemies within 250 of its target for 50% damage", "mods": {"bounce": 0.5}},
+	{"id": "wellspring", "tier": "rare", "name": "Trickle", "text": "+8 mana regen", "mods": {"mana_regen": 8.0}},
+	{"id": "kindling", "tier": "rare", "max": 2, "name": "Flamable", "text": "Burns last 1 s longer; an enemy dying while burning ignites another within 150", "mods": {"burn_time": 1.0, "burn_spread": 150.0}},
+	{"id": "cold_read", "tier": "rare", "max": 3, "name": "Snap", "text": "Slowed enemies take +12% damage from you, and your hit ends their slow", "mods": {"slowed_damage": 0.12}},
 	{"id": "serrated", "tier": "rare", "max": 3, "name": "Serrated", "text": "Your attacks make heroes bleed for 2 s: your attacks on them deal +10%", "mods": {"serrated": 0.1}},
 	{"id": "spite", "tier": "rare", "max": 3, "name": "Spite", "text": "Shields on you, or from you, reflect 30% of what they absorb", "mods": {"spite": 0.3}},
 	{"id": "second_wind", "tier": "rare", "name": "Second Wind", "text": "Below 30% health: a 150 shield for 3 s (once every 40 s)", "mods": {"second_wind": 150.0}},

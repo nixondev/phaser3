@@ -11,7 +11,19 @@ extends RefCounted
 ##   run_<stamp>.jsonl   the timeline, one JSON event per line: run/round
 ##                       start and end, last hits, missed last hits, casts,
 ##                       deaths and kills, shop actions, pauses, and a
-##                       snapshot every SNAPSHOT_EVERY seconds
+##                       snapshot every SNAPSHOT_EVERY seconds; power-up
+##                       capsules (capsule_drop / red_capsule_drop, then
+##                       capsule_open / capsule_denied with owner_dead;
+##                       capsule_faded is from before they stopped fading;
+##                       red_capsule_choice: hunt your capsules or press,
+##                       once per death of yours with capsules out;
+##                       the capsule brain: red_capsule_bank / red_capsule_open
+##                       (reason + how long banked) / red_capsule_lurk /
+##                       red_capsule_tow / red_capsule_park (why) /
+##                       red_shell_block; capsule_open / _denied carry age),
+##                       twin_end / red_twin_end (why: broken / death, absorbed, shots),
+##                       Guard (guard / red_guard: D pressed),
+##                       Bullets (bullet_hit / bullet_killed / bullet_fizzled, red_ versions)
 ##                       — plus RED's side for bot analysis: its decisions as
 ##                       they change (red_why, with flags), casts, last hits,
 ##                       denies, deaths, combos (start / end + why), key runs,
@@ -26,6 +38,9 @@ extends RefCounted
 ##                       "human"), so tools/combine_reports.py can put your
 ##                       runs next to the bots'
 ##   run_<stamp>/*.png   screenshots at deaths, round ends and the shop
+##   try_<stamp>.jsonl   a Training session, same switch: the event stream
+##                       only (slim snapshots, no round machinery or summary)
+##                       — for testing things like power-ups
 ##
 ## Everything here is static: the run spans several scene reloads.
 
@@ -81,7 +96,10 @@ static func set_enabled(on: bool) -> void:
 	c.set_value("playlog", "enabled", on)
 	c.save(SETTINGS)
 	if not on and _run_id != "":
-		run_end("log switched off")
+		if _run_id.begins_with("try_"):
+			training_end("log switched off")
+		else:
+			run_end("log switched off")
 
 
 static func folder() -> String:
@@ -108,6 +126,7 @@ static func _load() -> void:
 static func run_start() -> void:
 	if not is_on():
 		return
+	training_end("run starting")  # (a Training session left open: close it)
 	DirAccess.make_dir_recursive_absolute(folder())
 	_run_id = "run_" + Time.get_datetime_string_from_system().replace(":", "-")
 	_shots = 0
@@ -264,6 +283,32 @@ static func run_end(result: String) -> void:
 	_run_id = ""
 
 
+## A Training session log (try_<stamp>.jsonl), on the same switch as runs:
+## the event stream only — no rounds, no summary .json. main starts one when
+## Training is built with the log on; leaving Training ends it.
+static func training_start(main: Node) -> void:
+	if not is_on():
+		return
+	DirAccess.make_dir_recursive_absolute(folder())
+	_run_id = "try_" + Time.get_datetime_string_from_system().replace(":", "-")
+	_shots = 0
+	clock = 0.0
+	_run = {}
+	_round = {}  # (stays empty: snapshot skips the round metrics)
+	var version: String = BuildVersion.VERSION
+	if dev():
+		version = "dev (after v%s)" % version
+	event("training_start", {"hero": main.hero.def["name"], "version": version,
+		"no_cooldowns": bool(main.hero.no_cooldowns), "no_mana": bool(main.hero.no_mana)})
+
+
+static func training_end(reason: String) -> void:
+	if _run_id == "" or not _run_id.begins_with("try_"):
+		return
+	event("training_end", {"why": reason})
+	_run_id = ""
+
+
 # ------------------------------------------------------------------ game hooks
 
 static func last_hit(kind: String, gold: int) -> void:
@@ -313,6 +358,14 @@ static func snapshot(main: Node) -> void:
 	var hero: Node2D = main.hero
 	var bot: Node2D = main.bot
 	var creeps: Array = main.get_tree().get_nodes_in_group("creeps")
+	if main.lane == null:  # Training: a slim snapshot — you, the creeps, the practice front
+		event("snap", {
+			"you": {"at": _v(hero.position), "hp": roundi(hero.hp), "mana": roundi(hero.mana), "alive": hero.is_targetable()},
+			"creeps": [creeps.filter(func(c: Node2D) -> bool: return c.team == 0).size(), creeps.filter(func(c: Node2D) -> bool: return c.team == 1).size()],
+			"gold": hero.gold,
+			"front": _fronts(creeps),
+		})
+		return
 	if not _round.is_empty():  # the round's metrics as it goes: wave advantage, the tower race
 		var c0 := creeps.filter(func(c: Node2D) -> bool: return c.team == 0).size()
 		var c1 := creeps.filter(func(c: Node2D) -> bool: return c.team == 1).size()

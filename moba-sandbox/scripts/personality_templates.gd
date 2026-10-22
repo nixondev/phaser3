@@ -15,6 +15,8 @@ extends RefCounted
 ##   stutter      how keen on stutter-stepping (× smartness = the odds)
 ##   commit       how keen on committing to a combo (× smartness)
 ##   totem_keen   takes creeps to its totem before round 10
+##   capsule_hunt how much your capsules are worth to it while you're dead,
+##                against pressing your tower (bot.gd _hunt_tick; 1 = standard)
 ##   shop         card priorities when red shops (Run.red_shop)
 
 const TEMPLATES := {

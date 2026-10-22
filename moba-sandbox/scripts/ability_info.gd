@@ -18,8 +18,10 @@ const NEXT := Color("#ffd54f")
 
 
 ## Multiplier on an ability's damage from upgrades (`mods` = Upgrades.stacked).
-static func damage_scale(mods: Dictionary, slot: String, ult_off := false) -> float:
-	var s: float = 1.0 + mods.get("ability_damage", 0.0)
+## Ability-damage bonuses add (`extra`: a situational one, e.g. Homebody);
+## the ultimate's bonus multiplies on top. hero.gd ability_scale adds the rest.
+static func damage_scale(mods: Dictionary, slot: String, ult_off := false, extra := 0.0) -> float:
+	var s: float = 1.0 + mods.get("ability_damage", 0.0) + extra
 	if slot == "R" and not ult_off:
 		s *= 1.0 + mods.get("ult_damage", 0.0)
 	return s

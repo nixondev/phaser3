@@ -35,9 +35,21 @@ const Unit := preload("res://scripts/unit.gd")
 const Run := preload("res://scripts/run.gd")
 const DecoyScript := preload("res://scripts/decoy.gd")
 const CreepScript := preload("res://scripts/creep.gd")
+const CapsuleScript := preload("res://scripts/power_capsule.gd")
+const TwinScript := preload("res://scripts/twin.gd")
 
 const RIM := Color("#263238")
 const SLOT_ORDER := ["Q", "W", "E", "R"]
+## Guard (D): every hero's own small shield, outside the ability slots (no
+## levels, no mana). GUARD_SHIELD for GUARD_TIME s, whichever runs out first;
+## for its first GUARD_IMMUNE s nothing harmful lands, and it cleanses what's on
+## you as it goes up. Works while stunned (that's the point).
+const GUARD_SHIELD := 300.0
+const GUARD_TIME := 2.0
+const GUARD_IMMUNE := 0.5
+const GUARD_COOLDOWN := 60.0
+const GUARD_COLOR := Color(1.0, 0.92, 0.55)
+var guard_cd := 0.0
 const KEYS := {KEY_Q: "Q", KEY_W: "W", KEY_E: "E", KEY_R: "R"}
 const ACQUIRE_RANGE := 520.0   # attack-move picks up enemies this close to the hero
 const CLICK_PICK := 450.0      # left-click targets the enemy closest to the click within this
@@ -152,7 +164,9 @@ var _clock_rage := 0.0
 var _detour_for := Vector2.ZERO  # the target it was made for
 ## Leashing (T on one of your creeps; with the cast indicator on, T then click): `leashing` is the pick mode;
 ## `leashed` the creeps following you. Capacity in leash points: LEASH_POINTS
-## plus the Command card; a melee creep costs 1, ranged / tank 2.
+## plus the Command card; a melee creep costs 1, ranged / tank 2. Your own
+## capsule leashes too (2 points, power_capsule.gd): it floats after you —
+## open to the enemy at any health while it does.
 var leashing := false
 var leashed: Array = []
 var leash_flash := 0.0
@@ -164,14 +178,59 @@ var recast := {}
 var _spellblade_ready := false
 var _spellblade_shot: Node2D = null  # the charged shot in flight (only one at a time)
 var _volley := 0  # counts rounds of attacks (Twin Shot's two shots are one round)
+var _main_attacks := 0  # attacks at your target (Excess: every BOUNCE_EVERY-th bounces)
+const BOUNCE_EVERY := 5
+const BOUNCE_RANGE := 250.0  # from the target hit
+const BOUNCE_COUNT := 3
 var _second_wind_cd := 0.0
 var _aftershock_cd := 0.0
 var decoy: Node2D = null
 const SECOND_WIND_EVERY := 40.0
+## Power-ups (power_capsule.gd): overtime capsules from ranged last hits. One at
+## a time for POWER_TIME s; a new one replaces it. A ring in its colour shows it.
+##   spread   (out of the drops since 2026-10-20 — TWIN replaced it; code kept) each attack also fires at SPREAD_EXTRA more enemies in range (each Twin Shot shot gets its own triple)
+##   twin     not timed: a TWIN (twin.gd) at your side, held in `twin`, until it breaks or you die
+##   shield   not timed: a shield (POWER_SHIELD_SHARE of max health, key "power_shield") until it's used up or you die
+##   (pierce isn't on the clock either: a budget of extra damage, PIERCE_BACKSTOP s at most)
+##   rampage  RAMPAGE_SPEED faster moves, RAMPAGE_DPS to every enemy within
+##            RAMPAGE_RADIUS (no towers), and RAMPAGE_ARMOR less damage taken
+##   pierce   an attack also hits every enemy on its line, PIERCE_PAST px beyond,
+##            for PIERCE_DAMAGE × the attack (its target PIERCE_TARGET of that) —
+##            shoot through a creep to reach the hero
+const POWER_TIME := 10.0
+const SPREAD_EXTRA := 2
+const RAMPAGE_SPEED := 0.25
+const RAMPAGE_RADIUS := 140.0
+const RAMPAGE_DPS := 100.0
+const RAMPAGE_TICK := 0.25
+const RAMPAGE_ARMOR := 0.5
+var _rampage_tick := 0.0
+const PIERCE_PAST := 1000.0  # px the shot carries on past its target
+const PIERCE_WIDTH := 30.0
+const PIERCE_DAMAGE := 4.0   # × attack damage to everything on the line past the target
+const PIERCE_TARGET := 0.75  # the target itself takes this share of the line's hit (25% less: 3× the attack; towers just a normal hit)
+## Pierce runs on a budget, not the clock: PIERCE_BUDGET_SHARE of the enemy
+## hero's max health (when you open it; PIERCE_BUDGET_FLAT with none, in
+## Training) of EXTRA damage, beyond plain attacks — or PIERCE_BACKSTOP s at
+## most. Each SHOT costs only its single dearest hit (the enemy hero if it was
+## on the line, else one creep at PIERCE_CREEP_SHARE): hitting many at once is
+## the point, so it isn't charged per target.
+const PIERCE_BUDGET_SHARE := 0.6
+const PIERCE_BUDGET_FLAT := 600.0
+const PIERCE_CREEP_SHARE := 0.25
+const PIERCE_BACKSTOP := 60.0
+## SHIELD power-up: a shield of POWER_SHIELD_SHARE of your max health that stays
+## until it's used up (or you die).
+const POWER_SHIELD_SHARE := 0.6
+var power := ""
+var twin: Node2D = null  # the TWIN power-up's copy at your side (twin.gd), alongside any timed power
+var pierce_budget := 0.0  # Pierce: extra damage it has left to do…
+var pierce_budget_max := 1.0  # …out of this (its ring shows the share left)
+var power_left := 0.0
 const SECOND_WIND_BELOW := 0.3
 const AFTERSHOCK_RADIUS := 200.0
 const AFTERSHOCK_EVERY := 1.0
-const HOME_RANGE := 650.0  # Homeguard: "near your tower" = inside its range circle (centre to your edge, like tower.gd RANGE)
+const HOME_RANGE := 650.0  # Homeguard / Homebody: "near your tower" = inside its range circle (centre to your edge, like tower.gd RANGE)
 
 
 func _ready() -> void:
@@ -253,6 +312,7 @@ func _process(delta: float) -> void:
 	tick_unit(delta)
 	hero_aggro = maxf(0.0, hero_aggro - delta)
 	_face_hold = maxf(0.0, _face_hold - delta)
+	guard_cd = 0.0 if no_cooldowns else maxf(0.0, guard_cd - delta)
 	for k: String in cooldowns:  # cooldowns and charges keep running while dead
 		var cd_delta := delta
 		if Unit.ability_haste > 0.0 and (k != "R" or Unit.haste_ult):  # overtime: cooldowns run shorter
@@ -268,6 +328,17 @@ func _process(delta: float) -> void:
 				recharge[k] = _recharge_len[k] if charges[k] < max_charges(k) else 0.0
 	_second_wind_cd = maxf(0.0, _second_wind_cd - delta)
 	_aftershock_cd = maxf(0.0, _aftershock_cd - delta)
+	if power_left > 0.0:
+		power_left -= delta
+		if power_left <= 0.0:
+			power = ""
+		elif power == "rampage" and is_targetable():
+			_rampage_tick -= delta
+			if _rampage_tick <= 0.0:  # Rampage: the air round you hurts
+				_rampage_tick += RAMPAGE_TICK
+				for u: Node2D in Targets.enemies_in(get_tree(), position, RAMPAGE_RADIUS, team):
+					if not u.is_in_group("towers"):
+						u.take_damage(RAMPAGE_DPS * RAMPAGE_TICK, CapsuleScript.POWER_COLOR["rampage"], false, u.is_in_group("creeps"), self)
 	if not is_targetable():
 		respawn_in -= delta
 		if respawn_in <= 0.0:
@@ -390,6 +461,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		_target = null
 		_steering = false
 		_stop_attacking()
+	elif code == KEY_D and key.pressed:
+		guard()
 	elif code >= KEY_1 and code <= KEY_4 and key.pressed:
 		if can_switch and code - KEY_1 < Heroes.LIST.size():
 			set_hero(code - KEY_1)
@@ -407,6 +480,22 @@ func _unhandled_input(event: InputEvent) -> void:
 					cast(slot, get_global_mouse_position())  # quick cast: fire at the cursor on key-down
 		elif aiming == slot:
 			cast(slot, get_global_mouse_position())
+
+
+## Guard (D): cleanse, a moment of status immunity, and a small shield.
+func guard() -> bool:
+	if guard_cd > 0.0 or not is_targetable():
+		return false
+	guard_cd = GUARD_COOLDOWN
+	cleanse()
+	status_immune = GUARD_IMMUNE
+	add_shield(GUARD_SHIELD, GUARD_TIME, self, "guard")
+	effects.add_child(Effects.ShieldPuff.new(position + Vector2(0, -radius - 30), GUARD_COLOR, "D"))
+	if not is_bot:
+		PlayLog.event("guard", {})
+	elif PlayLog.recording():
+		PlayLog.event("red_guard", {})
+	return true
 
 
 ## Casting mode (a setting, Esc menu): off = quick cast (an ability fires at
@@ -448,9 +537,17 @@ func attack_interval() -> float:
 	return def["attack"]["interval"] * (1.0 + mod("attack_interval_pct")) / (1.0 + spd) * attack_time_mult()
 
 
-## Homeguard: inside your own tower's range circle?
+## Spell power: the multiplier on `slot`'s damage right now. Ability-damage
+## bonuses add (cards, and Homebody's near your tower); the ultimate's own
+## bonus and red's difficulty multiply on top (ability_info.gd damage_scale).
+func ability_scale(slot: String, ult_off := false) -> float:
+	var home: float = mod("home_ability_damage") if _near_home() else 0.0
+	return AbilityInfo.damage_scale(mods, slot, ult_off, home) * damage_mult
+
+
+## Homeguard / Homebody: inside your own tower's range circle?
 func _near_home() -> bool:
-	if mod("home_attack_speed") <= 0.0 and mod("home_regen") <= 0.0:
+	if mod("home_attack_speed") <= 0.0 and mod("home_regen") <= 0.0 			and mod("home_ability_damage") <= 0.0 and mod("home_spell_armor") <= 0.0:
 		return false
 	for t: Node2D in get_tree().get_nodes_in_group("towers"):
 		if t.team == team and t.is_targetable() and position.distance_to(t.position) - radius <= HOME_RANGE:
@@ -495,7 +592,7 @@ func attack_damage_vs(target: Node2D, dmg: float) -> float:
 
 ## After one of your attacks lands: Serrated makes heroes bleed; a charged
 ## Spellblade shot spends the charge; KYLE's attacks stoke his burn on it.
-func on_attack_landed(target: Node2D, charged := false) -> void:
+func on_attack_landed(target: Node2D, charged := false, bounced := false) -> void:
 	if charged:
 		_spellblade_ready = false
 		_spellblade_shot = null
@@ -503,6 +600,122 @@ func on_attack_landed(target: Node2D, charged := false) -> void:
 		target.bleed(self, mod("serrated"), 2.0)
 	if def["attack"].get("stoke", false) and is_instance_valid(target) and target.has_method("stoke_burn"):
 		target.stoke_burn(self)  # KYLE: each hit restarts your burn on them at its full length
+	if power == "pierce" and is_instance_valid(target):
+		var cost := 0.0  # the shot's dearest hit: its target's extra (3× not 1×) or the beam's
+		if not target.is_in_group("towers"):
+			cost = _pierce_cost(attack_damage() * (PIERCE_DAMAGE * PIERCE_TARGET - 1.0), target)
+		_spend_pierce(maxf(cost, _pierce(target)))
+	if bounced and is_instance_valid(target):
+		_bounce(target)
+
+
+## A TWIN's shot landed on `target` (fired from `from`): no on-hit cards, but
+## its own Pierce line while you have Pierce.
+func on_twin_landed(target: Node2D, from: Vector2) -> void:
+	if power == "pierce" and is_instance_valid(target):
+		var cost := 0.0
+		if not target.is_in_group("towers"):
+			cost = _pierce_cost(attack_damage() * TwinScript.TWIN_DAMAGE * (PIERCE_DAMAGE * PIERCE_TARGET - 1.0), target)
+		_spend_pierce(maxf(cost, _pierce(target, from, TwinScript.TWIN_DAMAGE)))
+
+
+## What `extra` damage (beyond a plain attack) on `victim` is worth to the
+## budget: creeps count PIERCE_CREEP_SHARE.
+func _pierce_cost(extra: float, victim: Node2D) -> float:
+	return extra * (PIERCE_CREEP_SHARE if victim.is_in_group("creeps") else 1.0)
+
+
+## A Pierce shot cost `cost` (its dearest hit): off the budget; empty → over.
+func _spend_pierce(cost: float) -> void:
+	if power != "pierce":
+		return
+	pierce_budget -= cost
+	if pierce_budget <= 0.0:
+		pierce_budget = 0.0
+		power = ""
+		power_left = 0.0
+
+
+## The SHIELD power-up's shield is still up.
+func has_power_shield() -> bool:
+	return _shields.has("power_shield") and float(_shields["power_shield"][0]) > 0.0
+
+
+## Excess: the attack jumps from `target` to up to BOUNCE_COUNT other enemies
+## within BOUNCE_RANGE of it (nearest first, no towers), each taking a share.
+func _bounce(target: Node2D) -> void:
+	var near := Targets.enemies_in(get_tree(), target.position, BOUNCE_RANGE, team).filter(
+		func(u: Node2D) -> bool: return u != target and not u.is_in_group("towers") and not (is_bot and u.is_in_group("heroes") and u.hidden_by_decoy()))
+	near.sort_custom(func(p: Node2D, q: Node2D) -> bool: return target.position.distance_to(p.position) < target.position.distance_to(q.position))
+	var col := Color("#fff3c4") if team == 0 else Color("#ffab91")
+	for u: Node2D in near.slice(0, BOUNCE_COUNT):
+		effects.add_child(Effects.Zap.new(target.position, u.position, col))
+		u.take_damage(attack_damage_vs(u, attack_damage()) * mod("bounce"), Color.WHITE, false, u.is_in_group("creeps"), self)
+
+
+## Pierce power-up: the attack carries on through `target` — every other enemy
+## on the line from you through it to PIERCE_PAST px beyond takes PIERCE_DAMAGE
+## × the hit (so a creep can be the sight for a long shot at the hero behind it).
+## `from` is where the shot came from (a TWIN's shot: the twin), `scale` its share of your attack.
+## Returns the beam's dearest hit for the budget (_pierce_cost).
+func _pierce(target: Node2D, from := Vector2.INF, scale := 1.0) -> float:
+	var origin: Vector2 = position if from == Vector2.INF else from
+	var dir := (target.position - origin).normalized()
+	if dir == Vector2.ZERO:
+		return 0.0
+	var dearest := 0.0
+	var tip := target.position + dir * PIERCE_PAST
+	var start: Vector2 = origin + dir * (radius if from == Vector2.INF else radius * 0.5)
+	effects.add_child(Effects.Helix.new(start, tip, CapsuleScript.POWER_COLOR["pierce"]))
+	for u: Node2D in Targets.enemies_on_line(get_tree(), origin, tip, PIERCE_WIDTH, team):
+		if u != target and not u.is_in_group("towers") and not (is_bot and u.is_in_group("heroes") and u.hidden_by_decoy()):
+			var dmg: float = attack_damage_vs(u, attack_damage() * scale) * PIERCE_DAMAGE
+			dearest = maxf(dearest, _pierce_cost(dmg, u))  # the beam is all extra
+			u.take_damage(dmg, Color.WHITE, false, u.is_in_group("creeps"), self)
+	return dearest
+
+
+## You last-hit an enemy ranged creep (unit.gd): by chance it drops a capsule
+## of yours where it died — likelier in overtime; always in Training.
+func on_ranged_last_hit(creep: Node2D) -> void:
+	var odds: float = CapsuleScript.DROP_CHANCE_OVERTIME if Unit.no_gold else CapsuleScript.DROP_CHANCE
+	if randf() >= odds and not Unit.training_drops:
+		return
+	var kinds: Array = CapsuleScript.POWERS.filter(func(k: String) -> bool: return k != power \
+		and not (k == "twin" and is_instance_valid(twin)) and not (k == "shield" and has_power_shield()))
+	var cap: Node2D = CapsuleScript.new(team, creep.position, kinds[randi() % kinds.size()])
+	cap.owner_hero = self
+	cap.effects = effects
+	creep.get_parent().add_child.call_deferred(cap)
+	PlayLog.event("capsule_drop" if not is_bot else "red_capsule_drop", {"power": cap.power})
+
+
+## You opened your capsule: its power for POWER_TIME s (replacing any other).
+func gain_power(kind: String) -> void:
+	if kind == "twin":  # not timed: a TWIN at your side until it breaks or you die
+		if not is_instance_valid(twin):
+			twin = TwinScript.new(self)
+			twin.effects = effects
+			get_parent().add_child.call_deferred(twin)
+		return
+	if kind == "shield":  # not timed: a shield until it's used up
+		add_shield(max_hp * POWER_SHIELD_SHARE, INF, self, "power_shield")
+		return
+	power = kind
+	power_left = POWER_TIME
+	if kind == "pierce":
+		power_left = PIERCE_BACKSTOP
+		pierce_budget_max = PIERCE_BUDGET_FLAT
+		for h: Node2D in get_tree().get_nodes_in_group("heroes"):
+			if h.team != team and not h.is_in_group("decoys"):
+				pierce_budget_max = h.max_hp * PIERCE_BUDGET_SHARE
+		pierce_budget = pierce_budget_max
+	_rampage_tick = 0.0
+
+
+## Rampage moves you faster (on top of any slow).
+func move_speed_mult() -> float:
+	return super() * (1.0 + (RAMPAGE_SPEED if power == "rampage" and power_left > 0.0 else 0.0))
 
 
 ## Aftershock: you (or your Tank Minion) stunned `victim` — a shockwave there.
@@ -653,7 +866,7 @@ func _tick_rage(delta: float) -> void:
 					u.stun(float(_rage["stun"]), self)
 					_rage_stunned[id] = _clock_rage + float(_rage.get("stun_every", 1.5))
 			if float(_rage.get("burn_dps", 0.0)) > 0.0:
-				u.burn(self, float(_rage["burn_dps"]) * AbilityInfo.damage_scale(mods, "R") * damage_mult, float(_rage.get("burn_time", 2.0)) + mod("burn_time"))
+				u.burn(self, float(_rage["burn_dps"]) * ability_scale("R"), float(_rage.get("burn_time", 2.0)) + mod("burn_time"))
 	if rage_left <= 0.0:
 		_end_rage()
 
@@ -725,6 +938,13 @@ func order_attack(point: Vector2) -> void:
 	if not is_targetable():
 		return  # dead
 	_steering = false
+	var cap := _capsule_at(point)
+	if cap and cap.breakable_by(team):  # clicked right on a power-up capsule: break it open (yours) or destroy it (theirs, below half)
+		_attack_move = null
+		attack_target = cap
+		if not is_bot:
+			effects.add_child(Effects.MoveMarker.new(point, CapsuleScript.POWER_COLOR[cap.power]))
+		return
 	var ally := _deniable_at(point)
 	if ally:  # clicked right on one of your own low creeps: deny it (attack-move never does)
 		order_deny(ally)
@@ -749,6 +969,13 @@ func order_deny(creep: Node2D) -> void:
 
 
 ## One of your own deniable creeps under the click (on it, not just near), or null.
+func _capsule_at(point: Vector2) -> Node2D:
+	for c: Node2D in get_tree().get_nodes_in_group("capsules"):
+		if c.is_targetable() and point.distance_to(c.position) <= c.radius + 30.0:
+			return c
+	return null
+
+
 func _deniable_at(point: Vector2) -> Node2D:
 	var best: Node2D = null
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
@@ -770,15 +997,20 @@ func leash_used() -> int:
 	return n
 
 
-## Leash a creep of yours (it follows you and attacks what you attack), or
-## release it if it's already following. False if you lack the points.
+## Leash a creep of yours (it follows you and attacks what you attack) — or
+## your own capsule (it floats after you, open to the enemy at any health
+## while it does) — or release it if it's already following. False if you
+## lack the points.
 func toggle_leash(c: Node2D) -> bool:
-	if c.team != team or not c.is_in_group("creeps") or not c.is_targetable():
+	if c.is_in_group("capsules"):
+		if c.owner_team != team or not c.is_targetable():
+			return false  # only its owner drags a capsule
+	elif c.team != team or not c.is_in_group("creeps") or not c.is_targetable():
 		return false
 	if leashed.has(c):
 		leashed.erase(c)
 		c.leader = null
-		PlayLog.event("unleash" if not is_bot else "red_unleash", {"kind": c.kind})
+		PlayLog.event("unleash" if not is_bot else "red_unleash", {"kind": _leash_kind(c)})
 		return true
 	if leash_used() + c.leash_cost() > leash_capacity():
 		leash_flash = 0.8
@@ -787,15 +1019,25 @@ func toggle_leash(c: Node2D) -> bool:
 	c.set("camp", null)  # (leashing a creep off a totem takes it off)
 	c.leash_slot = leashed.size()
 	leashed.append(c)
-	PlayLog.event("leash" if not is_bot else "red_leash", {"kind": c.kind})
+	PlayLog.event("leash" if not is_bot else "red_leash", {"kind": _leash_kind(c)})
 	return true
 
 
-## One of your own creeps under the cursor, or null.
+## What the leash log calls `c`: a creep's kind, or "capsule:<power>".
+func _leash_kind(c: Node2D) -> String:
+	return ("capsule:" + str(c.get("power"))) if c.is_in_group("capsules") else str(c.get("kind"))
+
+
+## One of your own creeps — or your own capsule (draggable too) — under the
+## cursor, or null.
 func _own_creep_at(point: Vector2) -> Node2D:
 	var best: Node2D = null
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.team == team and c.is_targetable() and point.distance_to(c.position) <= c.radius + 30.0:
+			if best == null or point.distance_to(c.position) < point.distance_to(best.position):
+				best = c
+	for c: Node2D in get_tree().get_nodes_in_group("capsules"):
+		if c.owner_team == team and c.is_targetable() and point.distance_to(c.position) <= c.radius + 30.0:
 			if best == null or point.distance_to(c.position) < point.distance_to(best.position):
 				best = c
 	return best
@@ -851,7 +1093,7 @@ func _update_attack() -> void:
 	if attack_target == null and _attack_move != null:
 		# Of the enemies within reach of the hero, the one closest to the click.
 		attack_target = _closest_to(_attack_move, Targets.enemies_in(get_tree(), position, ACQUIRE_RANGE, team).filter(
-			func(u: Node2D) -> bool: return not (is_bot and u.is_in_group("heroes") and u.hidden_by_decoy())))
+			func(u: Node2D) -> bool: return (not is_bot or _not_capsule(u)) and not (is_bot and u.is_in_group("heroes") and u.hidden_by_decoy())))
 		if attack_target == null and _target == null:
 			_attack_move = null  # arrived with nothing to fight
 	if attack_target == null:
@@ -866,31 +1108,53 @@ func _update_attack() -> void:
 	if _attack_cd <= 0.0:
 		_attack_cd = attack_interval()
 		_volley += 1
-		_shoot(attack_target)
+		_main_attacks += 1
+		var main_shot := _shoot(attack_target)
+		if mod("bounce") > 0.0 and _main_attacks % BOUNCE_EVERY == 0:
+			main_shot.bounce = true  # Excess
+		var in_range := Targets.enemies_in(get_tree(), position, attack_range(), team).filter(
+			func(u: Node2D) -> bool: return not (is_bot and u.is_in_group("heroes") and u.hidden_by_decoy()))
+		var shots: Array = [attack_target]
 		if mod("twin_shot") > 0.0:  # a second shot at the nearest other enemy in range
-			var others := Targets.enemies_in(get_tree(), position, attack_range(), team).filter(
-				func(u: Node2D) -> bool: return u != attack_target and not (is_bot and u.is_in_group("heroes") and u.hidden_by_decoy()))
-			var second := _closest_to(position, others)
+			var second := _closest_to(position, in_range.filter(func(u: Node2D) -> bool: return u != attack_target))
 			if second:
 				_shoot(second)
+				shots.append(second)
+		if is_instance_valid(twin):  # TWIN: its own shot at each of yours
+			twin.fire(shots)
+		if power == "spread":  # Spread power-up: every shot is a triple — SPREAD_EXTRA more at the enemies nearest its target
+			for t: Node2D in shots:
+				var near := in_range.filter(func(u: Node2D) -> bool: return u != t)
+				near.sort_custom(func(p: Node2D, q: Node2D) -> bool: return t.position.distance_to(p.position) < t.position.distance_to(q.position))
+				for u: Node2D in near.slice(0, SPREAD_EXTRA):
+					_shoot(u)
 
 
-func _shoot(at: Node2D) -> void:
-	var shot := Effects.AttackShot.new(position + facing * radius, at, attack_damage(),
+func _shoot(at: Node2D) -> Effects.AttackShot:
+	var shot := Effects.AttackShot.new(position + facing * radius, at, attack_damage() * (PIERCE_DAMAGE * PIERCE_TARGET if power == "pierce" and not at.is_in_group("towers") else 1.0),
 		Color("#fff3c4") if team == 0 else Color("#ffab91"), false, 6.0, self)
 	shot.speed_mult = 1.0 + mod("shot_speed")  # Keen Eye
 	shot.volley = _volley
-	if at.is_in_group("creeps") and at.hp < at.max_hp * mod("snap_finish"):
-		shot.speed_mult = 60.0  # Bounty Hunter: lands at once on a low creep
 	if _spellblade_ready and not is_instance_valid(_spellblade_shot) and not at.is_in_group("towers"):  # Spellblade: this one's charged
 		shot.extra_damage = mod("spellblade")
 		shot.on_hit_slow = 0.2
 		_spellblade_shot = shot  # the charge is spent when it lands (on_attack_landed), not now
 	effects.add_child(shot)
+	return shot
 
 
 func _closest_enemy(at: Vector2, within: float) -> Node2D:
-	return _closest_to(at, Targets.enemies_in(get_tree(), at, within, team))
+	return _closest_to(at, Targets.enemies_in(get_tree(), at, within, team).filter(
+			func(u: Node2D) -> bool: return not is_bot or _not_capsule(u)))
+
+
+## Bots never auto-acquire capsules — their capsule brain (bot.gd) is the only
+## way red touches one. The player's clicks and attack-moves DO pick up any
+## breakable capsule like a normal target (the Gauntlet rule: don't shoot your
+## food — the worst case is opening your own power early). A capsule only
+## enters target lists at all while breakable_by (power_capsule.is_enemy_of).
+func _not_capsule(u: Node2D) -> bool:
+	return not u.is_in_group("capsules")
 
 
 func _closest_to(point: Vector2, candidates: Array) -> Node2D:
@@ -909,7 +1173,7 @@ func cast(slot: String, point: Vector2) -> void:
 		return
 	if has_recast(slot):  # second press of a recast ability: set it off
 		var a2: Dictionary = abilities[slot]
-		var d2: float = a2["damage"] * AbilityInfo.damage_scale(mods, slot, ult_damage_off) * damage_mult
+		var d2: float = a2["damage"] * ability_scale(slot, ult_damage_off)
 		recast[slot].detonate(d2, slot == "Q" and mod("echo") > 0.0)
 		return
 	if not is_ready(slot) or not is_targetable() or is_stunned():
@@ -918,7 +1182,7 @@ func cast(slot: String, point: Vector2) -> void:
 		no_mana_flash = 0.6
 		return
 	var a: Dictionary = abilities[slot]
-	var dmg: float = a["damage"] * AbilityInfo.damage_scale(mods, slot, ult_damage_off) * damage_mult
+	var dmg: float = a["damage"] * ability_scale(slot, ult_damage_off)
 	var cd: float = a["cooldown"] * AbilityInfo.cooldown_scale(mods, slot)
 	if a["kind"] == "orb":  # recast: no cooldown until it explodes or fizzles
 		var dir := (point - position).normalized() if point.distance_to(position) > 1.0 else facing
@@ -1020,7 +1284,7 @@ func _cast_effects(a: Dictionary, point: Vector2, dmg: float) -> void:
 					b.finale = a.get("finale", 0.0)
 					b.bleed = a.get("bleed", 0.0)
 					b.fx = a.get("fx", "")
-					b.burn_dps = a.get("burn_dps", 0.0) * AbilityInfo.damage_scale(mods, "W") * damage_mult
+					b.burn_dps = a.get("burn_dps", 0.0) * ability_scale("W")
 					b.burn_time = a.get("burn_time", 0.0) + (mod("burn_time") if a.get("burn_time", 0.0) > 0.0 else 0.0)  # Kindling
 					b.blind = a.get("blind", false)  # RUMOR
 					_fx(b, a))
@@ -1092,9 +1356,9 @@ func _cast_effects(a: Dictionary, point: Vector2, dmg: float) -> void:
 			for u: Node2D in get_tree().get_nodes_in_group("units"):
 				if u.team == team and u.is_targetable() and position.distance_to(u.position) <= a["radius"] + u.radius:
 					if u.is_in_group("creeps"):  # grows with the creeps, round after round
-						u.add_shield(u.max_hp * float(a.get("creep_pct", 0.15)), a.get("duration", 3.0), self)
+						u.add_shield(u.max_hp * float(a.get("creep_pct", 0.15)), a.get("duration", 3.0), self, "brace")
 					elif u.is_in_group("heroes"):
-						u.add_shield(float(a["shield"]), a.get("duration", 3.0), self)
+						u.add_shield(float(a["shield"]), a.get("duration", 3.0), self, "brace")
 		"rage":  # RAGE: swell, burn whoever you touch, take less damage
 			_start_rage(a, dmg)
 		"self":
@@ -1126,7 +1390,7 @@ func _cast_effects(a: Dictionary, point: Vector2, dmg: float) -> void:
 func rage_contact(u: Node2D) -> void:
 	if rage_left <= 0.0 or float(_rage.get("burn_dps", 0.0)) <= 0.0 or not is_instance_valid(u) or not u.is_targetable():
 		return
-	u.burn(self, float(_rage["burn_dps"]) * AbilityInfo.damage_scale(mods, "R") * damage_mult, float(_rage.get("burn_time", 2.0)) + mod("burn_time"))
+	u.burn(self, float(_rage["burn_dps"]) * ability_scale("R"), float(_rage.get("burn_time", 2.0)) + mod("burn_time"))
 
 
 ## Stop a GRIND now (its remaining hits are lost).
@@ -1228,7 +1492,25 @@ func _add_to_ground(node: Node2D) -> void:
 		main.move_child(node, 1)  # child 0 is the ground
 
 
+## Armor (unit.gd): RAGE's cut, times Homebody's cut on abilities near your
+## tower, times Rampage's.
+func armor_mult(source: Node2D, hit: Dictionary) -> float:
+	var m := super(source, hit)
+	if not hit.is_empty() and mod("home_spell_armor") > 0.0 and _near_home():
+		m *= 1.0 - mod("home_spell_armor")
+	if power == "rampage" and power_left > 0.0:
+		m *= 1.0 - RAMPAGE_ARMOR
+	return m
+
+
 ## Hits on your hero always show, in red. (A bot shows them like any unit.)
+## TWIN: it soaks its share of a hit (unit.gd calls this after armor, before shields).
+func _share_damage(amount: float) -> float:
+	if is_instance_valid(twin) and amount > 0.0:
+		return amount - twin.absorb(amount * TwinScript.TWIN_SHARE)
+	return amount
+
+
 func take_damage(amount: float, colour: Color, big := false, quiet := false, source: Node2D = null, hit: Dictionary = {}) -> void:
 	if in_well:
 		return  # invulnerable in your own well
@@ -1240,11 +1522,15 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 	super(amount, colour, big, quiet, source, hit)
 	if mod("second_wind") > 0.0 and _second_wind_cd <= 0.0 and is_targetable() and hp < max_hp * SECOND_WIND_BELOW:
 		_second_wind_cd = SECOND_WIND_EVERY  # Second Wind: a shield when you drop low
-		add_shield(mod("second_wind"), 3.0, self)
+		add_shield(mod("second_wind"), 3.0, self, "second_wind")
 
 
 func _die() -> void:
 	leashing = false
+	power = ""  # a power-up ends with you
+	power_left = 0.0
+	if is_instance_valid(twin):
+		twin.end("death")
 	if rage_left > 0.0:
 		_end_rage()
 	spin_left = 0.0
@@ -1338,11 +1624,11 @@ func _dash(dest: Vector2, colour: Color, damage: float, a: Dictionary = {}) -> v
 					hit[u] = true
 					u.take_damage(damage, colour, false, false, self, ability_hit(a))
 					if a.get("attack_slow", 0.0) > 0.0:
-						u.slow_attacks(a["attack_slow"], a.get("slow_time", 2.0))
+						u.slow_attacks(a["attack_slow"], a.get("slow_time", 2.0), "dash")
 					if a.get("zone_slow", 0.0) > 0.0 and (u.is_burning_from(self) or u.in_zone_of(self)):  # combo: dashed through them while they burn
-						u.slow_moves(a["zone_slow"], a.get("slow_time", 2.0))
+						u.slow_moves(a["zone_slow"], a.get("slow_time", 2.0), "dash")
 					if a.get("move_slow", 0.0) > 0.0:
-						u.slow_moves(a["move_slow"], a.get("slow_time", 1.5))
+						u.slow_moves(a["move_slow"], a.get("slow_time", 1.5), "dash")
 					if a.get("expose", 0.0) > 0.0 and u.is_targetable():  # SHOVE: -armor for a few seconds
 						u.expose(a["expose"], a.get("expose_time", 3.0))
 					rage_contact(u)  # during RAGE, SHOVE's hits burn like a touch
@@ -1394,6 +1680,23 @@ static func draw_icon(canvas: CanvasItem, h: Dictionary, at: Vector2, r: float, 
 	for p in icon.size():
 		icon[p] += at
 	canvas.draw_colored_polygon(icon, h["color"])
+
+
+## This hero's body drawn on `canvas` at `at`, `r` across, facing `dir` (a
+## TWIN draws its hero this way): the painted art if there is any, else the shape.
+func draw_body_on(canvas: CanvasItem, at: Vector2, r: float, dir: Vector2) -> void:
+	var shape: String = def.get("shape", "circle")
+	var slot := "hero_" + shape
+	if SkinArt.has(slot):
+		SkinArt.draw(canvas, slot, at, r, dir)
+		return
+	var pts := shape_points(shape, r, dir)
+	for i in pts.size():
+		pts[i] += at
+	canvas.draw_colored_polygon(pts, def["color"])
+	var outline := pts.duplicate()
+	outline.append(pts[0])
+	canvas.draw_polyline(outline, RIM, 2.0)
 
 
 static func shape_points(shape: String, r: float, dir: Vector2) -> PackedVector2Array:
@@ -1466,6 +1769,17 @@ func _draw() -> void:
 		var flick := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 70.0)
 		draw_circle(Vector2.ZERO, radius + 8.0 + 4.0 * flick, Color(1.0, 0.4, 0.1, 0.18 + 0.1 * flick))
 		draw_arc(Vector2.ZERO, radius + float(_rage.get("contact_reach", 40.0)), 0.0, TAU, 48, Color(1.0, 0.5, 0.15, 0.35), 2.0)
+	if power != "" and power_left > 0.0:  # a power-up: a turning broken ring in its colour, outermost, shrinking as it runs out
+		var pc: Color = CapsuleScript.POWER_COLOR[power]
+		if power == "rampage":  # its damage area: a faint hot disc with a flickering edge
+			var fl := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 80.0)
+			draw_circle(Vector2.ZERO, RAMPAGE_RADIUS, Color(pc, 0.08 + 0.05 * fl))
+			draw_arc(Vector2.ZERO, RAMPAGE_RADIUS, 0.0, TAU, 48, Color(pc, 0.35 + 0.25 * fl), 2.0)
+		var turn := Time.get_ticks_msec() / 400.0
+		var left := pierce_budget / pierce_budget_max if power == "pierce" else power_left / POWER_TIME  # Pierce drains by damage, not time
+		for i in 3:
+			var a0 := turn + i * TAU / 3.0
+			draw_arc(Vector2.ZERO, radius + 28.0, a0, a0 + TAU / 3.0 * 0.7 * left, 16, Color(pc, 0.9), 3.5)
 	draw_health_bar(76.0, Color("#66bb6a") if not is_bot else TEAM_COLORS[team], 9.0)
 	draw_stun_mark()
 	if is_bot:

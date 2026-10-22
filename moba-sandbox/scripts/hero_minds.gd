@@ -36,6 +36,9 @@ extends RefCounted
 ##             keep_add         added to keep_out (matchups)
 ##             predictable_only skillshots / delayed blasts at the enemy hero only when it's predictable
 ##                              (standing still, or moving in a straight line for ~0.5 s)
+##             bank_nerve       how long it dares bank a capsule (× bot.gd BANK_ROT; 1 = standard)
+##             deny_lurk        how keen it waits by your cracked capsule for the deny (0..1, × smartness)
+##             capsule_tow      how keen it tows a banked SHELL/RAMPAGE along (0..1, × smartness; bot.gd _tow_worth)
 ##   stages  [{"from": round, "traits": {...}, "rules": {...}}]: how it grows
 ##           (later stages layer over earlier ones)
 ##   vs      {"<hero name>": {"traits": {...}, "rules": {...}}}: matchup tweaks
@@ -49,7 +52,7 @@ const MINDS := {
 		"stance": {"base": 0.0, "on_wave": 0.7, "tough_pull": 120.0, "sustain_pull": 200.0, "min": 40.0, "max": 360.0},
 		# controls where fights happen: keeps you burning, knocks you out of his
 		# face or into his fire, and burns the creeps you want to farm
-		"rules": {"keep_burning": true, "boop_peel": 200.0},
+		"rules": {"keep_burning": true, "boop_peel": 200.0, "bank_nerve": 1.0, "deny_lurk": 0.7, "capsule_tow": 0.6},
 		"stages": [
 			{"from": 4, "rules": {"boop_into_fire": true}},   # learns to use BOOP with IGNITE
 			{"from": 7, "rules": {"ignite_deny": true}},      # learns to zone the farm
@@ -72,7 +75,7 @@ const MINDS := {
 		"stance": {"base": -10.0, "on_wave": 0.5, "tough_pull": 60.0, "sustain_pull": 100.0, "min": -40.0, "max": 80.0},
 		# waits in the wave for an opening, then POUNCEs and commits fully; never
 		# lets a hurt hero walk away. Grows from impulsive to patient.
-		"rules": {"hunt_at": 0.25},
+		"rules": {"hunt_at": 0.25, "bank_nerve": 1.3, "deny_lurk": 0.4, "capsule_tow": 0.9},  # the diver holds SHELL for a dive — and carries it there; too impatient to lurk
 		"stages": [
 			{"from": 4, "traits": {"trade_when": "vulnerable"}, "rules": {"hunt_at": 0.35, "wait_escape": true}},  # learns patience
 			{"from": 7, "rules": {"hunt_at": 0.4}},
@@ -102,7 +105,7 @@ const MINDS := {
 		"overcharge", "echo", "reserve", "afterimage", "kindling", "executioner", "clean_finish", "adrenaline",
 		"scavenger", "tank_minion", "reinforcement", "vanguard", "standard_bearer", "siege_training", "healing_aura",
 		"focus", "wellspring", "longbow", "siphon"]},
-		"rules": {"grind_for_kills": true, "front_first": true, "threat": 250.0},
+		"rules": {"grind_for_kills": true, "front_first": true, "threat": 250.0, "bank_nerve": 0.7, "deny_lurk": 0.5, "capsule_tow": 0.3},  # the anchor plays it straight
 		"stages": [
 			{"from": 4, "rules": {"threat": 350.0}},   # reads the lane: steps up sooner
 			{"from": 8, "rules": {"threat": 400.0}},
@@ -119,7 +122,7 @@ const MINDS := {
 		"stance": {"base": 0.0, "on_wave": 0.75, "tough_pull": 150.0, "sustain_pull": 150.0, "min": 150.0, "max": 460.0},
 		# never in reach, always in range: poke-farms from safety, punishes anyone
 		# who stands still or walks in a straight line
-		"rules": {"keep_out": 60.0},
+		"rules": {"keep_out": 60.0, "bank_nerve": 1.0, "deny_lurk": 0.9, "capsule_tow": 0.4},  # the artillery lurks denies from range
 		"stages": [
 			{"from": 4, "traits": {"hero_casts": "poke"}, "rules": {"predictable_only": true}},  # learns to punish
 			{"from": 7, "rules": {"keep_out": 100.0}},

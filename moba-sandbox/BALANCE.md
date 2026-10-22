@@ -294,8 +294,7 @@ round 8, then flat).
 | Hero kill (× lane growth) | 120 | 131 | 142 | 153 | 164 | 176 | 187 | 198+ |
 | **Good round's farm** | **630** | 709 | 788 | 866 | 945 | 1,024 | 1,103 | **1,181** |
 
-Card modifiers on last hits: no card adds gold any more (Bounty Hunter now
-makes low-creep attacks land instantly); Siphon +15 mana; Adrenaline −1 s ultimate cooldown. (Midas, "last hits pay double", was removed 2026-10-02.)
+Card modifiers on last hits: no card adds gold any more; Refund +20 mana; Elegance −1 s ultimate cooldown. (Midas, "last hits pay double", was removed 2026-10-02.)
 
 ### Gold out
 
@@ -303,7 +302,7 @@ makes low-creep attacks land instantly); Siphon +15 mana; Adrenaline −1 s ulti
 |---|---|---|
 | Dying | lose 15% of carried gold, max 300 — to the enemy hero if it got the kill | `hero.gd` `DEATH_GOLD_LOSS`, `DEATH_GOLD_CAP` |
 | Rising prices | every pick (card or level) raises all prices 8% of base, rounded to 5 | `run.gd` `PRICE_RISE` |
-| Rerolls | 50, +25 per reroll so far this run (never resets: chasing a combo gets dear) | `REROLL_COST`, `REROLL_STEP` |
+| Rerolls | none — the shop has no Reroll button; the Gamble card rerolls once per run | — |
 
 **Price after n picks** = base × (1 + 0.08 n): after 5 picks +40%, after 10
 +80%, after 20 +160%.
@@ -317,18 +316,18 @@ makes low-creep attacks land instantly); Siphon +15 mana; Adrenaline −1 s ulti
   purchase to take an ability level (lowest letter first), otherwise **the
   first affordable card on its next hero's personality's priority list**
   (`RED_PRIORITY`), until nothing fits (`RED_LEVEL_CHANCE`). Cards missing from
-  a list are never bought: Command, Rally Cry, Siege Breaker only by the pusher
+  a list are never bought: Command, Wonderpets, Siege Breaker only by the pusher
   (the only one that leashes / sieges); Scavenger never by the pusher (it never
-  denies), Recruit and Homeguard only by the farmer; Glass Cannon, Overclock and
+  denies), Recruit and Homebody only by the farmer; Glass Cannon, Overclock and
   Heavy Hands by nobody (a bot can't play their downside).
 
 | Personality | Priority list (best first) |
 |---|---|
-| Brawler | Vigor, Whetstone, Quickdraw, Serrated, Vampirism, Second Wind, Colossus, Spellblade, Cold Read, Twin Shot, Arcane Edge, Aftershock, Hunter's Mark, Salve, Haste, Spite, Boots, Overcharge, Echo, Reserve, Afterimage, Kindling, Executioner, Clean Finish, Adrenaline, Scavenger, Tank Minion, Reinforcement, Vanguard, Standard Bearer, Siege Training, Healing Aura, Focus, Wellspring, Longbow, Siphon |
-| Farmer | Arcane Edge, Haste, Focus, Wellspring, Siphon, Keen Eye, Clean Finish, Bounty Hunter, Echo, Reserve, Overcharge, Executioner, Adrenaline, Homeguard, Afterimage, Second Wind, Scavenger, Recruit, Vigor, Whetstone, Quickdraw, Longbow, Salve, Boots, Colossus, Twin Shot, Healing Aura, Reinforcement, Tank Minion, Siege Training, Vampirism |
-| Pusher | Reinforcement, Siege Training, Tank Minion, Command, Rally Cry, Sappers, Vanguard, Standard Bearer, Pathfinders, Healing Aura, Siege Breaker, Quickdraw, Whetstone, Twin Shot, Arcane Edge, Vigor, Haste, Boots, Colossus, Overcharge, Echo, Salve, Focus, Wellspring, Longbow, Vampirism, Executioner, Siphon |
-| Opportunist | Arcane Edge, Overcharge, Echo, Haste, Hunter's Mark, Kindling, Cold Read, Spellblade, Reserve, Afterimage, Focus, Vigor, Boots, Wellspring, Colossus, Second Wind, Vampirism, Whetstone, Quickdraw, Salve, Twin Shot, Executioner, Keen Eye, Clean Finish, Adrenaline, Scavenger, Longbow, Tank Minion, Reinforcement, Siege Training, Healing Aura, Siphon |
-| Standard | Arcane Edge, Vigor, Whetstone, Quickdraw, Haste, Spellblade, Second Wind, Overcharge, Colossus, Twin Shot, Echo, Hunter's Mark, Reserve, Vampirism, Salve, Boots, Clean Finish, Keen Eye, Adrenaline, Focus, Wellspring, Executioner, Bounty Hunter, Longbow, Tank Minion, Reinforcement, Vanguard, Siege Training, Standard Bearer, Healing Aura, Sappers, Pathfinders, Scavenger, Siphon |
+| Brawler | Red Drink, Chunk, Hands, Serrated, Suck, Second Wind, Colossus, Spellblade, Snap, Twin Shot, Amp, Aftershock, Hunter's Mark, Drip, Efficiency, Spite, Shoes, Overcharge, Echo, Reserve, Afterimage, Flamable, Executioner, Clean Finish, Elegance, Scavenger, Tank Minion, Reinforcement, Vanguard, Standard Bearer, Siege Training, Healing Aura, Blue Drink, Trickle, Kobe, Refund |
+| Farmer | Amp, Efficiency, Blue Drink, Trickle, Refund, Keen Eye, Clean Finish, Excess, Echo, Reserve, Overcharge, Executioner, Elegance, Homebody, Afterimage, Second Wind, Scavenger, Recruit, Red Drink, Chunk, Hands, Kobe, Drip, Shoes, Colossus, Twin Shot, Healing Aura, Reinforcement, Tank Minion, Siege Training, Suck |
+| Pusher | Reinforcement, Siege Training, Tank Minion, Command, Wonderpets, Sappers, Vanguard, Standard Bearer, Pathfinders, Healing Aura, Siege Breaker, Hands, Chunk, Twin Shot, Amp, Red Drink, Efficiency, Shoes, Colossus, Overcharge, Echo, Drip, Blue Drink, Trickle, Kobe, Suck, Executioner, Refund |
+| Opportunist | Amp, Overcharge, Echo, Efficiency, Hunter's Mark, Flamable, Snap, Spellblade, Reserve, Afterimage, Blue Drink, Red Drink, Shoes, Trickle, Colossus, Second Wind, Suck, Chunk, Hands, Drip, Twin Shot, Executioner, Keen Eye, Clean Finish, Elegance, Scavenger, Kobe, Tank Minion, Reinforcement, Siege Training, Healing Aura, Refund |
+| Standard | Amp, Red Drink, Chunk, Hands, Efficiency, Spellblade, Second Wind, Overcharge, Colossus, Twin Shot, Echo, Hunter's Mark, Reserve, Suck, Drip, Shoes, Clean Finish, Keen Eye, Elegance, Blue Drink, Trickle, Executioner, Excess, Kobe, Tank Minion, Reinforcement, Vanguard, Siege Training, Standard Bearer, Healing Aura, Sappers, Pathfinders, Scavenger, Refund |
 - Red pays the same rising prices.
 
 ---
@@ -351,29 +350,29 @@ Levels belong to the **letter** and carry across hero switches.
 
 | Tier (base price) | Card | Effect |
 |---|---|---|
-| Common (100) | Whetstone | +8 attack damage |
-| | Quickdraw | +12% attack speed |
-| | Vigor | +200 max health |
-| | Focus | +150 max mana |
-| | Boots | +25 move speed |
-| | Salve | +6 health regen |
-| | Siphon | +15 mana per last hit |
+| Common (100) | Chunk | +10 attack damage |
+| | Hands | +10% attack speed |
+| | Red Drink | +200 max health |
+| | Blue Drink | +150 max mana |
+| | Shoes | +20 move speed |
+| | Drip | +8 health regen |
+| | Refund | +20 mana per last hit |
 | | Scavenger | denying a creep: +25 mana, +40 health (before overtime) |
 | | Heavy Hands | attacks +40% damage, 25% longer between them |
-| | Homeguard | inside your tower's range (650): +25% attack speed, +5 health regen |
-| | Rally Cry | leashed creeps +30% damage, −30% damage taken (max 2; damage cut capped at 75%) |
-| | Adrenaline | each last hit: −1 s on the ultimate's cooldown (max 2) |
+| | Homebody | inside your tower's range (650): +20% ability damage, take 20% less ability damage (burns and bleeds not reduced) |
+| | Wonderpets | leashed creeps +20% damage, −20% damage taken (max 2; damage cut capped at 75%). Totem-latched creeps don't count |
+| | Elegance | each last hit: −1 s on the ultimate's cooldown (max 2) |
 | | Keen Eye | attack shots fly 50% faster |
 | | Clean Finish | attacks +15% vs creeps below half health |
-| | Bargain | when bought: halves your current reroll cost (the climb carries on from there). Shown once per run — skip it and it's gone. Doesn't count as a pick |
-| Rare (250) | Arcane Edge | +20% ability damage |
-| | Haste | −15% cooldowns |
-| | Longbow | +120 attack range |
-| | Vampirism | heal 8% of damage to creeps, 16% to heroes |
-| | Bounty Hunter | attacks on creeps below 25% health land instantly (no more gold, 2026-10-04) |
-| | Wellspring | +5 mana regen |
-| | Kindling | burns +2 s; a unit dying while burning ignites the nearest of its side within 150 (max 2) |
-| | Cold Read | slowed enemies (move or attack slow) take +12% damage from you (max 3) |
+| | Gamble | when bought: every shop offer rolls again (free). Max 1 per run; offered every round until bought. Doesn't count as a pick |
+| Rare (250) | Amp | +20% ability damage (max 3) |
+| | Efficiency | −15% cooldowns |
+| | Kobe | +100 attack range |
+| | Suck | heal 8% of damage to creeps, 16% to heroes |
+| | Excess | every 5th attack (at your target; Twin Shot / Spread extras don't count) bounces to up to 3 enemies within 250 of its target for 50% damage, no towers |
+| | Trickle | +8 mana regen |
+| | Flamable | burns +1 s; a unit dying while burning ignites the nearest of its side within 150 (max 2) |
+| | Snap | slowed enemies (move or attack slow) take +12% damage from you, and that hit ends all their slows (max 3) |
 | | Serrated | your attacks make heroes bleed 2 s: your attacks on them +10% (max 3) |
 | | Spite | shields on you or given by you reflect 30% of what they soak at the creep / hero that hit (max 3) |
 | | Second Wind | below 30% health: 150 shield for 3 s, once per 40 s |
@@ -392,7 +391,13 @@ Levels belong to the **letter** and carry across hero switches.
 | | Hunter's Mark | ability hits mark heroes 4 s; your next attack on a marked hero +15% of its missing health |
 | | Recruit | a creep you deny rises at half health for 6 s (worth no gold; before overtime) |
 
-Cooldown cards (Haste, Overclock) add up to at most −60% (`ability_info.gd` `COOLDOWN_CAP`); Overcharge halves the ultimate on top, never below 20% of it (`ULT_FLOOR`).
+Cooldown cards (Efficiency, Overclock) add up to at most −60% (`ability_info.gd` `COOLDOWN_CAP`); Overcharge halves the ultimate on top, never below 20% of it (`ULT_FLOOR`).
+
+**Stacking rules** (`unit.gd`, 2026-10-14):
+- **Spell power adds**: Amp, Glass Cannon and Homebody's near-tower bonus sum; Overcharge (ultimate) and red's difficulty multiply on top (`hero.gd` `ability_scale`).
+- **Armor multiplies**: RAGE, Homebody's ability cut, Wonderpets' creep cut all multiply in `armor_mult` (stacked cuts shrink, never immunity). Exposed (+10% taken) and Snap (+12%) multiply on top.
+- **Statuses, per source**: the same source again refreshes (stronger replaces with its own time, equal tops the time up, weaker ignored). **Different sources add**: move slows (cap 80%, `MOVE_SLOW_CAP`), attack slows (cap +200%, `ATTACK_SLOW_CAP`), shields (cap 100% of max health, or the biggest single shield, `SHIELD_CAP_PCT`; soaked soonest-expiring first), bleeds (TRAP + Serrated). Caps are loose on purpose: stacking may get wild, trim later.
+- **One at a time**: burn (strongest), exposed (strongest). **Control never stacks**: stun (longest), blind (on/off), tether (replaces).
 
 ### Wave cards (creep upgrades)
 
@@ -469,12 +474,20 @@ The minimap shows the whole field (y ±720).
 
 | Hero | HP | Speed | Mana / regen | Attack | Attack DPS | Range |
 |---|---|---|---|---|---|---|
-| KYLE | 700 | 360 | 500 / 6 | 25 every 0.8 s | 31 | 420 |
-| CHAD | 900 | 400 | 500 / 7 | 40 every 0.65 s | 62 | 150 |
-| KAREN | 1,100 | 320 | 450 / 5 | 35 every 1.0 s | 35 | 140 |
+| KYLE | 700 | 360 | 500 / 6 | 30 every 0.8 s | 38 | 420 |
+| CHAD | 800 | 400 | 500 / 7 | 35 every 0.65 s | 54 | 150 |
+| KAREN | 1,000 | 320 | 450 / 5 | 35 every 1.0 s | 35 | 140 |
 | BECKY | 650 | 340 | 550 / 9 | 25 every 0.9 s | 28 | 520 |
 
-All heroes: 2 HP/s regen, 2 leash points. Respawn: see the death timer in
+All heroes: 2 HP/s regen, 2 leash points. **D** (Guard in code), every hero, outside
+the Q W E R slots (no levels, no mana): a 300 shield for 2 s (whichever runs out
+first); as it goes up it clears every harmful status (slows, burn, bleed,
+exposed, blind, stun, tether, marks) and for 0.5 s none can land. Works while
+stunned. 60 s cooldown (`hero.gd` `GUARD_*`). Red uses it a beat after being
+locked down with you close, or when low and being hit (0.6 s → 0.15 s reaction
+with smartness). It reaches for it readily, slows included — on purpose:
+baiting red's Guard, then going in while it's down, is a play (user, 2026-10-15).
+Respawn: see the death timer in
 section 4 (Training: 6 s).
 
 ---
@@ -487,8 +500,8 @@ Levels I → II → III. "cd" = cooldown, "—" = unchanged.
 
 | | Ability | I | II | III |
 |---|---|---|---|---|
-| Q | **SHOCK** — orb (lightning look) flies up to 450 at 900/s; press Q again to burst early, else bursts at the end | 80 dmg, radius 80, cd 5, 50 mana | 105, r 95 | 130, r 110, cd 4 |
-| W | **IGNITE** — 0.55 s warning, then a fire zone for 1.5 s (6 ticks); nearest-to-centre full, others × splash; touched enemies **burn** after leaving | 80 dmg, r 128, splash 50%, burn 10/s × 2 s, range 700, cd 8, 80 mana | 96, r 150, burn 14/s | 112, splash 75%, burn 18/s, cd 6.5 |
+| Q | **SHOCK** — orb (lightning look) flies up to 450 at 900/s; press Q again to burst early, else bursts at the end | 80 dmg (+50% to an enemy burning from IGNITE, puts it out, slows 15% 1.5 s), radius 80, cd 5, 50 mana | 105, r 95 | 130, r 110, cd 4 |
+| W | **IGNITE** — 0.55 s warning, then a fire zone for 1.5 s (6 ticks); nearest-to-centre full, others × splash; touched enemies **burn** after leaving | 80 dmg, r 128, splash 50%, burn 14/s × 2 s, range 700, cd 8, 80 mana | 96, r 150, burn 18/s | 112, splash 75%, burn 22/s, cd 6.5 |
 | E | **BOOP** — a circle at the cursor; after 0.2 s everything inside (heroes, creeps, KYLE too) slides out to `push` px past its edge, straight from the centre, over 0.25 s; enemies take its damage; tethers snap. Towers, totems, decoys, siege minions stay put. Afterimage fires if it shoves KYLE | 30 dmg, range 700, radius 160, push 120, cd 10, 60 mana | 40, radius 180, cd 9 | 50, radius 200, push 160, cd 8 |
 | R | **PUNISH** — shockwave, full damage at the centre down to 50% at the edge | 200 → 100, r 345, **cd 60**, 150 mana | 270 → 135, r 390 | 350 → 175, **cd 48** |
 
@@ -547,15 +560,15 @@ RUMOR only on targets 250+ away, keeps GHOST for escapes.
 | `ABILITY_VS_CREEPS` | 1.0 | ability damage to creeps |
 | `ABILITY_VS_STRUCTURES` | 0.5 | ability damage to towers (bursts don't delete them) |
 | `ATTACK_VS_STRUCTURES` | 1.0 | auto-attack damage to towers |
-| `LIFESTEAL_VS_HEROES` | 2.0 | Vampirism heals this × its base % on hero damage |
+| `LIFESTEAL_VS_HEROES` | 2.0 | Suck (Vampirism) heals this × its base % on hero damage |
 
 Any ability can override with `vs_heroes` / `vs_creeps` / `vs_structures`
 (none do yet).
 
 ### Ability damage scaling (`ability_info.gd`, used by casts and tooltips)
 
-- Damage × (1 + Arcane Edge) × (1 + Overcharge's +30%, ultimates only) × red's damage stat.
-- Cooldown × (1 − Haste) × (1 − Overcharge's 50%, ultimates only).
+- Damage × (1 + Amp) × (1 + Overcharge's +30%, ultimates only) × red's damage stat.
+- Cooldown × (1 − Efficiency) × (1 − Overcharge's 50%, ultimates only).
 
 ### Statuses (`unit.gd`) — none stack; the stronger one wins / refreshes
 
@@ -625,7 +638,7 @@ Run a fresh baseline before the next tuning pass.
 | Stats (even), skill table, reaction, hesitation, last hit, deny, beyond-human, late creeps | `scripts/run.gd` | `STAT_*`, `DIFFICULTY`, `REACTION_*`, `HESITATE_*`, `LAST_HIT_*`, `DENY_*`, `ENDLESS_SHARPEN`, floors, `SUPER*`, `RED_EXTRA_*` |
 | Smartness ladder, signatures | `scripts/run.gd` | `SMART_START`, `SMART_FULL_ROUND`, `SIGNATURE` |
 | Personalities, dumb end, bot constants | `scripts/bot.gd` | `PERSONALITIES`, `DUMB`, `ULT_SMARTS`, `SIEGE_SMARTS`, top constants |
-| Economy: win gold, prices, rerolls, red shop | `scripts/run.gd` | `WIN_GOLD`, `PRICE_RISE`, `REROLL_*`, `RED_*` |
+| Economy: win gold, prices, rerolls, red shop | `scripts/run.gd` | `WIN_GOLD`, `PRICE_RISE`, `RED_*` |
 | Death gold, hero bounty, respawn | `scripts/hero.gd` | `DEATH_GOLD_*`, `HERO_BOUNTY`, `RESPAWN` |
 | Creeps, creep gold | `scripts/creep.gd` | `KINDS`, `GOLD_MULT` |
 | Towers | `scripts/tower.gd` | top constants |
@@ -641,6 +654,46 @@ Run a fresh baseline before the next tuning pass.
 
 Newest first. One line per tuning change: what, from → to, why.
 
+- **2026-10-21** — The Gauntlet rule: the player's attack-move and near-clicks now acquire breakable capsules like any target (was: direct click only — a near-miss click in Training grabbed the dummy instead). Your own is always yours to hit (worst case: you open your power early — don't shoot your food); red's still only enters the pool below half / leashed / owner dead (breakable_by, unchanged). Bots keep the old filter so red never cracks its bank by accident. Knob: _not_capsule gating in hero.gd.
+- **2026-10-21** — Red tows capsules: a banked SHELL or RAMPAGE within 650 gets leashed along (same 2 points as yours, so key runs outrank it) when red is healthy, unbothered and you're 900+ away — rolled once per capsule at capsule_tow × smartness (CHAD 0.9, KYLE 0.6, BECKY 0.4, KAREN 0.3). It parks the capsule (protection back) when you come within 700, it drops under 55%, a key run needs the points, or it's about to crack it. Knobs: TOW_REACH/TOW_DANGER/TOW_START (bot.gd), capsule_tow (hero_minds.gd). Logged: red_capsule_tow / red_capsule_park.
+- **2026-10-21** — Leash-a-capsule built as logged in IDEAS.md: T on your own capsule drags it (2 leash points, a ranged creep's price); it floats after you at 300 while you walk 360, so long runs leave it trailing — and while leashed it's open to red at ANY health (the white deny line leaves its bar to say so). Red doesn't drag its own capsules yet. Knobs: CAPSULE_LEASH_COST, CAPSULE_DRAG_SPEED (power_capsule.gd).
+- **2026-10-21** — Red won't open its own capsule with you nearly dead (you < 55%, SHELL exempt — its open IS that kill) or with you healthy (> 30%) within 500 of the capsule (it walked off a 14%-health kill for a pierce, and cracked a fresh twin in the player's face and got denied, run of 2026-10-20). Knob: CAPSULE_CONTEST; the analyzer now pairs each open decision with the actual break ("— broken at X" / "— you denied it at X" / "— never broken").
+- **2026-10-20** — Red's **capsule brain** (bot.gd), first cut: opens TWIN / SHIELD on sight (permanent until spent), banks RAMPAGE until a fight is brewing or it's defending its tower, PIERCE until healthy and pushing, SHELL until a kill window (you ≤ 55%, or your D seen used — it watches the public ring, assumes 60 s — and you under 85%, and you're 900+ from your well); spends a bank before retreating or once it's ~50 s old (× its mind's bank_nerve: CHAD 1.3, KAREN 0.7), walks back up to 1500 px for one on a quiet lane, lurks your cracked capsule for the deny at 420 px (deny_lurk × smartness: BECKY 0.9, CHAD 0.4), D-blocks your Shell just before contact when it can't shoot it down in time, and counts your TWIN into its kill math (+min(twin hp, 54% of your hp)). Dull reds mostly keep the old candy-on-sight habit (the "simple" roll, fades out by smartness ~0.9). Logged: red_capsule_bank / red_capsule_open (reason + banked s) / red_capsule_lurk / red_shell_block; capsule_open carries age now. Expect tuning from logs.
+- **2026-10-20** — Pierce budget: flat 600 → **60% of the enemy hero's max health** when opened (390 vs base BECKY, 600 vs KAREN, 840 vs a 1,400 hero; 600 flat in Training), so it stays ~half-a-hero-plus every round like Shell, where flat 600 was a near-kill in round 1 and under 40% late. And it's charged **per shot, not per target**: each shot costs only its dearest hit (the hero if it was on the line, else one creep at 25%), so lining up many isn't penalised. SHIELD: flat 500 → **60% of your max health** (540 for a 900 KYLE). Knobs: PIERCE_BUDGET_SHARE, POWER_SHIELD_SHARE. User: "maximizing multiple target hits should not be penalized for a powerup meant to make that better".
+- **2026-10-20** — Pierce leaves the clock: it lasts until it has done **600 extra damage** (the beam's whole hit, and the target's extra 2× over a plain attack; Twin's too), creeps counting **25%**, with a 60 s backstop; its ring drains by damage. Why (user): a 10 s power is only worth one wave. PIERCE_BUDGET / PIERCE_CREEP_SHARE / PIERCE_BACKSTOP. Rampage stays on its 10 s on purpose — a risk (user).
+- **2026-10-20** — New power-up **SHIELD** (teal #1de9b6, S): a 500 shield (key power_shield) that stays until it's used up or you die; other shields soak first. Not timed (sits alongside a timed power); no Shield drops while yours is up. Red values yours at 0.9 when you're dead. POWER_SHIELD in hero.gd. User idea.
+- **2026-10-20** — Pierce colour: blue #448aff (almost your team blue) → violet **#b388ff**, on its capsule, ring and helix. User call.
+- **2026-10-20** — SHELL colour: royal blue #1e56e8 → sky blue **#29b6f6** (nose #b3e5fc), a different hue from your team blue #4f8ff7 so your own Shell reads apart from you. User pick.
+- **2026-10-20** — SHELL look: back to the bullet-shaped cartridge, now in blue-shell blue (#1e56e8 body, lighter nose, white bands, outlined in its side's colour); the capsule window shows a little blue cartridge. Replaces the spiny-shell drawing — user: "I like the bullet shape but I wanted it blue".
+- **2026-10-20** — Pierce: the shot's own target now takes 25% less than the line — 3× the attack (was a normal 1× hit); the line behind takes 4×. Twin shots the same at their 60%. Towers excluded (a normal hit; the line already skipped them). PIERCE_TARGET 0.75 (× PIERCE_DAMAGE). User call.
+- **2026-10-20** — Pierce line damage 2× → **4×** the attack (KYLE 120 a hit on what's behind the target, CHAD 140, BECKY 100) and width 20 → **30** so long shots land: lined up for half its 10 s it's ~600+ on a hero, beside Shell (50% max health + 2 s stun) and Rampage (up to 1,000 + 50% less damage). Also melts waves on the line. User: "as scary damage wise as the rest". Trim knob: PIERCE_DAMAGE.
+- **2026-10-20** — New power-up **TWIN** replaces Spread in the drops (twin.gd; Spread's code kept): a half-size copy of your hero at your side (70 px out, switching sides as you turn) that fires its own shot at each of yours (Twin Shot's too) for 60% of your attack — damage cards, attack speed and Keen Eye count, on-hit cards don't — and its own Pierce line (at its 60%) while you have Pierce. It soaks 35% of every hit you take (after armor, before shields) from 800 health, never heals (not in the well either), ends when it breaks or you die; nobody can target it. Not timed, so it sits alongside a timed power; no Twin drops while you have one. Red values yours at 1.2 when you're dead. Knobs: TWIN_HP / TWIN_SHARE / TWIN_DAMAGE in twin.gd. User design ("annoying amount of hp but doesn't get healed in the base").
+- **2026-10-20** — Pierce power: carries 250 → **1000** px past the target, and everything on that line takes **2×** the attack (was 1×; the target itself still takes a normal hit; PIERCE_DAMAGE). Lets you aim through a creep at the hero behind it. Width stays 20. User call, in line with the Shell / Rampage buffs.
+- **2026-10-20** — Pierce look: the jagged zap → a double helix of dots (two strands twisting round the line, racing to the tip and spinning; effects.gd Helix). Same hit as before. User: "two sine waves that look like they are in like parallel spirals".
+- **2026-10-20** — Rampage power: damage taken cut 20% → 50% (RAMPAGE_ARMOR), aura 40 → 100 damage a second (RAMPAGE_DPS). User call.
+- **2026-10-20** — Bullet → **SHELL** (bullet shape + Mario's blue shell; code, logs and files keep "bullet"): on contact 20% → **50%** of the hero's max health, and a new **2 s stun** (D blocks the stun, not the damage). Drawn as a blue spiny shell (#1e56e8, white rim, turning spikes, flapping wings) ringed in its side's colour; the capsule shows a little blue shell instead of B. Massive buff on purpose (overbuff then trim): knobs DAMAGE_SHARE / STUN in bullet_minion.gd, then HP 600 / SPEED 300. User call.
+- **2026-10-20** — Capsules and death: while a hero is dead their capsules have no deny protection (the other hero can break them at any health) and show on the other side's minimap until they respawn; your own capsules always show on your minimap. Red, once per death of yours with capsules out, weighs breaking them (bullet 1.5 — 2.5 since the SHELL buff, rampage 1, spread / pierce 0.8, only ones it can reach and break with 1 s to spare, × its mind's capsule_hunt) against pressing your tower (1, or 2 with its wave at your tower); smartness decides whether it thinks of it. Logged as red_capsule_choice; bot.gd HUNT_VALUE / HUNT_PUSH / HUNT_PUSH_AT_TOWER / HUNT_SPARE. Opened powers already ended on death. User design.
+- **2026-10-20** — Capsules: MODE "hits" (3 attacks) → "health" (300). The other hero can't hit yours until it's below half (CAPSULE_DENY_BELOW 0.5, a white line on its bar), like denying a creep; then their breaking blow destroys it. Capsules no longer fade (was 8 s), so one can be banked. Only a click on a capsule attacks it (attack-move and near-clicks skip them). Your own spells still hit your capsule. Red goes for yours only once it's below half. User design: "it basically is like a minion where the other person cannot try and deny it unless it is beneath half health and it never goes away".
+- **2026-10-19** — KYLE attack damage 25 → 30 (31 → 38 dps, level with KAREN): he lost both of today's round 1s to CHAD and BECKY on the wave, and early trades and pushes run on the basic attack. Trim knob: back toward 27. User call.
+- **2026-10-19** — KYLE SHOCK on an enemy burning from his IGNITE: +30% → +50% damage (80 → 120 at base). User call.
+- **2026-10-18** — Power-up drops are now chance, not a count: a ranged last hit drops a capsule 1 in 10 before overtime (was never) and 1 in 3 in overtime (was every 3rd). Training still drops every time. `power_capsule.gd` DROP_CHANCE / DROP_CHANCE_OVERTIME. User call.
+- **2026-10-18** — KYLE IGNITE burn per second by level: 10 / 14 / 18 → 14 / 18 / 22. User call.
+- **2026-10-18** — Fix: red no longer uses D to break its own POUNCE tether (19 of 82 red D uses across four runs were this), and D's cleanse no longer cuts a tether you made yourself (on either side).
+- **2026-10-16** — Guard renamed to just **D** everywhere the player sees it (slot, pop-up text, hover, How to Play). Code keeps `guard`. User call.
+- **2026-10-14** — Capsule look: a gold football-shaped pod (shooter-style, shine and rivet tips) rimmed in its owner's colour, letter in a dark window — was an owner-coloured football with stitch bands. User: "football shaped, not actual footballs, maybe gold".
+- **2026-10-14** — New power-up B, Bullet (steel capsule): opening it sends a Bullet minion (bullet_minion.gd) straight at the enemy hero through everything — 600 health, 300 speed (under every hero), on contact 20% of that hero's max health (shields/armor count), then gone. Only heroes can hurt it (creeps and towers ignore it); slows and stuns hold it; it waits while its hero is dead; entering the enemy's well burns it up (hiding at home saves you). Red turns and shoots yours within 700. User design.
+- **2026-10-14** — Power-up Rapid (+60% attack speed) → Rampage (still R, amber): +25% move speed, 40 damage a second to every enemy within 140 (creeps and heroes, no towers; ticks every 0.25 s), 20% less damage taken (armor, multiplies). 10 s like the others. User design.
+- **2026-10-14** — Spread power-up + Twin Shot: each of Twin Shot's two shots becomes a triple (its target + the 2 enemies nearest it) = 6 shots a volley; an enemy near both targets can take more than one (was 4 shots, Spread ignoring Twin's target). Spread alone 3, Twin alone 2, unchanged. User call.
+- **2026-10-14** — New: Guard (D), every hero: 300 shield for 2 s, cleanses harmful statuses and blocks new ones for 0.5 s, 60 s cooldown; works while stunned; red uses it when locked down or low. Small D slot right of R; gold pulsing ring while immune. User design.
+- **2026-10-14** — Stacking pass (unit.gd): statuses tracked per source — same source refreshes (stronger replaces with its own time; fixes a weak-long + strong-short slow merging into strong-long), different sources add: move slows to 80%, attack slows to +200%, shields to 100% max health, TRAP + Serrated bleeds sum (was: biggest only). So kit + card stack (Serrated in TRAP, Spellblade in TRAP, Second Wind under BRACE). Spell power now one function (Homebody's bonus adds with Amp instead of multiplying); armor one hook (`armor_mult`). Amp max 3 (was unlimited). Attack slow got a lime ring. User: caps loose on purpose, trim what breaks.
+- **2026-10-13** — Cards (Cards view requests, fifth batch): Bounty Hunter → Excess, reworked: every 5th attack bounces to up to 3 enemies within 250 for 50% damage (was: attacks on creeps under 25% land instantly). Wellspring → Trickle, +5 → +8 mana regen. Kindling → Flamable, burns +2 s → +1 s. Cold Read → Snap: the +12% hit now also ends the enemy's slows. User requests.
+- **2026-10-13** — Base health: CHAD 900 → 800, KAREN 1,100 → 1,000 (KYLE 700, BECKY 650 unchanged). User call.
+- **2026-10-13** — CHAD's attack damage 40 → 35 (every 0.65 s: 62 → 54 damage a second; KAREN 35, KYLE 31, BECKY 28). User call: same per-hit damage as KAREN, still the fastest attacker.
+- **2026-10-13** — Cards (Cards view requests, fourth batch): Arcane Edge → Amp; Haste → Efficiency; Longbow → Kobe, +120 → +100 attack range; Vampirism → Suck. User requests.
+- **2026-10-13** — Cards (Cards view requests, third batch): Rally Cry → Wonderpets, leashed creeps only (totem-latched no longer count), +30%/−30% → +20%/−20%; owning it no longer counts as a reason for red to go for totems (it still does, see _wants_totem). Adrenaline → Elegance. Hyper → Hands. Bargain → Gamble, reworked: the shop's Reroll button (50 +25 each) is gone; buying Gamble (common 100, max 1, no longer a once-shown card) rerolls every offer. User requests.
+- **2026-10-13** — Cards (Cards view requests, second batch): Red Potion → Red Drink; Blue Potion → Blue Drink; Boots → Shoes; Siphon → Refund, +15 → +20 mana per last hit; Homeguard → Homebody, reworked: inside your tower's range +20% ability damage and 20% less ability damage taken (was +25% attack speed, +5 health regen). User requests.
+- **2026-10-13** — Cards (Cards view requests): Whetstone → Chunk, +8 → +10 attack damage; Quickdraw → Hyper, +12% → +10% attack speed; Vigor → Red Potion; Focus → Blue Potion; Boots +25 → +20 move speed; Salve → Drip, +6 → +8 health regen. User requests.
+- **2026-10-13** — New: power-up capsules (power_capsule.gd), overtime only. Every 3rd ranged creep a hero last-hits drops a capsule of theirs (football, letter S / R / P). 3 hits to break, attacks only (MODE "hits"; "health" = 300 hp hurt by anything, kept to try); your break = the power, red's = destroyed; creeps and towers ignore it; fades after 8 s. Powers last 10 s: Spread (+2 shots at the nearest other enemies), Rapid (+60% attack speed), Pierce (hits everything on the line, 250 px past the target). Red opens its own and goes for yours within 650 px (35% + smartness roll each, not under your tower). Why: overtime pays no gold, so last hits stopped mattering when the round is decided. Knobs: DROP_EVERY, HITS, LIFE, POWER_TIME, the three power values.
 - **2026-10-11** — No denying in overtime: nothing pays then, so denies are off (own creeps get no amber outline, clicking one does nothing, red skips its deny step and KYLE's IGNITE-on-own-low-creeps zoning). Overtime is for winning the round, not the farm. Scavenger and Recruit say "(before overtime)". (The 2026-10-07 note claimed overtime creeps couldn't be denied; they could — now true.)
 - **2026-10-11** — Bot: no totem trip while you're within your reach + 250 px of red or its totem (TOTEM_CLEAR). Round 7 BECKY leashed a creep, took a step, saw your burst and dropped it on 6 of 12 trips; now it waits for an open moment instead.
 - **2026-10-10** — Tower health +600 flat (LANE_TOWER_EXTRA; still +185 a round): round 1 2000 → 2600, R5 2740 → 3340, R8 3295 → 3895, R12 4035 → 4635. A wave's burst on a tower is about the same every round (worst 15 s ≈ 900–1,400 across three runs; creep damage doesn't grow), so early towers crumbled the moment a wave got there (43–62% in 15 s, rounds 1–3). Flat so it helps most early. Watch round length; trim toward +400 if rounds drag.

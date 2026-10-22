@@ -50,6 +50,7 @@ def find_logs():
     out = []
     for d in LOG_DIRS:
         out += glob.glob(os.path.join(d, "run_*.jsonl"))
+        out += glob.glob(os.path.join(d, "try_*.jsonl"))  # Training sessions
     return sorted(out, key=os.path.getmtime, reverse=True)
 
 
@@ -67,7 +68,7 @@ def load(path):
 
 
 def complete(events):
-    return any(e["type"] == "round_end" for e in events)
+    return any(e["type"] in ("round_end", "training_end") for e in events)
 
 
 def run_seed(events):
@@ -325,6 +326,77 @@ def why(r):
         sieges = (sum(w["blue"]["siege"] for w in waves), sum(w["red"]["siege"] for w in waves))
         print("- waves sent: %d · creeps you/red %d/%d · siege minions you/red %d/%d · last tower multiplier ×%.2f" % (
             len(waves), sb, sr, sieges[0], sieges[1], waves[-1].get("tower_mult", 1.0)))
+    drops = r.of("capsule_drop", "red_capsule_drop")
+    if drops:  # power-up capsules (overtime, since 2026-10-13)
+        ends = r.of("capsule_open", "capsule_denied", "capsule_faded")
+        drags = [e for e in r.of("leash", "red_leash") if str(e.get("kind", "")).startswith("capsule:")]
+        for who in ("you", "red"):
+            mine = [e for e in ends if e.get("owner") == who]
+            n = len([e for e in drops if (e["type"] == "capsule_drop") == (who == "you")])
+            got = collections.Counter(e["power"] for e in mine if e["type"] == "capsule_open")
+            line = "- %s capsules: %d dropped · opened %d (%s) · denied %d · faded %d" % (
+                "your" if who == "you" else "red's", n, sum(got.values()), ", ".join("%s %d" % kv for kv in got.items()) or "—",
+                sum(1 for e in mine if e["type"] == "capsule_denied"), sum(1 for e in mine if e["type"] == "capsule_faded"))
+            dr = sum(1 for e in drags if (e["type"] == "leash") == (who == "you"))
+            if dr:
+                line += " · dragged %d×" % dr
+            print(line)
+    bl = r.of("bullet_hit", "bullet_killed", "bullet_fizzled", "red_bullet_hit", "red_bullet_killed", "red_bullet_fizzled")
+    dead = [e for e in r.of("capsule_open", "capsule_denied") if e.get("owner_dead")]
+    if dead:  # broken while the owner was dead (no protection then, since 2026-10-20)
+        print("- capsules broken while their owner was dead: yours by red %d · red's by you %d" % (
+            sum(1 for e in dead if e["owner"] == "you"), sum(1 for e in dead if e["owner"] == "red")))
+    tw = r.of("twin_end", "red_twin_end")
+    if tw:  # TWIN power-ups (since 2026-10-20): how each one ended
+        print("- twins: " + ", ".join("%s %s at %s (soaked %d, %d shots)" % (
+            "yours" if e["type"] == "twin_end" else "red's", e["why"], fmt_t(e["t"]), e["absorbed"], e["shots"]) for e in tw))
+    play = r.of("red_capsule_bank", "red_capsule_open", "red_capsule_lurk", "red_capsule_tow", "red_capsule_park", "red_shell_block")
+    if play:  # the capsule brain's calls (bot.gd, since 2026-10-20)
+        # red_capsule_open is the DECISION; the break itself is the capsule_open/_denied
+        # that follows (red gets pulled into fights on the way — pair them up)
+        red_ends = [e for e in r.of("capsule_open", "capsule_denied") if e.get("owner") == "red"]
+        bits = []
+        for e in play:
+            if e["type"] == "red_capsule_bank":
+                bits.append("banked %s at %s" % (e["power"], fmt_t(e["t"])))
+            elif e["type"] == "red_capsule_open":
+                bit = "went to open %s at %s (%s, banked %.0f s)" % (e["power"], fmt_t(e["t"]), e["why"], e["age"])
+                end = next((x for x in red_ends if x["power"] == e["power"] and x["t"] >= e["t"] - 1), None)
+                if end is None:
+                    bit += " — never broken"
+                else:
+                    red_ends.remove(end)
+                    if end["type"] == "capsule_denied":
+                        bit += " — you denied it at %s" % fmt_t(end["t"])
+                    elif end["t"] - e["t"] > 15:
+                        bit += " — broken at %s" % fmt_t(end["t"])
+                bits.append(bit)
+            elif e["type"] == "red_capsule_lurk":
+                bits.append("lurked your %s at %s (%d%% left)" % (e["power"], fmt_t(e["t"]), round(e["left"] * 100)))
+            elif e["type"] == "red_capsule_tow":
+                bits.append("towed %s at %s" % (e["power"], fmt_t(e["t"])))
+            elif e["type"] == "red_capsule_park":
+                bits.append("parked %s at %s (%s)" % (e["power"], fmt_t(e["t"]), e["why"]))
+            else:
+                bits.append("D-blocked your Shell at %s" % fmt_t(e["t"]))
+        print("- red's capsule play: " + ", ".join(bits))
+    ch = r.of("red_capsule_choice")
+    if ch:  # while you were dead, with capsules out: break them or press the tower (bot.gd _hunt_tick)
+        print("- red's choice while you were dead: " + ", ".join(
+            "%s at %s (%d of %d reachable, worth %.2f vs push %.1f, you back in %.0f s)" % (
+                e["choice"], fmt_t(e["t"]), e["reachable"], e["capsules"], e["value"], e["push"], e["respawn"]) for e in ch))
+    if bl:  # Bullet minions (B capsules, since 2026-10-14)
+        c = collections.Counter(e["type"] for e in bl)
+        print("- bullets: yours hit %d / shot down %d / burnt in the well %d · red's hit %d / shot down %d / burnt %d" % (
+            c["bullet_hit"], c["bullet_killed"], c["bullet_fizzled"], c["red_bullet_hit"], c["red_bullet_killed"], c["red_bullet_fizzled"]))
+    guards = r.of("guard", "red_guard")
+    if guards:  # Guard (D, since 2026-10-14)
+        def at(t):
+            return "%d:%02d" % (int(t) // 60, int(t) % 60)
+        for who, kind in (("you", "guard"), ("red", "red_guard")):
+            ts = [e.get("t") for e in guards if e["type"] == kind]
+            if ts:
+                print("- %s guarded %d× (%s)" % (who, len(ts), ", ".join(at(t) for t in ts if t is not None)))
     print()
 
 
@@ -456,6 +528,46 @@ def detail(r):
     print()
 
 
+def training_report(path, ev):
+    """A Training session (try_*.jsonl): hero, switches, and a power-up timeline."""
+    start = next((e for e in ev if e["type"] == "training_start"), {})
+    length = max((e.get("t", 0) for e in ev), default=0)
+    print("# Training session %s" % os.path.basename(path))
+    print("- hero %s \u00b7 version %s \u00b7 no cooldowns %s \u00b7 no mana %s \u00b7 length %s%s" % (
+        start.get("hero", "?"), start.get("version", "?"),
+        "on" if start.get("no_cooldowns") else "off", "on" if start.get("no_mana") else "off",
+        fmt_t(length), "" if any(e["type"] == "training_end" for e in ev) else "  (no clean end)"))
+    drops = [e for e in ev if e["type"] == "capsule_drop"]
+    opens = [e for e in ev if e["type"] == "capsule_open"]
+    denies = [e for e in ev if e["type"] == "capsule_denied"]
+    drags = [e for e in ev if e["type"] == "leash" and str(e.get("kind", "")).startswith("capsule:")]
+    if drops or opens:
+        by = lambda es: ", ".join("%s %d" % kv for kv in collections.Counter(e["power"] for e in es).items()) or "\u2014"
+        print("- capsules: dropped %d (%s) \u00b7 opened %d (%s) \u00b7 denied %d \u00b7 dragged %d\u00d7" % (
+            len(drops), by(drops), len(opens), by(opens), len(denies), len(drags)))
+    print("- timeline:")
+    for e in ev:
+        t = fmt_t(e.get("t", 0))
+        k = e["type"]
+        if k == "capsule_drop":
+            print("  - %s dropped %s" % (t, e["power"]))
+        elif k == "capsule_open":
+            print("  - %s opened %s (age %.0f s)" % (t, e["power"], e.get("age", 0)))
+        elif k == "capsule_denied":
+            print("  - %s denied %s (age %.0f s)" % (t, e["power"], e.get("age", 0)))
+        elif k in ("leash", "unleash"):
+            kind = str(e.get("kind", "?"))
+            print("  - %s %s %s" % (t, "leashed" if k == "leash" else "released", kind))
+        elif k == "twin_end":
+            print("  - %s twin ended: %s (soaked %d, %d shots)" % (t, e.get("why", "?"), e.get("absorbed", 0), e.get("shots", 0)))
+        elif k in ("bullet_hit", "bullet_killed", "bullet_fizzled"):
+            print("  - %s shell %s" % (t, {"bullet_hit": "hit", "bullet_killed": "shot down", "bullet_fizzled": "fizzled"}[k]))
+        elif k == "guard":
+            print("  - %s D pressed" % t)
+        elif k == "death":
+            print("  - %s you died" % t)
+
+
 def main():
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # (the Windows console defaults to cp1252)
@@ -468,12 +580,22 @@ def main():
     if a.list:
         for p in find_logs()[:15]:
             ev = load(p)
+            if any(e["type"] == "training_start" for e in ev):
+                print("%s  %s  training session  %s" % (os.path.basename(p),
+                                          next((e.get("hero") for e in ev if e["type"] == "training_start"), "?"),
+                                          "ended" if any(e["type"] == "training_end" for e in ev) else "unfinished"))
+                continue
             ends = [e for e in ev if e["type"] == "round_end"]
             print("%s  %s  rounds %d  %s%s" % (os.path.basename(p), next((e.get("hero") for e in ev if e["type"] == "run_start"), "?"),
                                           len(ends), "complete" if ends else "unfinished",
                                           "  (continues an earlier log)" if is_continue(ev) else ""))
         return
-    paths = chain(pick(a.log, a.any))
+    first = pick(a.log, a.any)
+    ev = load(first)
+    if any(e["type"] == "training_start" for e in ev):
+        training_report(first, ev)
+        return
+    paths = chain(first)
     events, rounds, replayed = stitch(paths)
     header(paths, events, rounds, replayed)
     round_table(rounds)

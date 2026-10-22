@@ -45,6 +45,10 @@ top of `moba-sandbox/scripts/play_log.gd`.
    python moba-sandbox/tools/analyze_log.py --round N    # + one round in detail
    python moba-sandbox/tools/analyze_log.py latest --any # include an unfinished run
    ```
+   Training sessions log too, on the same switch (`try_<stamp>.jsonl`): the
+   script prints them as a session report — hero, switches, capsule counts and
+   a power-up timeline — instead of a run. `--list` marks them; a cleanly
+   ended one counts as complete, so `latest` picks it when it's newest.
    A run saved and resumed later (Continue) writes one log per sitting (each
    resumed part starts with a `continue` event; all share the run's seed). The
    script stitches them into one run automatically and says so in the header
@@ -80,7 +84,7 @@ top of `moba-sandbox/scripts/play_log.gd`.
 - **Red's behaviour and why**: what it spent its time doing, its flags (wary,
   retreat, pressing…), combos and how they ended, cast hit rates, chances it
   passed up and the reasons, deaths (killer, what it was doing), key runs and
-  how they ended, totem trips / contests, its damage ledger. Explain the "why"
+  how they ended, totem trips / contests, capsule choices while you were dead (hunt vs push, and whether it was right: capsules it broke, what the push did instead), its damage ledger. Explain the "why"
   from the bot's rules (`moba-sandbox/scripts/bot.gd`, `combo_book.gd`) — read
   the code when the reason isn't obvious.
 - **Anomalies** the script flags, checked before calling them bugs: retreat

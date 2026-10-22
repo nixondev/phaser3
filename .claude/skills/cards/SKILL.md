@@ -63,6 +63,12 @@ The user adds and edits shop cards in plain words in the game's **Cards** view
 
 - Live cards live in code (`upgrades.gd`); the JSON is only requests. Never
   make the game read the JSON.
+- **A card must never be eaten by a kit.** If it gives a status some hero's
+  ability already gives (slow, bleed, shield…), apply it with its own source
+  `key` (`slow_moves(amount, time, "<card>")`, `add_shield(…, "<card>")`) so it
+  adds on top (`unit.gd` stacking rules). Spell power adds into
+  `hero.ability_scale`; damage cuts multiply in `armor_mult`. If it truly can't
+  stack, say so plainly in its shop text.
 - Don't commit. Don't change cards nobody asked about (point out a problem you
   notice instead).
 - Ability / hero names come from constants in `heroes.gd` — use them in code.
