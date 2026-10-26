@@ -6,6 +6,7 @@ extends CanvasLayer
 
 const Run := preload("res://scripts/run.gd")
 const PlayLog := preload("res://scripts/play_log.gd")
+const HowToPlayScript := preload("res://scripts/how_to_play.gd")
 
 signal restart   # main reloads the scene
 
@@ -144,7 +145,8 @@ func _draw_menu() -> void:
 	var ind: bool = hero.cast_indicator() if hero else false
 	items.append(["Cast indicator: %s" % ("ON (hold, release)" if ind else "OFF (quick cast)"),
 		func() -> void: hero.set_cast_indicator(not hero.cast_indicator()), Color("#80cbc4") if ind else Color("#546e7a")])
-	items.append(["How to play", _open_help, Color("#80cbc4")])
+	if HowToPlayScript.SHOW_BUTTON:
+		items.append(["How to play", _open_help, Color("#80cbc4")])
 	items.append(["Quit", func() -> void: get_tree().quit(), Color("#ef5350")])
 	# the whole menu (title, buttons, Music fader) centred on screen, clear of the HUD
 	var size := Vector2(360, 58)

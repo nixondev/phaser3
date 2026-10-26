@@ -23,7 +23,7 @@ const GOLD_MULT := 0.6
 const ACQUIRE := 460.0
 const RETARGET := 0.4
 const KINDS := {
-	"melee":  {"hp": 550.0, "radius": 20.0, "speed": 240.0, "range": 18.0,  "damage": 21.0, "interval": 1.0, "gold": 40, "leash": 1},
+	"melee":  {"hp": 500.0, "radius": 20.0, "speed": 240.0, "range": 18.0,  "damage": 21.0, "interval": 1.0, "gold": 40, "leash": 1},
 	"ranged": {"hp": 320.0, "radius": 17.0, "speed": 240.0, "range": 400.0, "damage": 24.0, "interval": 1.0, "gold": 55, "leash": 2},
 	# Tank Minion (a wave upgrade): leads the wave; every stun_cd s stuns the
 	# closest enemy (creep or hero) within stun_range for stun_time s
@@ -397,9 +397,9 @@ func _die() -> void:
 
 func _draw() -> void:
 	var c: Color = TEAM_COLORS[team]
-	if heal_aura > 0.0:  # the aura's reach, faint green
-		draw_circle(Vector2.ZERO, heal_radius, Color(0.4, 0.9, 0.5, 0.05))
-		draw_arc(Vector2.ZERO, heal_radius, 0.0, TAU, 48, Color(0.4, 0.9, 0.5, 0.25), 1.5)
+	if heal_aura > 0.0:  # the aura's reach, faint green (dim: every ranged creep in the wave wears one, and they overlap)
+		draw_circle(Vector2.ZERO, heal_radius, Color(0.4, 0.9, 0.5, 0.025))
+		draw_arc(Vector2.ZERO, heal_radius, 0.0, TAU, 48, Color(0.4, 0.9, 0.5, 0.13), 1.0)
 	var o := facing * 8.0 * sin(_lunge * PI)  # lunge toward the target on a melee hit
 	var body := c.lerp(Color.WHITE, _flash * 0.6)
 	var nothing := worthless()

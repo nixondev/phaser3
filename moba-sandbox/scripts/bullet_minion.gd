@@ -4,7 +4,9 @@ extends "res://scripts/unit.gd"
 ## files keep "bullet"): a minion with one thought. It
 ## walks straight at the enemy hero, through everything — creeps, towers and
 ## the lane don't exist for it, and nothing but heroes notice it (it isn't a
-## creep: creeps and towers never target it). On contact it takes DAMAGE_SHARE
+## creep: creeps and towers never target it). It IS a minion to the tower
+## shield, though: while it's inside a tower's range, its hero can hit that
+## tower (tower.gd shielded_from). On contact it takes DAMAGE_SHARE
 ## of that hero's max health (shields and armor still count), stuns them for
 ## STUN s (D blocks the stun) and is spent.
 ## It's sturdy for a minion but killable: heroes' attacks and abilities hurt

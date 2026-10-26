@@ -4,6 +4,11 @@ extends CanvasLayer
 ## than the screen. Esc, Close or a click outside the panel shuts it.
 ## Instruction copy: always "hero" here (see run_screen.gd CHEERS).
 
+## Whether anything offers the screen. Off since 2026-10-24: the user wants to
+## see whether the game reads without it. The screen itself is kept and still
+## works — flip this to true to put the buttons back (hero select, Esc menu).
+const SHOW_BUTTON := false
+
 const ACCENT := Color("#80cbc4")
 const GOLD := Color("#ffd54f")
 const INK := Color("#10151a")
@@ -25,12 +30,12 @@ const PAGE := [
 	["p", "Dying costs 15% of your gold (max 300) — the enemy hero takes it if it got the kill."],
 	["h", "TOWERS AND THE LANE"],
 	["p", "Waves leave each base every 20 s. Creeps inside an enemy tower's range attack only the tower."],
-	["p", "Towers are shielded against heroes: you can only hurt one while one of your creeps is in its range."],
+	["p", "Towers are shielded against heroes: you can only hurt one while one of your creeps (or your Shell) is in its range."],
 	["p", "A tower shoots creeps first — but hit its hero under it and it switches to you."],
 	["p", "Your well heals you and nothing can hurt you there. The enemy's well burns you."],
 	["p", "Overtime (later each round): kills pay nothing, towers crumble faster, waves grow, and abilities cost 25% less mana and cool down 25% faster. Finish it."],
-	["p", "A ranged creep you last-hit sometimes drops a capsule in your colour (1 in 10, or 1 in 3 in overtime). It has 300 health and never goes away: attack it (a click on it — or an attack-move: it's a target like any other, so mind where you aim near your own) and break it to open it: Twin (a small copy of you at your side: it shoots what you shoot, soaks part of the damage you take, never heals, and lasts until it breaks or you die), Rampage (faster, tougher, and hurts everything close, for 10 s), Pierce (shots go on a long way through the target and hit everything behind it four times as hard, the target three times; it lasts until it has done extra damage worth over half the enemy hero's health, creeps counting for less), Shield (a shield worth over half your health that stays until it's used up), or Shell (blue): a minion that walks straight at the enemy hero and, if it reaches them, takes half their health and stuns them for 2 s (D blocks the stun). Red can't touch yours until it's below half health (the white line); if red breaks it, it's gone. The same goes for you and red's — except while its owner is dead: then anyone can break it, and red's show on your minimap. You can leash your own capsule like a creep (2 points): it floats after you, a little slower than you walk — but while it follows you, red can break it at any health. Creeps ignore capsules."],
-	["p", "From round 6 each side has a totem on its own half, off the lane. Lead one of your creeps into its ring and it latches on: it leaves your leash and attacks only the totem until one of them falls. Only your own creeps can hurt your totem, and it wears them down. Destroy it and a siege minion goes out with your next wave; another rises 45 s later."],
+	["p", "A creep you last-hit sometimes drops a capsule in your colour (about 1 in 25, or 1 in 7 in overtime). It has 300 health and never goes away: attack it (a click on it — or an attack-move: it's a target like any other, so mind where you aim near your own) and break it to open it: Twin (a small copy of you at your side: it shoots what you shoot, soaks part of the damage you take, never heals, and lasts until it breaks or you die), Rampage (faster, tougher, and hurts everything close, for 10 s), Pierce (shots go on a long way through the target and hit everything behind it four times as hard, the target three times; it lasts until it has done extra damage worth over half the enemy hero's health, creeps counting for less), Shield (a shield worth over half your health that stays until it's used up), or Shell (blue): a minion that walks straight at the enemy hero and, if it reaches them, takes half their health and stuns them for 2 s (D blocks the stun). Red can't touch yours until it's below half health (the white line); if red breaks it, it's gone. The same goes for you and red's — except while its owner is dead: then anyone can break it, and red's show on your minimap. You can leash your own capsule like a creep (2 points): it floats after you, a little slower than you walk — but while it follows you, red can break it at any health. Creeps ignore capsules."],
+	["p", "From round 5 each side has two totems on its own half, one above the lane and one below. Lead one of your creeps into its ring and it latches on: it leaves your leash and attacks only the totem until one of them falls. Only your own creeps can hurt your totem, and it wears them down. Destroy it and a siege minion goes out with your next wave; another rises 45 s later."],
 	["p", "In overtime every hero death sends a siege minion with the other side's next wave: nothing can stop it, and it blows up on the tower for 10% of its health."],
 	["h", "CONTROLS"],
 	["k", "Right-click", "Move (hold to keep steering)"],
@@ -38,7 +43,7 @@ const PAGE := [
 	["k", "Left-click own creep", "Deny it (below half health)"],
 	["k", "Q  W  E  R", "Cast at the cursor (quick cast) — Esc menu → Cast indicator to aim first"],
 	["k", "Q / E again", "Second press: set off SHOCK early, let go of POUNCE"],
-	["k", "T on your creep or capsule", "Leash it: a creep follows you and hits what you hit (melee 1 point, ranged 2); your own capsule floats after you (2 points) but can be broken at any health while it follows"],
+	["k", "T on your creep or capsule", "Leash it, if it's close enough: a creep follows you and hits what you hit (melee 1 point, ranged 2); your own capsule floats after you (2 points) but can be broken at any health while it follows"],
 	["k", "D", "300 shield for 2 s; clears bad effects and blocks new ones for 0.5 s (60 s cooldown)"],
 	["k", "S", "Stop"],
 	["k", "Hover Q W E R", "What the ability does right now"],

@@ -154,6 +154,45 @@ def dist(a, b):
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
 
 
+def quantile(xs, q):
+    """xs must be sorted. Nearest-rank, and 0 for an empty list."""
+    return xs[min(len(xs) - 1, int(len(xs) * q))] if xs else 0
+
+
+def power_windows(r):
+    """Every stretch of snapshots where a hero had a timed power-up running
+    (snap `you`/`bot` gained `power` 2026-10-23). Each window carries how long
+    it lasted, the closest it ever got to the other hero, and -- for red -- what
+    it spent the window doing. A power that never came near anybody did
+    nothing, however long it was up."""
+    out = []
+    for key, who, other in (("you", "you", "bot"), ("bot", "red", "you")):
+        cur = None
+        for s in r.snaps:
+            h = s.get(key) or {}
+            p = h.get("power")
+            if p and (cur is None or cur["power"] != p):
+                if cur:
+                    out.append(cur)
+                cur = {"who": who, "power": p, "t0": s["t"], "t1": s["t"],
+                       "near": None, "whys": collections.Counter()}
+            elif not p:
+                if cur:
+                    out.append(cur)
+                cur = None
+                continue
+            cur["t1"] = s["t"]
+            o = s.get(other) or {}
+            if h.get("at") and o.get("at") and o.get("alive"):
+                d = dist(h["at"], o["at"])
+                cur["near"] = d if cur["near"] is None else min(cur["near"], d)
+            if key == "bot" and h.get("why"):
+                cur["whys"][h["why"]] += 1
+        if cur:
+            out.append(cur)
+    return sorted(out, key=lambda w: w["t0"])
+
+
 class Round:
     def __init__(self, n):
         self.n = n
@@ -199,6 +238,26 @@ def metrics(r):
         lh, missed = r.end.get("last_hits", 0), r.end.get("missed", 0)
         m["lh_pct"] = round(pct(lh, lh + missed))
     return m
+
+
+def economy(r):
+    """What each side earned and holds this round.
+
+    Both sides farm for everything they buy (no allowance since 2026-10-01), so
+    the gold gap IS the power gap a round or two later. Yours comes from the
+    round summary; red's from its gold in the first and last snapshot, since
+    only its spending is logged, not its income.
+    """
+    e = {"you_earned": r.end.get("gold_earned"), "you_bank": r.end.get("gold_after")} if r.end else {}
+    st = r.start or {}
+    e["you_picks"] = len(st.get("upgrades") or [])
+    red = st.get("red") or {}
+    e["red_picks"] = len(red.get("upgrades") or [])
+    reds = [s["bot"]["gold"] for s in r.snaps if s.get("bot") and s["bot"].get("gold") is not None]
+    if reds:
+        e["red_earned"] = reds[-1] - reds[0]
+        e["red_bank"] = reds[-1]
+    return e
 
 
 def tower_at(r, t, side):
@@ -314,6 +373,16 @@ def why(r):
             at = [s.get("at_tower", [0, 0]) for s in r.snaps if s.get("at_tower")]
             print("- creeps at the enemy tower (avg): yours %.1f, red's %.1f" % (
                 sum(a[0] for a in at) / max(1, len(at)), sum(a[1] for a in at) / max(1, len(at))))
+        near = {}  # how much of the wave is actually around each hero (snap `near`, 2026-10-23)
+        for key, who in (("you", "you"), ("bot", "red")):
+            xs = sorted(sum((s.get(key) or {}).get("near", []))
+                        for s in r.snaps if (s.get(key) or {}).get("near") is not None
+                        and (s.get(key) or {}).get("alive"))
+            if xs:
+                near[who] = (quantile(xs, 0.5), quantile(xs, 0.9))
+        if near:
+            print("- creeps within 460 px (median / p90): " + " · ".join(
+                "around %s %d / %d" % (w, v[0], v[1]) for w, v in near.items()))
     cd = r.end.get("creep_deaths")
     if cd:
         for who, d in (("your creeps", cd.get("yours", {})), ("red's creeps", cd.get("reds", {}))):
@@ -326,6 +395,15 @@ def why(r):
         sieges = (sum(w["blue"]["siege"] for w in waves), sum(w["red"]["siege"] for w in waves))
         print("- waves sent: %d · creeps you/red %d/%d · siege minions you/red %d/%d · last tower multiplier ×%.2f" % (
             len(waves), sb, sr, sieges[0], sieges[1], waves[-1].get("tower_mult", 1.0)))
+    ec = economy(r)
+    if ec.get("you_earned") is not None:
+        gap = ""
+        if ec.get("red_earned") is not None and ec["red_earned"] > 0:
+            gap = " · you earned ×%.2f red's" % (ec["you_earned"] / ec["red_earned"])
+        print("- gold: you +%d (%d picks going in, %d banked after) · red +%s (%d picks going in, %s banked)%s" % (
+            ec["you_earned"], ec["you_picks"], ec.get("you_bank", 0),
+            ec.get("red_earned", "?"), ec["red_picks"],
+            ec.get("red_bank", "?"), gap))
     drops = r.of("capsule_drop", "red_capsule_drop")
     if drops:  # power-up capsules (overtime, since 2026-10-13)
         ends = r.of("capsule_open", "capsule_denied", "capsule_faded")
@@ -380,6 +458,25 @@ def why(r):
             else:
                 bits.append("D-blocked your Shell at %s" % fmt_t(e["t"]))
         print("- red's capsule play: " + ", ".join(bits))
+    pw = power_windows(r)
+    if pw:  # what each power-up actually did with its window (snap `power`, 2026-10-23)
+        for w in pw:
+            bits = "- %s had %s %s–%s (%.1f s)" % (
+                w["who"], w["power"], fmt_t(w["t0"]), fmt_t(w["t1"]), w["t1"] - w["t0"])
+            bits += ", closest %d px to the other hero" % w["near"] if w["near"] is not None \
+                else ", never saw the other hero"
+            if w["whys"]:
+                bits += ", doing " + share(w["whys"], sum(w["whys"].values()), 3)
+            print(bits)
+    for ev, who in (("earned_minion", "you"), ("red_earned_minion", "red")):
+        got = r.of(ev)  # every EARN_EVERY last hits (hero.gd): an extra creep, kind rolled off the auto share
+        if got:
+            kinds = collections.Counter(e.get("kind", "?") for e in got)
+            autos = [int(e.get("autos", 0)) for e in got]
+            print("- %s earned %d creep%s from last hits (%s), autos %d/%d of the ten on average" % (
+                who, len(got), "" if len(got) == 1 else "s",
+                ", ".join("%d %s" % (n, k) for k, n in kinds.most_common()),
+                round(sum(autos) / len(autos)), int(got[0].get("of", 10))))
     ch = r.of("red_capsule_choice")
     if ch:  # while you were dead, with capsules out: break them or press the tower (bot.gd _hunt_tick)
         print("- red's choice while you were dead: " + ", ".join(
@@ -413,6 +510,19 @@ def red_behaviour(r):
         print("- combos: %s · ended: %s" % (
             ", ".join("%s×%d" % ("→".join(k), v) for k, v in combos.most_common()),
             dict(collections.Counter(e.get("reason", "?") for e in r.of("red_combo_end")))))
+        # a combo "done" only means it ran out of steps: steps that weren't ready are skipped
+        ends = [e for e in r.of("red_combo_end") if "cast" in e]
+        if ends:
+            fired = collections.Counter()
+            for e in ends:
+                for s in e["cast"]:
+                    fired[s] += 1
+            steps = sum(len(e["cast"]) for e in ends)
+            want = sum(e.get("of", 0) for e in ends)
+            missing = [s for s in ("Q", "W", "E", "R") if sum(1 for e in ends if s in e.get("seq", e["cast"])) == 0 and fired[s] == 0]
+            print("  steps actually cast: %d of %d (%s)%s" % (
+                steps, want, ", ".join("%s %d" % kv for kv in sorted(fired.items())) or "none",
+                "  — never fired: " + ", ".join(missing) if missing else ""))
     by = collections.defaultdict(lambda: [0, 0, 0, 0])
     for e in r.of("red_cast_result"):
         b = by[e["ability"]]
@@ -460,9 +570,12 @@ def anomalies(rounds):
                 still = since = None
                 continue
             w = b.get("why", "")
-            if still and dist(still, b["at"]) < 8 and w.startswith("leash:key"):
+            # Standing still with a target is a siege, not a freeze: once its creeps
+            # drop the backdoor shield it parks at max range and shoots the tower
+            # (run of 2026-10-22 R6/R16 — this read as a freeze for four rounds).
+            if still and dist(still, b["at"]) < 8 and w.startswith("leash:key") and b.get("target") in (None, "none"):
                 if s["t"] - since >= 3.0:
-                    found.append("R%d %s: red stood still %.0f s on a key run (freeze?)" % (r.n, fmt_t(since), s["t"] - since))
+                    found.append("R%d %s: red stood still %.0f s on a key run with nothing targeted (freeze?)" % (r.n, fmt_t(since), s["t"] - since))
                     still = since = None
                 continue
             still, since = b["at"], s["t"]
@@ -505,6 +618,11 @@ def trends(rounds):
     for key, label, fmt in (("wave_adv", "wave", "%+.1f"), ("dmg_ratio", "dmg", "%.2f"), ("lh_pct", "lh%", "%d")):
         vals = [metrics(r).get(key) for r in rs]
         print("- %s: %s" % (label, "  ".join((fmt % v) if v is not None else "—" for v in vals)))
+    es = [economy(r) for r in rs]
+    print("- gold you: %s" % "  ".join(str(e.get("you_earned", "?")) for e in es))
+    print("- gold red: %s" % "  ".join(str(e.get("red_earned", "?")) for e in es))
+    print("- picks you/red going in: %s" % "  ".join(
+        "%d/%d" % (e.get("you_picks", 0), e.get("red_picks", 0)) for e in es))
     print("- length: %s" % "  ".join(fmt_t(r.end.get("time", 0)) for r in rs))
     print("- result: %s" % "  ".join(r.end.get("outcome", "?")[0] for r in rs))
     print()

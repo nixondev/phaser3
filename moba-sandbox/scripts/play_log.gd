@@ -11,7 +11,13 @@ extends RefCounted
 ##   run_<stamp>.jsonl   the timeline, one JSON event per line: run/round
 ##                       start and end, last hits, missed last hits, casts,
 ##                       deaths and kills, shop actions, pauses, and a
-##                       snapshot every SNAPSHOT_EVERY seconds; power-up
+##                       snapshot every SNAPSHOT_EVERY seconds (each hero's
+##                       line carries `near`: the creeps within NEAR_CREEPS of
+##                       it as [yours, red's], and, only while they are up,
+##                       `power` / `power_left`, `twin` and `shield` — the whole
+##                       lane's creep count says nothing about how much of the
+##                       wave is within reach of anyone, and a log could not
+##                       say whether a hero had a power-up at all); power-up
 ##                       capsules (capsule_drop / red_capsule_drop, then
 ##                       capsule_open / capsule_denied with owner_dead;
 ##                       capsule_faded is from before they stopped fading;
@@ -23,7 +29,11 @@ extends RefCounted
 ##                       red_shell_block; capsule_open / _denied carry age),
 ##                       twin_end / red_twin_end (why: broken / death, absorbed, shots),
 ##                       Guard (guard / red_guard: D pressed),
-##                       Bullets (bullet_hit / bullet_killed / bullet_fizzled, red_ versions)
+##                       Bullets (bullet_hit / bullet_killed / bullet_fizzled, red_ versions),
+##                       earned_minion / red_earned_minion (every EARN_EVERY
+##                       last hits: the kind rolled, and how many of those
+##                       kills weren't ability hits — nothing in the game says
+##                       this happened, so the log is the only way to see it)
 ##                       — plus RED's side for bot analysis: its decisions as
 ##                       they change (red_why, with flags), casts, last hits,
 ##                       denies, deaths, combos (start / end + why), key runs,
@@ -168,6 +178,8 @@ static func round_end(main: Node, outcome: String) -> void:
 	var lane: Node2D = main.lane
 	var hero: Node2D = main.hero
 	var bot: Node2D = main.bot
+	if bot != null and is_instance_valid(bot) and bot.has_method("flush_open_casts"):
+		bot.flush_open_casts()  # the last casts of the round still have their hits pending
 	var rec := {
 		"round": Run.round_num, "outcome": outcome, "time": snappedf(clock, 0.1),
 		"gold_earned": hero.gold - int(_round["gold_start"]), "gold_after": hero.gold,
@@ -266,7 +278,8 @@ static func _rounded(d: Dictionary) -> Dictionary:
 
 
 ## Each wave as it leaves: what each side sends (normal / bonus creeps, tanks,
-## siege minions) and overtime's state — tempo and escalation across rounds.
+## siege minions, `earned`: the kinds earned by last hits) and overtime's
+## state — tempo and escalation across rounds.
 static func wave(data: Dictionary) -> void:
 	event("wave", data)
 
@@ -360,7 +373,7 @@ static func snapshot(main: Node) -> void:
 	var creeps: Array = main.get_tree().get_nodes_in_group("creeps")
 	if main.lane == null:  # Training: a slim snapshot — you, the creeps, the practice front
 		event("snap", {
-			"you": {"at": _v(hero.position), "hp": roundi(hero.hp), "mana": roundi(hero.mana), "alive": hero.is_targetable()},
+			"you": _hero_snap(hero, creeps),
 			"creeps": [creeps.filter(func(c: Node2D) -> bool: return c.team == 0).size(), creeps.filter(func(c: Node2D) -> bool: return c.team == 1).size()],
 			"gold": hero.gold,
 			"front": _fronts(creeps),
@@ -377,8 +390,8 @@ static func snapshot(main: Node) -> void:
 			var t1: Node2D = main.lane.tower(1)
 			_round["race"].append([snappedf(clock, 0.1), snappedf(t0.hp / t0.max_hp, 0.01), snappedf(t1.hp / t1.max_hp, 0.01)])
 	event("snap", {
-		"you": {"at": _v(hero.position), "hp": roundi(hero.hp), "mana": roundi(hero.mana), "alive": hero.is_targetable()},
-		"bot": _bot_snap(bot) if bot else {},
+		"you": _hero_snap(hero, creeps),
+		"bot": _bot_snap(bot, creeps) if bot else {},
 		"creeps": [creeps.filter(func(c: Node2D) -> bool: return c.team == 0).size(), creeps.filter(func(c: Node2D) -> bool: return c.team == 1).size()],
 		"towers": [roundi(main.lane.tower(0).hp), roundi(main.lane.tower(1).hp)],
 		"gold": hero.gold,
@@ -386,6 +399,40 @@ static func snapshot(main: Node) -> void:
 		"front": _fronts(creeps),
 		"at_tower": _at_towers(main, creeps),
 	})
+
+
+## Creeps within NEAR_CREEPS of `pos`, as [team 0's, team 1's]. The plain
+## `creeps` field counts the whole lane, so no log could say how much of the
+## wave was actually around a hero — which is what any wave-radius tuning and
+## the "is it worth leaving the lane" question both need.
+const NEAR_CREEPS := 460.0  # px: creep ACQUIRE (creep.gd) — the range a creep can engage from
+
+
+static func _near(creeps: Array, pos: Vector2) -> Array:
+	var n := [0, 0]
+	for c: Node2D in creeps:
+		if c.is_targetable() and c.position.distance_to(pos) <= NEAR_CREEPS:
+			n[c.team] += 1
+	return n
+
+
+## One hero's line of a snapshot — both sides go through here, so the two are
+## always measured the same way. The optional fields are left out when they are
+## not up, which keeps a snapshot the size it was in the usual case.
+## (Distance off the lane and time in the well are NOT fields: both follow from
+## `at`, against bounds.gd's HALF_HEIGHT and WELL_X / WELL_R.)
+static func _hero_snap(h: Node2D, creeps: Array) -> Dictionary:
+	var d := {"at": _v(h.position), "hp": roundi(h.hp), "mana": roundi(h.mana),
+		"alive": h.is_targetable(), "near": _near(creeps, h.position)}
+	if str(h.get("power")) != "" and float(h.get("power_left")) > 0.0:
+		d["power"] = h.power  # a timed capsule power-up running now (rampage / pierce)
+		d["power_left"] = snappedf(h.power_left, 0.1)
+	var tw: Variant = h.get("twin")
+	if is_instance_valid(tw):
+		d["twin"] = roundi(tw.hp)  # TWIN isn't timed, so it never shows in `power`
+	if h.shield_hp > 0.0:
+		d["shield"] = roundi(h.shield_hp)  # Guard, BRACE, the SHIELD power-up, Second Wind
+	return d
 
 
 ## Each side's most advanced creep (x; the lane runs blue −x → red +x), or null.
@@ -416,22 +463,26 @@ static func _at_towers(main: Node, creeps: Array) -> Array:
 
 
 ## Red in a snapshot: where, health, mana, gold, and what it's doing (bot.gd log_state).
-static func _bot_snap(bot: Node2D) -> Dictionary:
-	var d := {"at": _v(bot.position), "hp": roundi(bot.hp), "mana": roundi(bot.mana), "gold": bot.gold, "alive": bot.is_targetable()}
+static func _bot_snap(bot: Node2D, creeps: Array) -> Dictionary:
+	var d := _hero_snap(bot, creeps)
+	d["gold"] = bot.gold
 	if bot.has_method("log_state"):
 		d.merge(bot.log_state())
 	return d
 
 
-## Each side's totem meter (0–1), or -1 when it has none.
+## Each side's living totems' meters (0–1), as [team 0's, team 1's]; an empty
+## list for a side whose totems are both down (or before TOTEM_FROM).
 static func _totems(main: Node) -> Array:
 	var lane: Node = main.lane
 	if lane == null or not lane.has_method("totem"):
 		return []
 	var out := []
 	for team in 2:
-		var t: Node2D = lane.totem(team)
-		out.append(snappedf(t.meter(), 0.01) if t else -1)
+		var ms := []
+		for t: Node2D in lane.totems_of(team):
+			ms.append(snappedf(t.meter(), 0.01))
+		out.append(ms)  # one entry per living totem of that side (two a side since 2026-10-24)
 	return out
 
 

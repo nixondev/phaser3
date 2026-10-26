@@ -1,7 +1,7 @@
 extends "res://scripts/unit.gd"
-## A power-up capsule (IDEAS.md "Power-up drops"). A ranged creep a hero
-## last-hits drops one where it died by chance — DROP_CHANCE before overtime,
-## DROP_CHANCE_OVERTIME after (every one in Training): a
+## A power-up capsule (IDEAS.md "Power-up drops"). A creep a hero last-hits
+## drops one where it died by chance — DROP_CHANCE before overtime,
+## DROP_CHANCE_OVERTIME after, in Training too: a
 ## gold football-shaped pod rimmed in its owner's colour, the power's letter in its window. Break it to
 ## open it — whoever lands the breaking blow decides: its owner gets the power
 ## (hero.gd gain_power), the other hero just destroys it. Like a creep you can
@@ -35,15 +35,22 @@ const HEALTH := 300.0
 const CAPSULE_DENY_BELOW := 0.5  # the other hero can hit it only below this share of its health
 const CAPSULE_LEASH_COST := 2    # leash points to drag it (a ranged creep's price)
 const CAPSULE_DRAG_SPEED := 300.0  # how fast it floats after its hero (a hero walks 360)
-const DROP_CHANCE := 0.1           # odds a ranged last hit drops one before overtime
-const DROP_CHANCE_OVERTIME := 0.33  # … and in overtime
+## Odds a last hit of ANY creep drops one. Ranged-only (at 0.10 / 0.33) gave
+## red almost nothing: ranged creeps walk at the back of a wave, red is the
+## pushed-back side in nearly every round, and it claimed 13% of them against
+## the player's 60% — 16 capsules to 2 over the run of 2026-10-24. The filter
+## punished whoever was losing the push and then withheld the power-ups that
+## might turn it around. These odds are set so the player's supply is
+## unchanged (~1.9 a round) while red's roughly doubles.
+const DROP_CHANCE := 0.04          # odds a last hit drops one before overtime
+const DROP_CHANCE_OVERTIME := 0.14  # … and in overtime
 const POWERS := ["twin", "rampage", "pierce", "bullet", "shield"]  # (spread left the drops 2026-10-20: TWIN replaced it)
 const LETTER := {"twin": "T", "shield": "S", "spread": "S", "rampage": "R", "pierce": "P", "bullet": "B"}  # (bullet draws a shell instead)
 ## One colour per power, on the capsule and on the hero who has it (hero.gd).
 const POWER_COLOR := {"twin": Color("#c6ff00"), "shield": Color("#1de9b6"), "spread": Color("#c6ff00"), "rampage": Color("#ffab00"), "pierce": Color("#b388ff"), "bullet": Color("#29b6f6")}
 
 var owner_team := 0
-var owner_hero: Node2D = null  # who it dropped for (hero.gd on_ranged_last_hit)
+var owner_hero: Node2D = null  # who it dropped for (hero.gd on_creep_last_hit)
 var leader: Node2D = null      # leashed: the hero it floats after (hero.gd toggle_leash)
 var leash_slot := 0
 var power := "spread"

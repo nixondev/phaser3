@@ -19,6 +19,7 @@ const Heroes := preload("res://scripts/heroes.gd")
 const HeroScript := preload("res://scripts/hero.gd")
 const PlayLog := preload("res://scripts/play_log.gd")
 const RunHistoryScript := preload("res://scripts/run_history.gd")
+const HowToPlayScript := preload("res://scripts/how_to_play.gd")
 const AbilityInfo := preload("res://scripts/ability_info.gd")
 
 signal reload
@@ -350,13 +351,14 @@ func _draw_pick(view: Vector2) -> void:
 	# under the cards: Training (practice, no run), and the play log switch in dev builds
 	var both := PlayLog.available()
 	var bw := 360.0
-	var row1: Array = []  # first row, for everyone: Continue (a saved run), Training and How to Play
+	var row1: Array = []  # first row, for everyone: Continue (a saved run), Training and How to Play (hidden while SHOW_BUTTON is off)
 	var saved := Run.load_continue()
 	if not saved.is_empty():
 		var where := "shop after round %d" % int(saved["round"]) if str(saved.get("phase", "")) == "shop" else "round %d" % int(saved["round"])
 		row1.append(["Continue  ·  %s  (%s)" % [where, Heroes.LIST[int(saved["hero"])]["name"]], continue_run, Color("#66bb6a")])
 	row1.append(["Training mode", func() -> void: get_parent().start_training(), Color("#80cbc4")])
-	row1.append(["How to play", open_help, Color("#90a4ae")])
+	if HowToPlayScript.SHOW_BUTTON:
+		row1.append(["How to play", open_help, Color("#90a4ae")])
 	var widths: Array = row1.map(func(b: Array) -> float: return maxf(bw, ThemeDB.fallback_font.get_string_size(b[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 40.0))
 	var total := 24.0 * (row1.size() - 1)
 	for wd: float in widths:
@@ -394,9 +396,9 @@ func _draw_shop(view: Vector2) -> void:
 	_draw_gold_line(Vector2(view.x / 2.0, 128))
 	var np := Run.picks(Run.upgrades, Run.levels)
 	if _pick_hover_prev != "":  # previewing a pick: say what it does to prices
-		_text(Vector2(view.x / 2.0 + 150.0, 128), "after this pick: prices +%d%%" % roundi(Run.PRICE_RISE * (np + 1) * 100.0), 13, GOLD)
+		_text(Vector2(view.x / 2.0 + 150.0, 128), "after this pick: prices +%d%%" % roundi(Run.rise(Run.upgrades) * (np + 1) * 100.0), 13, GOLD)
 	elif np > 0:
-		_text(Vector2(view.x / 2.0 + 150.0, 128), "prices +%d%% (%d pick%s)" % [roundi(Run.PRICE_RISE * np * 100.0), np, "" if np == 1 else "s"], 13, Color(1, 1, 1, 0.5))
+		_text(Vector2(view.x / 2.0 + 150.0, 128), "prices +%d%% (%d pick%s)" % [roundi(Run.rise(Run.upgrades) * np * 100.0), np, "" if np == 1 else "s"], 13, Color(1, 1, 1, 0.5))
 
 	var card := Vector2(300, 84)
 	var gap := 20.0
@@ -410,7 +412,7 @@ func _draw_shop(view: Vector2) -> void:
 	var y := 422.0
 	for tier: String in Upgrades.TIER_ORDER:
 		var tc: Color = Upgrades.TIERS[tier]["color"]
-		var price: int = Run.inflate(Upgrades.TIERS[tier]["price"], Run.picks(Run.upgrades, Run.levels))  # rising prices
+		var price: int = Run.inflate(Upgrades.TIERS[tier]["price"], Run.picks(Run.upgrades, Run.levels), Run.rise(Run.upgrades))  # rising prices
 		_text(Vector2(label_x, y + 38), tier.to_upper(), 20, tc)
 		_text(Vector2(label_x, y + 60), "%d gold" % price, 15, GOLD if Run.gold >= price else Color(1, 1, 1, 0.4))
 		var row: Array = _offers.get(tier, [])
@@ -450,7 +452,7 @@ func _price(r: Rect2, key: String, now: int, base: int, can: bool, y: float, wid
 		_pick_hover = key
 	_text(r.position + Vector2(0, y), "%d" % now, size, GOLD if can else Color("#ef5350"), width, HORIZONTAL_ALIGNMENT_RIGHT)
 	if _pick_hover_prev != "" and _pick_hover_prev != key:
-		var next := Run.inflate(base, Run.picks(Run.upgrades, Run.levels) + 1)
+		var next := Run.inflate(base, Run.picks(Run.upgrades, Run.levels) + 1, Run.rise(Run.upgrades))
 		var pw := ThemeDB.fallback_font.get_string_size("%d" % now, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 		_text(r.position + Vector2(0, y - 1.0), "next %d" % next, 12, Color(1, 1, 1, 0.55), width - pw - 8.0, HORIZONTAL_ALIGNMENT_RIGHT)  # beside the price, clear of the text
 

@@ -57,7 +57,6 @@ static var no_gold := false
 static var ability_haste := 0.0
 ## Training (main.gd sets it): every ranged creep a hero last-hits drops a
 ## power-up capsule, overtime or not (power_capsule.gd), to try them out.
-static var training_drops := false
 static var haste_ult := true
 ## Whatever dealt the killing blow (a hero, or null for creeps / towers).
 var killed_by: Node2D = null
@@ -73,8 +72,9 @@ const ATTACK_SLOW_CAP := 2.0   # all attack slows together: attacks at most 3x a
 const SHIELD_CAP_PCT := 1.0    # shields together: at most this share of max health (or the biggest one alone)
 ## Attack-speed slow: attacks take (1 + attack_slow) times as long while it lasts.
 var attack_slow := 0.0
-var _attack_slows := {}  # key -> [amount, time left]
-## Movement slow: moves at (1 - move_slow) speed while it lasts.
+var _attack_slows := {}  # key -> [amount, time left, fade time (0 = holds full strength)]
+## Movement slow: moves at (1 - move_slow) speed while it lasts. A slow can
+## FADE (slow_moves fade = true): full strength on landing, nothing by the end.
 var move_slow := 0.0
 var _move_slows := {}
 ## Bleed (standing in a CHAD's TRAP): that hero's auto-attacks hit this
@@ -194,19 +194,22 @@ func tick_unit(delta: float) -> void:
 
 
 ## Put `amount` for `time` s on `stack` under `key`: stronger replaces (its
-## own time), equal tops the time up, weaker is ignored.
-static func _stack_add(stack: Dictionary, key: String, amount: float, time: float) -> void:
+## own time), equal tops the time up, weaker is ignored. `fade` = it decays
+## from `amount` to nothing over its time instead of holding and dropping off
+## (SHOVE's slow: hard the instant it lands, gone a second later).
+static func _stack_add(stack: Dictionary, key: String, amount: float, time: float, fade := false) -> void:
 	var cur: Variant = stack.get(key)
 	if cur == null or amount > cur[0] + 0.001:
-		stack[key] = [amount, time]
+		stack[key] = [amount, time, time if fade else 0.0]
 	elif amount >= cur[0] - 0.001:
 		cur[1] = maxf(cur[1], time)
+		cur[2] = time if fade else 0.0
 
 
 static func _stack_total(stack: Dictionary) -> float:
 	var total := 0.0
 	for e: Array in stack.values():
-		total += e[0]
+		total += (e[0] * (e[1] / e[2])) if e.size() > 2 and e[2] > 0.0 else e[0]  # a fading one is worth less the older it is
 	return total
 
 
@@ -230,10 +233,11 @@ func slow_attacks(amount: float, time: float, key := "") -> void:
 
 
 ## Slow this unit's movement by `amount` (0.35 = 35% slower) for `time` s.
-func slow_moves(amount: float, time: float, key := "") -> void:
+## `fade`: it starts at `amount` and wears off smoothly over those seconds.
+func slow_moves(amount: float, time: float, key := "", fade := false) -> void:
 	if status_immune > 0.0:
 		return
-	_stack_add(_move_slows, key, amount, time)
+	_stack_add(_move_slows, key, amount, time, fade)
 	move_slow = minf(MOVE_SLOW_CAP, _stack_total(_move_slows))
 
 
@@ -572,9 +576,9 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 			UnitLog.creep_died(team, killed_by, not hit.is_empty())
 		if bounty > 0 and killed_by and killed_by.is_in_group("heroes"):
 			if killed_by.team != team:
-				killed_by.earn_gold(bounty, position, is_in_group("creeps"))
-				if get("kind") == "ranged" and killed_by.has_method("on_ranged_last_hit"):
-					killed_by.on_ranged_last_hit(self)  # ranged last hits may drop a power-up capsule (power_capsule.gd)
+				killed_by.earn_gold(bounty, position, is_in_group("creeps"), hit.is_empty())
+				if is_in_group("creeps") and killed_by.has_method("on_creep_last_hit"):
+					killed_by.on_creep_last_hit(self)  # any creep last hit may drop a power-up capsule (power_capsule.gd)
 			elif is_in_group("creeps") and not no_gold:
 				killed_by.on_deny(position, self)  # its own side's blow: denied, nobody is paid (overtime: just a death)
 		_die()

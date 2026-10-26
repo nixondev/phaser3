@@ -15,8 +15,8 @@ extends "res://scripts/unit.gd"
 ## at you. At 0 HP it collapses into rubble (no longer solid) and emits died.
 ##
 ## Shield (backdoor protection): heroes — their attacks, abilities, burns —
-## can only damage it while at least one of their creeps (leashed ones count)
-## is inside its range circle. Creeps can always hit it, and siege minions. The
+## can only damage it while at least one of their creeps (leashed ones count,
+## and so does their SHELL passing through) is inside its range circle. Creeps can always hit it, and siege minions. The
 ## shield stays up in overtime too (lane.gd OVERTIME shield_drops sets `doors_open`). A shielded tower shows a
 ## shield plate, and blocked hero hits puff "SHIELDED".
 
@@ -129,12 +129,16 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 
 
 ## Is this tower shielded against heroes of `attacker_team`? Yes unless one of
-## that team's creeps is inside its range circle (or doors_open: see lane.gd).
+## that team's creeps — or their SHELL (bullet_minion.gd): it's a minion too —
+## is inside its range circle (or doors_open: see lane.gd).
 func shielded_from(attacker_team: int) -> bool:
 	if doors_open or not is_targetable() or attacker_team == team:
 		return false
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.team == attacker_team and c.is_targetable() and position.distance_to(c.position) <= RANGE + c.radius:
+			return false
+	for b: Node2D in get_tree().get_nodes_in_group("bullets"):
+		if b.team == attacker_team and b.is_targetable() and position.distance_to(b.position) <= RANGE + b.radius:
 			return false
 	return true
 

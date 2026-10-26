@@ -37,8 +37,8 @@ sides. Keep them separate when tuning: each answers one question.
 | Dial | Question | What's in it | Matures by |
 |---|---|---|---|
 | **Stats** | How strong is red's stuff? | bot health and damage, red creeps, red tower health and damage | **even: always the same as yours** |
-| **Skill** | How well does the bot *execute*? | cast gap, aim error, reaction, hesitation, last-hit odds, deny odds | human-level by round 10, **beyond human by round 20** |
-| **Smartness** | How well does the bot *decide*? | decision speed, blunders, noticing openings, when to trade, coming back, ultimate and siege | round 6 |
+| **Skill** | How well does the bot *execute*? | cast gap, aim error, reaction, hesitation, last-hit odds, deny odds | human-level by round 9, **beyond human by round 20** |
+| **Smartness** | How well does the bot *decide*? | decision speed, blunders, noticing openings, when to trade, coming back, ultimate and siege | round 8 |
 | Round pressure (both sides) | How long can a round go on? | overtime: no gold, towers weaken, waves grow; ultimates start on cooldown | — |
 | Late red waves | More of them, not stronger | +1 red melee per wave at round 15, another every 5 rounds | endless |
 
@@ -59,6 +59,24 @@ creeps.
 
 All values for the **standard** bot. Personalities change the smartness end
 points (section 3).
+
+**Round cycles (2026-10-25).** Red's heroes are a seeded shuffle of the four
+that repeats every 4 rounds (`run.gd` `bot_hero_for`), so a run reads as
+cycles: **1-4 · 5-8 · 9-12 · 13-16**. You meet every hero once a cycle, so a
+gate that fires mid-cycle makes the heroes incomparable — you cannot tell
+whether CHAD got harder or you just drew him after the change. Every gate is
+now on a boundary, one theme per cycle:
+
+| Cycle | Theme | What opens it |
+|---|---|---|
+| **1-4** | learn the game | tame minds (`hero_minds.gd` `TAME_UNTIL` 4); no new systems |
+| **5-8** | the characters | minds grow; **totems appear** (`TOTEM_FROM` 5, `TOTEM_ALL` 5); smartness finishes across the cycle (`SMART_FULL_ROUND` 8) |
+| **9-12** | past human | reaction floors, hesitation ends, `SUPER_FROM` 9; red contests your totems (`TOTEM_CONTEST_FROM` 9); late mind stages (`LATE_FROM` 9) |
+| **13+** | the wall | `RED_RAMP_FROM` 13 — red's body grows, uncapped |
+
+Already on a boundary and left alone: overtime capping at round 8, red's
+last-hit odds capping at 8, its deny odds at 9. Still mid-cycle: `RED_EXTRA_FROM`
+15 (+1 red melee per wave).
 
 ### Stats (`run.gd`: `STAT_STEP` 0.0, `TOWER_HP_START` 1.0, `CREEPS_START` 1.0)
 
@@ -108,39 +126,39 @@ change.
 
 | Round | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12 | 15 | 20+ |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Cast gap (s between casts) | 2.6 | 2.0 | 1.5 | 1.1 | 0.9 | 0.81 | 0.73 | 0.66 | 0.60 | 0.60 | 0.55 | 0.48 | **0.35** |
-| Aim error (px) | 90 | 65 | 45 | 35 | 25 | 22.5 | 20.3 | 18.2 | 16.4 | 14.8 | 10.4 | 8.0 | **4** |
-| Reaction (s, danger → escape; ±20%) | .70 | .65 | .60 | .55 | .50 | .45 | .40 | .35 | .30 | .25 | .22 | .19 | **.12** |
-| Hesitation (s, keeps fighting before retreating; ±20%) | 1.00 | .89 | .78 | .67 | .56 | .44 | .33 | .22 | .11 | 0 | 0 | 0 | 0 |
+| Cast gap (s between casts) | 2.6 | 2.0 | 1.5 | 1.1 | 0.9 | 0.81 | 0.73 | 0.66 | 0.60 | 0.58 | 0.53 | 0.46 | **0.35** |
+| Aim error (px) | 90 | 65 | 45 | 35 | 25 | 22.5 | 20.3 | 18.2 | 16.4 | 13.8 | 9.8 | 7.6 | **4** |
+| Reaction (s, danger → escape; ±20%) | .70 | .64 | .59 | .53 | .48 | .42 | .36 | .31 | **.25** | .24 | .22 | .18 | **.12** |
+| Hesitation (s, keeps fighting before retreating; ±20%) | 1.00 | .88 | .75 | .63 | .50 | .38 | .25 | .13 | **0** | 0 | 0 | 0 | 0 |
 | Last-hit odds | 75% | 78% | 81% | 84% | 87% | 90% | 93% | 95% | 95% | 95% | 96% | 98% | **100%** |
-| Deny odds | 0% | 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 80% | 83% | 88% | **95%** |
+| Deny odds | 0% | 10% | 20% | 30% | 40% | 50% | 60% | 70% | 80% | 81% | 84% | 88% | **95%** |
 
 - Cast gap and aim error: table for rounds 1–5, then ×0.9 per round down to
   floors 0.6 s and 12 px.
-- Reaction: even line 0.70 → 0.25 over rounds 1–10. A second escape needs
-  another full reaction.
-- Hesitation: even line 1.0 → 0 over rounds 1–10.
+- Reaction: even line 0.70 → 0.25 over rounds 1–9 (cycle 3 opens at the human
+  floor). A second escape needs another full reaction.
+- Hesitation: even line 1.0 → 0 over rounds 1–9.
 - Both vary **±20% around the round's value** each time (`bot.gd` `JITTER`):
   round 1 reacts in 0.56–0.84 s and hesitates 0.8–1.2 s.
 - Last hit / deny: one roll per creep when it first becomes a candidate.
-- **Beyond human** (`SUPER_FROM` 10, `SUPER_FULL` 20, `SUPER`): after round
-  10 every value above blends evenly toward the `SUPER` row, reached at round
-  20 — 0.12 s reactions, 0.35 s between casts, 4 px aim error, every last hit,
+- **Beyond human** (`SUPER_FROM` 9, `SUPER_FULL` 20, `SUPER`): from round
+  9 every value above blends evenly toward the `SUPER` row, reached at round
+  20 (the blend is 0 at 9 itself, so the first increment lands at 10) — 0.12 s reactions, 0.35 s between casts, 4 px aim error, every last hit,
   95% denies. Faster than a person can play; the endless engine now that
   stats are even.
 
-### Smartness (`run.gd`: `SMART_START` 0.3, `SMART_FULL_ROUND` 6; `bot.gd`: `DUMB`, `ULT_SMARTS`, `SIEGE_SMARTS`)
+### Smartness (`run.gd`: `SMART_START` 0.3, `SMART_FULL_ROUND` 8; `bot.gd`: `DUMB`, `ULT_SMARTS`, `SIEGE_SMARTS`)
 
-| Round | 1 | 2 | 3 | 4 | 5 | 6+ |
-|---|---|---|---|---|---|---|
-| Smartness | .30 | .44 | .58 | .72 | .86 | 1.00 |
-| Decides every (s) — dumb 0.6, smart 0.2 | .48 | .42 | .37 | .31 | .26 | .20 |
-| Skips the right action — dumb 30%, smart 0 | 21% | 17% | 13% | 8% | 4% | 0% |
-| Notices your openings (= smartness) | 30% | 44% | 58% | 72% | 86% | 100% |
-| Comes back at health — dumb 75%, smart 90% | 80% | 82% | 84% | 86% | 88% | 90% |
-| Trades when ahead by — dumb +20%, smart −10% | +11% | +7% | +3% | −2% | −6% | −10% |
-| Uses its ultimate (from 0.4) | no | yes | yes | yes | yes | yes |
-| Sieges your tower (from 0.4) | no | yes | yes | yes | yes | yes |
+| Round | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8+ |
+|---|---|---|---|---|---|---|---|---|
+| Smartness | .30 | .40 | .50 | .60 | .70 | .80 | .90 | 1.00 |
+| Decides every (s) — dumb 0.6, smart 0.2 | .48 | .44 | .40 | .36 | .32 | .28 | .24 | .20 |
+| Skips the right action — dumb 30%, smart 0 | 21% | 18% | 15% | 12% | 9% | 6% | 3% | 0% |
+| Notices your openings (= smartness) | 30% | 40% | 50% | 60% | 70% | 80% | 90% | 100% |
+| Comes back at health — dumb 75%, smart 90% | 80% | 81% | 83% | 84% | 86% | 87% | 89% | 90% |
+| Trades when ahead by — dumb +20%, smart −10% | +11% | +8% | +5% | +2% | −1% | −4% | −7% | −10% |
+| Uses its ultimate (from 0.4) | no | yes | yes | yes | yes | yes | yes | yes |
+| Sieges your tower (from 0.4) | no | yes | yes | yes | yes | yes | yes | yes |
 
 Blend: every `DUMB` key = `lerp(dumb, personality value, smartness)`.
 Retreat health is **not** blended: a dumb bot wants to leave at the same
@@ -168,6 +186,18 @@ Hidden from the player — never shown, named or signalled.
 | CHAD | brawler |
 | KAREN | brawler |
 | BECKY | farmer |
+
+**Tame early rounds (2026-10-25).** The table below is the four reference
+*templates* (`personality_templates.gd`), which nothing reads in normal play —
+every hero has its own mind (`hero_minds.gd`). Each mind's **base is now its
+tame round-1 self** and its first stage, at `TAME_UNTIL + 1` (TAME_UNTIL 3, so
+round 4), restores the real numbers. Rounds 1–3: KYLE engage 520 / chase 250 /
+trade_cap 0.70 / dash_at 0.30, no keep_burning or boop_peel, deny_lurk 0.3 ·
+CHAD engage 420 / chase 250 / trade_cap 0.75 / dash_at 0.35 / hunt_at 0.12, no
+drag_to_trap, capsule_tow 0.4 · KAREN engage 320 / chase 250 / trade_cap 0.75 /
+dash_at 0.35 / threat 150, no bully_reach, shove_peel or bully_when_behind ·
+BECKY unchanged but deny_lurk 0.4. From round 4 every value is what it was
+before. Knob: `TAME_UNTIL` (hero_minds.gd).
 
 **Tuned values** (missing = standard bot):
 
@@ -380,6 +410,7 @@ Levels belong to the **letter** and carry across hero switches.
 | | Glass Cannon | +35% ability damage, −20% max health (max 2; max health never below 20% of base) |
 | | Overclock | −30% cooldowns, abilities cost +40% mana (max 1) |
 | | Spellblade | after a cast, the next attack +40 damage and slows 20% for 1 s |
+| | Deflation | each pick raises your prices 5% instead of 8% (max 1; run.gd PRICE_RISE, red's own prices unaffected) |
 | Epic (600) | Twin Shot | auto-attacks also hit a second enemy nearby |
 | | Echo | Q hits twice: again 0.4 s later, half damage |
 | | Overcharge | ultimate: half cooldown, +30% damage |
@@ -442,7 +473,7 @@ blocked hero hits. The bot won't siege a shielded tower.
 
 | Kind | HP | Damage | Interval | Range | Speed | Gold (×1.5) | Leash cost |
 |---|---|---|---|---|---|---|---|
-| Melee | 550 base (× lane scaling) | 21 | 1.0 s | 18 | 240 | 60 | 1 |
+| Melee | 500 base (× lane scaling) | 21 | 1.0 s | 18 | 240 | 60 | 1 |
 | Ranged | 320 base | 24 | 1.0 s | 400 | 240 | 83 | 2 |
 | Tank (wave card) | 1,100 base | 14 | 1.2 s | 18 | 240 | 105 | 2 |
 
@@ -511,7 +542,7 @@ Level I burst if all lands: ~400–420.
 
 | | Ability | I | II | III |
 |---|---|---|---|---|
-| Q | **STARS** — spinning barbed stars in a spread, range 600; each cuts through creeps (hitting each once) and stops at the first hero or tower | 3 × 55, spread 18°, cd 5, 45 mana | 4 × 60 | 5 × 70 |
+| Q | **STARS** — spinning barbed stars in a spread, range 600; each cuts through creeps (hitting each once) and stops at the first hero or tower | 3 × 55, spread 18°, cd 7, 45 mana | 4 × 60 | 5 × 70 |
 | W | **TRAP** — dropped at your feet, r 55, 3 s: slow (+1 s after leaving), **bleed** (your attacks +20%), final 1 s whips round and cuts in 4 hits | 60 dmg, slow 35%, cd 10, 50 mana, 1 charge | 80, 2 charges, slow 40% | 100, 3 charges, slow 45%, cd 8 |
 | E | **POUNCE** — dash 520 through creeps and friends; stops at the first hero (or tower) and **tethers** it 1.2 s, max 220 apart; your pull wins; E again lets go | 70 dmg, cd 8, 60 mana | 100, range 600 | 140, cd 6 |
 | R | **FLURRY** — barbed pulses r 220 every 0.25 s, following you | 3 × 70, **cd 50**, 120 mana | 4 × 105 | 5 × 120 |
@@ -654,6 +685,38 @@ Run a fresh baseline before the next tuning pass.
 
 Newest first. One line per tuning change: what, from → to, why.
 
+- **2026-10-25** — A wary red **pokes** instead of freezing: the wary gate in `_farm_target` becomes `_poke_ok`, a new judgement (bot.gd, `POKE_BITE` 0.35). Wary was binary — either red played its whole order at full reach, or it held outside your threat and skipped every creep, capsule, push target and combo target inside it. There was no middle, so being behind switched off red's income and kept it behind. Now it may lean up to 35% into your reach for a last hit, judged at the spot it would **stand** to take the shot rather than at the creep, so attack range buys safety: a ranged hero farms under pressure, a melee one takes real risk for the same creep — character for free. Still gated while wary: pushing, clearing, denying, capsules, combos, chasing. Deliberately not safe — red can misjudge the lean and eat a combo for one creep, which is the mistake a person makes; `_in_danger` is a separate check on a separate roll, so it still bails out of burst it can see. The step back out needs no code: `order_attack` walks it to the creep and the next decision's `_lane_spot` pulls it back out with the `WARY_BAND` hysteresis already there. Trim knob: `POKE_BITE` 0.35 → 0.2 if red dies farming, → 0.5 if it still starves. Pairs with the `WARY_RACE` change below — that one makes red go wary less often, this one makes it cost less when it does.
+- **2026-10-25** — Red's "outmatched" bar stops borrowing the trade knob: `WARY_RACE` was a multiplier on `race_need` (×0.8), now it is its own absolute bar, **0.7** for every character (bot.gd). Why: `race_need` is documented as the TRADE gate — how hard a personality plays — and `_pv` blends it toward the personality's own value as smartness rises, so the cautious characters became the ones that froze. BECKY (race_need 1.2) called herself outmatched at a race of 0.96, almost even: in the run of 2026-10-25 21:38 she ran `wary 89%` in round 8, held for 73% of it, **took zero damage** and lost in 2:56 — while the same BECKY at smartness 0.6 in round 4 dealt 8,867 damage and nearly won the round. Wary blocks farming, pushing, totem trips and pressing at six call sites, so once red was behind on picks it could not farm, which kept it behind: rounds 8–11 of that run were 11 straight wins ending 2:56 / 3:05 / 4:43 / 2:12 with red earning 96 / 105 / 234 / 320 gold (33/min, against 58/min in round 1). Smartness still decides whether red *notices* it is outmatched (the `notice_outmatched` roll, unchanged — round 1 red stays oblivious); the bar it reads against is now the same for everyone. Caution is untouched where it belongs: `_wants_trade` still reads `race_need`, so BECKY still refuses trades. The hurt-and-losing retreat keeps the old coupling under its own name, `LOSING_RACE` 0.8 × `race_need` (same numbers as before — it only fires near retreat health). Dev log gains `trade_need` beside `odds_need`. Trim knob: `WARY_RACE` 0.7 → 0.8 if red starts dying in your reach. The matching half, letting a wary red still take last hits (`_farm_target`), is **not** done yet — IDEAS.md "The wary spiral".
+- **2026-10-25** — **Every round gate moved onto a 4-round cycle boundary** (user). Red's heroes are a seeded shuffle of the four repeating every 4 rounds, so a run is cycles of 1-4 / 5-8 / 9-12 / 13-16 and you meet each hero once per cycle; a gate firing mid-cycle made the heroes incomparable (two met before the change, two after). Moved: `TAME_UNTIL` 3 → 4 (cycle 1 is now entirely tame, so you meet all four gentle versions, then all four real ones) · `TOTEM_FROM` 6 → 5 and `TOTEM_ALL` 6 → 5 (totems open cycle 2 with the grown minds) · `SMART_FULL_ROUND` 6 → 8 (smartness is now a clean line .30 .40 .50 .60 .70 .80 .90 1.00 finishing at the end of its cycle instead of maxing mid-cycle) · `STAT_ANCHOR_ROUND` 6 → 5 (inert while the starts are 1.0, but anchored for when the stat nerf comes back) · `REACTION_FLOOR_ROUND` and `HESITATE_END_ROUND` 10 → 9, `SUPER_FROM` 10 → 9, `TOTEM_CONTEST_FROM` 8 → 9, and the four late mind stages (scattered at 7, 7, 7, 8) all to a named `LATE_FROM` 9 — so cycle 3 opens with one clear jolt: human-floor reflexes, no hesitation, red contesting your totems and every hero in its late form · `RED_RAMP_FROM` 12 → 13 (cycle 4 = the wall; this is the one change that makes the game *harder*, and it pays for the taming). Left alone, already on a boundary: overtime capping at 8, last-hit odds at 8, deny odds at 9. Still mid-cycle: `RED_EXTRA_FROM` 15. How to Play's totem line now says round 5.
+- **2026-10-25** — Melee creep base health 550 → 500 (creep.gd KINDS; ranged 320 and tank 1,100 unchanged). With the lane scaling that is 385 → 350 in round 1 and 706 → 642 in round 10. A tower now needs 3.2 shots to kill a melee instead of 3.5, so waves melt a little faster under a tower and the last-hit window is ~9% shorter — watch lh% and whether sieging gets harder, since tower damage against creeps still follows the round (TOWER_CREEP_SCALE 1.0) and was tuned against 550. Knob: KINDS.melee.hp; the whole-line knobs are LANE_CREEP_START (0.7) and LANE_GROWTH_STEP (0.0925, shared with tower health).
+- **2026-10-25** — Red's minds start tame: each hero's base is now its round-1 self and its first stage (`TAME_UNTIL + 1`, TAME_UNTIL 3) puts the real numbers back, so from round 4 nothing changed. Rounds 1–3 lose the reach and the grind, never the stance: KYLE engage 800 → 520, chase 600 → 250, trade_cap 0.5 → 0.7, dash_at 0.5 → 0.3, no keep_burning / boop_peel, deny_lurk 0.7 → 0.3 · CHAD engage 650 → 420, chase 700 → 250, trade_cap 0.6 → 0.75, dash_at 0.6 → 0.35, hunt_at 0.25 → 0.12, no drag_to_trap, capsule_tow 0.9 → 0.4 (his `trade_when` stays absent — trading on sight is young CHAD, and the round-4 stage making him pickier is the authored arc) · KAREN engage 400 → 320, chase 700 → 250, trade_cap 0.6 → 0.75, dash_at 0.6 → 0.35, threat 250 → 150, no bully_reach / shove_peel / bully_when_behind · BECKY deny_lurk 0.9 → 0.4 only. Why: smartness blends how WELL red decides, never how HARD it plays (bot.gd DUMB covers think, blunder, healed_at, trade_margin, race_need and some odds rolls — not engage, chase_depth, hold_back, dash_at, stance or any rule), so round-1 red was a full-strength character with a slow brain against a player who owns nothing. Round 1 was lost for the first time on record (2026-10-25, KYLE vs CHAD at smartness 0.3: 0-2, lh% 50 vs a usual 68–76, red's tower untouched at 2600) and 2 of the 3 round 2s before it, all to the aggressive draws. Also: KYLE's `vs CHAD` override becomes `peel_add: 60` (was `boop_peel: 260`), the `threat_add` / `hunt_add` / `keep_add` idiom, so a matchup can't reinstate a rule the tame base removed — it is inert in rounds 1–3 and 260 again from round 4. Trim knob: `TAME_UNTIL` (hero_minds.gd). Not yet paid for — `RED_RAMP_FROM` 12 → ~8 is the matching move once a few runs confirm the early game reads better (IDEAS.md "Difficulty shape: tame early minds").
+- **2026-10-25** — New rare card **Deflation** (250 base, max 1 — first built as an epic the same day, moved because the tier rule puts economy in rare and unique mechanics in epic; at 250 it is a real tempo-against-greed choice early and near worthless late, which is the decision the card is for): each pick raises your prices 5% instead of 8%. The shop's price growth (run.gd PRICE_RISE 0.08 a pick, both sides) had no card attached to it although `gold_mult` and `last_hit_gold` have been wired and unused for a while — and it's the biggest brake in the run: by round 10 of the 2026-10-24 run the player was at 18 picks, ×2.44 on every price, while income had grown only ×1.3. Deflation is deliberately a timing card: bought at the first shop it saves roughly 1,400 gold over a long run, bought late it saves almost nothing. Built as a `price_rise` mod read by run.gd `rise()` (not hero.gd) and floored at PRICE_RISE_MIN 0.01. Red doesn't buy it — it isn't in RED_PRIORITY.
+- **2026-10-24** — Earned minions: the kind scale moved onto the band that actually happens — EARN_FLOOR 0.6 → 0.2 and a new EARN_CEIL 0.7 (was an implicit 1.0), hero.gd. The odds at each end are unchanged (tank 2% → 10%, ranged 15% → 30%). The first guess assumed 7–10 of every ten last hits are attacks; measured over 13 rolls it is 2–6 — the player averaged 4.3, **red averaged 5.0**, so the floor sat above the bot as well as the player, every roll resolved at the bottom of the scale and 13 of 13 produced no tank. Wave-clear abilities take most last hits (R8: 35 creeps to the player's abilities, 15 to attacks), and AoE heroes farm lower still. A typical ten now lands mid-scale: tank ~5.7%, about one every five rounds instead of one every fourteen. Trim knob: the two ends of the band.
+- **2026-10-24** — Two totems a side instead of one, mirrored across the lane at y = ±TOTEM_Y (lane.gd TOTEM_SIDES; each on its own respawn timer, each paying TOTEM_REWARD). The negative-y half of the field was bare — both sides' totems sat at +560 — so the map was effectively one row deep. Red picks the nearer of its two and sticks with it for the trip (bot.gd `_trip_totem`, so it can't wander between them), and contests whichever of yours is furthest along rather than whichever is closest. Reward supply barely moves: the 2026-10-10 trim was two rewards from ONE kill, while this is two rewards from two separate kills — the payout per trip is unchanged, and one hero with one leash capacity can only work one totem at a time. The real gain is that a fallen totem no longer stalls you for TOTEM_RESPAWN (45 s); the real cost is that each side now has two to defend and two to contest, a full map crossing apart. Trim knobs if siege minions pile up anyway: TOTEM_REWARD, TOTEM_RESPAWN.
+- **2026-10-24** — Capsules now drop from **any** creep last hit, not just ranged ones, at DROP_CHANCE 0.10 → 0.04 and DROP_CHANCE_OVERTIME 0.33 → 0.14 (power_capsule.gd; unit.gd calls `on_creep_last_hit` for every creep). Ranged-only was a double penalty on the losing side: ranged creeps walk at the back of a wave, red is the pushed-back side in nearly every round, and it claimed 13% of them against the player's 60% — 16 capsules to 2 across the run of 2026-10-24, both of red's in round 1, so its whole capsule brain ran in one round of eight. The new odds are set to leave the player's supply where it was (~1.9 a round, ~15 a run) while red's goes 0.3 → 0.66 a round; the gap closes from 6:1 to 3:1, which is simply how much more the player farms. Training is unchanged (every ranged last hit drops, nothing else). Trim knobs: the two odds.
+- **2026-10-24** — Training now uses the same capsule odds as a lane round: the `training_drops` special case (every ranged last hit dropped one) is gone, along with the flag. User call — Training should practise the game, not hand out powers. Testing a particular power now means waiting for it.
+- **2026-10-24** — CHAD STARS cooldown 5 → 7 s (heroes.gd; still flat across its two levels, which only raise count and damage).
+- **2026-10-24** — Healing Aura's circle dimmed: fill alpha 0.05 → 0.025, ring 0.25 → 0.13 and 1.5 → 1.0 px wide (creep.gd). Every ranged creep in the wave wears one and they overlap, so at full strength the lane read as rings rather than creeps.
+- **2026-10-24** — Earned minions: every EARN_EVERY (10) last hits now sends one extra creep with that hero's next wave, both sides (hero.gd `_earn_minion`, lane.gd `pending_earned`). It's a bonus creep, so it pays no gold. The kind is rolled off how many of the ten kills were not ability hits, mapped from EARN_FLOOR 0.6 to 1.0: tank EARN_TANK 2% → 10%, ranged EARN_RANGED 15% → 30%, melee the rest — the floor because the real auto share never goes below ~0.6, so a curve over the full range would spend 0.70 of its length where nothing happens (run-level swing 1.32 vs 1.74 tanks without the floor, 0.70 vs 1.74 with it). Measured rate: ~2.9 creeps a round for you, ~1.1 for red, +4.5% creeps a round, and faster in overtime (5.1 last hits/min before, 6.9 inside). Nothing in the game announces it — the tell is meant to be a sound, which doesn't exist yet. Trim knob: EARN_FLOOR, then EARN_EVERY.
+- **2026-10-24** — Leashing (T) got a range: unlimited → LEASH_RANGE 700 px to the creep's edge (hero.gd `toggle_leash`). You could clip a leash on any creep or capsule of yours anywhere on the map, including ones across the lane you couldn't see. 700 is the longest ability reach in the game and matches red's own widest grab (bot.gd KEY_FETCH_OPEN 700, KEY_FETCH 350, TOTEM_FETCH 550, TOW_REACH 300), so red's behaviour is unchanged — the gate sits in `toggle_leash`, so it binds both sides. Releasing is still unconditional: a follower dragged out of reach can always be let go. Out of range flashes "Too far away to leash" where the leash-points refusal already flashed.
+- **2026-10-23** — Snapshots now say what each hero is carrying and what is around it. Both heroes' lines go through one builder (`_hero_snap`, play_log.gd) and gain `near` — the creeps within NEAR_CREEPS (460 px, creep ACQUIRE) as [yours, red's] — plus `power` / `power_left`, `twin` and `shield` when those are up. No log could previously say whether a hero had a power-up at all: red's 10 s of RAMPAGE in the run of 2026-10-23 R3 had to be inferred from its walking speed (453 px/s against 365 either side = RAMPAGE_SPEED). And `creeps` counts the whole lane, so nothing said how much of the wave was within reach of anyone — the number any wave-radius tuning needs. Distance off the lane and time in the well were deliberately not added: both follow from `at`.
+- **2026-10-23** — Red's fight maths knows power-ups exist. `_fight_hp` / `_fight_dps` (bot.gd) counted shields, BRACE and RAGE's damage cut but nothing from a capsule, so a rampaging red sized up a fight as if it were naked — and so did its reading of *you*. They now fold in RAMPAGE's armour (half of every hit, so effective health doubles), RAMPAGE's aura damage (only for a hero whose reach keeps it inside RAMPAGE_RADIUS — a zoner never applies it), and a TWIN's remaining health and its shots. Everything that reads `_race` — wary, commit, press, and two of the three retreat triggers — changes with it. Run of 2026-10-23 R3: rampage up, red read its odds as **0.55 against a need of 0.78** and ran at 43% health, which with half damage taken was worth 86%; counted properly the odds were about **1.1**. No new knob: this is a correction, not a tuning number.
+- **2026-10-23** — RAMPAGE is visible now. Its aura was the only area damage-over-time in the game that drew no damage numbers (`quiet` was set for creeps, hero.gd) while RAGE, zones and burns all draw theirs, and its disc sat at alpha 0.08–0.13 — so a rampaging hero looked like a hero. The aura now ticks at RAMPAGE_TICK 0.25 → 0.5 s (same DPS, same cadence as RAGE_TICK and BURN_TICK) and every tick shows its number; the disc went to alpha 0.16–0.24 with a 3 px edge, throws a ring out to RAMPAGE_RADIUS on each hit, and the body itself glows like RAGE's. Run of 2026-10-23 R3: red held RAMPAGE for its full 10 s (walking 25% faster, which is how we know) and the player saw nothing — it opened 2,200 px away and never came within 370 px, so the only thing the aura could touch was creeps, silently.
+- **2026-10-22** — Red now treats losing the lane as a problem. When the clash sits more than LANE_LOST_PUSH (400 px) into its own half **and** its wave is even or better where it stands (and it isn't wary or retreating), pushing jumps ahead of its usual order instead of being the thing it does when there's nothing left to last-hit — push sits 5th or 6th in every personality's order. Run of 2026-10-22 R14: **95% of the round was fought on red's half** (median front x +956 with its base at +2600), so the player's creeps reached red's tower 0.7 times a round and red's reached the player's 0.0; red's tower took 5756 and the player's 1001, all of it from siege minions walking past the clash. Logged as `why: push:lane`. Knob: LANE_LOST_PUSH (bot.gd).
+- **2026-10-22** — Red won't crack a capsule whose power it already has running. A second TWIN while one stands does literally nothing (hero.gd gain_power skips it), and "keep" powers are opened on sight, so two banked TWINs both got opened. Run of 2026-10-22 R14: red broke one at 5:32 and the next at 5:35 — ~8 s of cracking and a whole banked capsule for zero effect.
+- **2026-10-22** — A kill now means something to red: while the player is dead it no longer defends its tower just because the tower was hit recently — only if the backdoor shield has been walked open or the tower is under DEFEND_PANIC (35%). `_defend` sits above commit / press / push / siege in the decision order and fires on "hit in the last 2.5 s", which against a bigger wave is permanently true, so red spent its advantage on housekeeping. Run of 2026-10-22 R13: CHAD killed the player twice and the player's tower took **zero** damage in both windows — the second was 23 ticks of defending while the enemy hero lay dead. Knob: DEFEND_PANIC (bot.gd).
+- **2026-10-22** — A cast's result is logged 2.5 s after it lands (CAST_WINDOW), so any cast in a round's last 2.5 s never reached the cast table — 14 of 1014 across the run of 2026-10-22, and always the casts that ended the round (KYLE's PUNISH in R11 did 227 damage and showed as never cast). round_end now flushes the open ones first.
+- **2026-10-22** — Red can contest the wave race at last: Tank Minion goes to the top of every personality's shop list (was ranked 27–29 of 31–36, i.e. unreachable — red buys the highest-ranked card it can afford and never saves, so cheap stat cards drained its gold first), and the other wave cards move from the bottom to mid-list. Red has no allowance (RED_ALLOWANCE 0), so it only affords the 550 when it has farmed well — the contest is earned, not granted. Run of 2026-10-22: red bought **no wave card in 17 rounds** while the player's single Tank Minion, bought after R7, turned equal 4-creep waves into an 18-to-8 field advantage by R9. Knob: the rank of tank_minion per personality (hero_minds.gd).
+- **2026-10-22** — Red's lane stance gains `crowd_pull`: it gives up 25 px of ground per creep it is outnumbered by within 700 px, so a hero who holds the clash stops holding it when the clash turns. KAREN only (nobody else defines the key); her stance clamp goes max 30 → 200 so the term can actually move her. Run of 2026-10-22 R8: she stands 30 px AHEAD of her own front creep at any wave size, took 6190 from creeps (more than from the player), and died to a creep wave — and today's anchor rework puts her in the wave more, not less. Knobs: crowd_pull, stance.max (hero_minds.gd), CROWD_SEE (bot.gd).
+- **2026-10-22** — KYLE gets an ult combo, `E, R, W, Q`: PUNISH is now what the BOOP pull is for, cast while you're still inside its 260 px, instead of sitting last where it fired **twice in the whole 17-round run** (it's a contact shockwave on a hero whose mind keeps him at 400–760). And a combo step that pays extra against a burning target (SHOCK: +50%) now waits up to BURN_WAIT_MAX (0.8 s) for the IGNITE it just cast to catch — the two were being cast a tenth of a second apart, collecting none of the bonus. Knobs: the `ult` entry in combo_book.gd, BURN_WAIT_MAX (bot.gd).
+- **2026-10-22** — Red's totem play, per the escalation plan in IDEAS.md: it now works out the load before leashing and won't set out with fewer than TOTEM_MIN_LOAD (2) creeps; a trip under way is only called off by a real threat (retreating, your wave on its tower, defending) rather than by being merely wary — and a called-off trip releases its creeps instead of dragging them around; TOTEM_FETCH 450 → 550 so a full load is reachable; trips open to every personality from round 6 (TOTEM_ALL 10 → 6) with contesting split onto its own gate (TOTEM_CONTEST_FROM 8) and starting at 40% of your meter (TOTEM_CONTEST_AT 0.5 → 0.4). Run of 2026-10-22 R6: five trips of one or two creeps, meter crawled 0.00 → 0.36, red was wary 39% of the round, and the player took both totems.
+- **2026-10-22** — CHAD learns the player's combo: TRAP moves from last to first (still `W,E,Q,R`; flee `W,Q,E,R`) and the new `drag_to_trap` rule makes him haul a POUNCE-tethered hero back into his own spikes before STARS lands. TRAP hit a hero **0 times in 58 casts** across the run of 2026-10-22 — it drops at his feet with a 55 px radius, the tether is 220 px / 1.2 s, and casting it last meant the hero simply walked out. Its bleed (+20% to his hits) is an amplifier, so last also broke the combo book's own "amplifier before the payoff" rule; the lab that seeded the book could only try cast orders, never a combo whose key step is walking backwards. Knob: DRAG_STEP_WAIT (bot.gd).
+- **2026-10-22** — KAREN becomes the anchor she's described as, instead of CHAD with more health (they shared a decision order and a character-for-character identical 36-card shop). Now her own: order `abilities, clear, farm, siege, push, deny, trade` (wave first, tower before the fight, trading last); her own shop led by colossus / vigor / vampirism / healing_aura and the wave cards (tank_minion, reinforcement, vanguard, standard_bearer, siege_training — previously ranked 27–32 of 36, so never bought). New rules: `bully_reach` (she turns on you only within her charge + 60 px — the old anchor rule sent her marching 900 px into artillery, which is where her 19–29% retreat time went), `shove_peel` (crowd her wave in SHOVE range and she charges through you, knocking you aside and gaining ground, instead of starting a fight she must walk into), `bully_when_behind` (tower under threat: she fights whether or not she wins the damage race). engage 650 → 400. Run of 2026-10-22: four KAREN rounds, dmg ratio 5.56 / 4.36 / 3.99 / 1.79, GRIND 9/46.
+- **2026-10-22** — SHOVE now slows 50%, decaying to nothing over 1 s (new: slows can fade — unit.gd slow_moves `fade`). The anchor's kit is contact-range (GRIND, RAGE) behind a single 300 px dash, so against artillery she landed SHOVE and nothing else: GRIND 9/46 across four KAREN rounds, her whole kit 510 damage in R4 (run of 2026-10-22, dmg ratio 5.56). The slow buys the beat GRIND needs. Knobs: move_slow / slow_time / slow_fade on SQUARE_E (heroes.gd).
+- **2026-10-22** — Red won't open a combo with a puller (BOOP) while the back-off rules are about to fire: dragging you closer and then fleeing is the worst of both (run of 2026-10-22 R3 1:38 — KYLE BOOPed the player in at full health, then danger-retreat aborted the combo at step 1). New pass reason "keeping BOOP: about to back off".
+- **2026-10-22** — red_combo_end now logs `cast`: which steps actually fired. "done" only ever meant "ran out of steps" — steps that aren't ready are skipped silently, so R3's seven KYLE combos read as five completed while PUNISH (60 s / 150 mana / 260 px) never fired once. The analyzer prints "steps actually cast: N of M" per round.
+- **2026-10-22** — Round 1 red kills like round 1 again: the "kill on the table" roll goes 0.5 + 0.5×smartness → 0.2 + 0.8×smartness (65% → 44% at smartness 0.3, unchanged at 1.0), and a finished combo now blocks the next one for COMBO_BREATH × (1 − smartness) s (2.4 s at 0.3, 0 s at 1.0). Run of 2026-10-22 R1: CHAD at 0.3 chained two full combos twice to kill from ~95%, four deaths in the opening round. Knobs: KILL_SEEN_FLOOR, COMBO_BREATH (bot.gd).
+- **2026-10-22** — A SHELL counts as a minion for the tower shield: while your bullet is inside a tower's range, you can hit that tower (was: only creeps dropped the shield, so a shell walking past did nothing for you). tower.gd shielded_from checks group "bullets" too.
 - **2026-10-21** — The Gauntlet rule: the player's attack-move and near-clicks now acquire breakable capsules like any target (was: direct click only — a near-miss click in Training grabbed the dummy instead). Your own is always yours to hit (worst case: you open your power early — don't shoot your food); red's still only enters the pool below half / leashed / owner dead (breakable_by, unchanged). Bots keep the old filter so red never cracks its bank by accident. Knob: _not_capsule gating in hero.gd.
 - **2026-10-21** — Red tows capsules: a banked SHELL or RAMPAGE within 650 gets leashed along (same 2 points as yours, so key runs outrank it) when red is healthy, unbothered and you're 900+ away — rolled once per capsule at capsule_tow × smartness (CHAD 0.9, KYLE 0.6, BECKY 0.4, KAREN 0.3). It parks the capsule (protection back) when you come within 700, it drops under 55%, a key run needs the points, or it's about to crack it. Knobs: TOW_REACH/TOW_DANGER/TOW_START (bot.gd), capsule_tow (hero_minds.gd). Logged: red_capsule_tow / red_capsule_park.
 - **2026-10-21** — Leash-a-capsule built as logged in IDEAS.md: T on your own capsule drags it (2 leash points, a ranged creep's price); it floats after you at 300 while you walk 360, so long runs leave it trailing — and while leashed it's open to red at ANY health (the white deny line leaves its bar to say so). Red doesn't drag its own capsules yet. Knobs: CAPSULE_LEASH_COST, CAPSULE_DRAG_SPEED (power_capsule.gd).

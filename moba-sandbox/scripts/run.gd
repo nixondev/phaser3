@@ -34,14 +34,27 @@ const ENDLESS_GROWTH := 0.10  # (unused now: stats follow STAT_STEP below)
 ## The old gentle line is kept switchable: STAT_STEP 0.04 with TOWER_HP_START
 ## 0.6 / CREEPS_START 0.7 was 80% in round 1, 100% at round 6, +4% a round after.
 const STAT_STEP := 0.0
+## ROUND CYCLES (2026-10-25, user). Red's heroes are a seeded shuffle of the
+## four that repeats every 4 rounds (bot_hero_for), so a run reads as cycles of
+## four: 1-4, 5-8, 9-12, 13-16. You meet every hero once a cycle, so anything
+## that changes mid-cycle makes the heroes incomparable — you cannot tell
+## whether CHAD got harder or you just drew him after the change. Every gate
+## below is therefore aligned to a cycle boundary, one theme each:
+##   1-4   learn the game    tame minds (hero_minds.gd TAME_UNTIL), no new systems
+##   5-8   the characters    minds grow, totems appear, smartness finishes by 8
+##   9-12  past human        reaction floors, hesitation ends, SUPER starts,
+##                           red contests your totems, late mind stages
+##   13+   the wall          RED_RAMP_FROM: red's body grows, uncapped
+## Already on a boundary and left alone: overtime capping at round 8, red's
+## last-hit odds capping at 8, its deny odds at 9.
 ## LATE RAMP: from RED_RAMP_FROM, all of red's stats (creeps, tower health and
 ## damage, its hero's health and damage) climb RED_RAMP_STEP a round, with no
 ## cap — so every run ends sometime, however good the player. A straight line
 ## is enough: rising prices flatten the player's growth, so the line wins.
-##   round 12 ×1.05 · 15 ×1.20 · 20 ×1.45 · 30 ×1.95
-const RED_RAMP_FROM := 12
+##   round 13 ×1.05 · 15 ×1.15 · 20 ×1.40 · 30 ×1.90
+const RED_RAMP_FROM := 13  # cycle 4 opens (was 12, mid-cycle)
 const RED_RAMP_STEP := 0.05
-const STAT_ANCHOR_ROUND := 6
+const STAT_ANCHOR_ROUND := 5  # cycle 2 opens (was 6; inert while the starts are 1.0)
 const STAT_FLOOR := 0.5
 const STAT_KEYS := ["creeps", "tower_hp", "tower_damage", "bot_hp", "bot_damage"]
 ## Red's tower health starts lower (quick early rounds) and climbs evenly to
@@ -67,16 +80,18 @@ const AIM_ERROR_FLOOR := 12.0
 ## then flat. 1.0 s = a distracted beginner, 0.25 s = a sharp, practised player.
 const REACTION_START := 0.7
 const REACTION_FLOOR := 0.25
-const REACTION_FLOOR_ROUND := 10
+const REACTION_FLOOR_ROUND := 9   # cycle 3 opens (was 10)
 ## The bot's hesitation: once hurt enough to run, it keeps fighting up to this
 ## many seconds (random each time) first. An even line from HESITATE_START in
 ## round 1 to none at HESITATE_END_ROUND.
 const HESITATE_START := 1.0
-const HESITATE_END_ROUND := 10
+const HESITATE_END_ROUND := 9   # cycle 3 opens (was 10)
 ## Past human: from SUPER_FROM the bot keeps sharpening toward SUPER, reached
-## at SUPER_FULL (an even line between). By then it reacts faster, casts more
+## at SUPER_FULL (an even line between). SUPER_FROM is cycle 3's opening (was
+## 10, mid-cycle), and it lands with the reaction floor and the end of
+## hesitation so the cycle starts with one clear jolt. By then it reacts faster, casts more
 ## often and aims better than a person can, and never misses a last hit.
-const SUPER_FROM := 10
+const SUPER_FROM := 9
 const SUPER_FULL := 20
 const SUPER := {"reaction": 0.12, "cast_gap": 0.35, "aim_error": 4.0, "last_hit_chance": 1.0, "deny_chance": 0.95}
 ## LANE GROWTH: the lane itself gets tougher over a run — the SAME for both
@@ -108,8 +123,10 @@ static var settings := "user://settings.cfg"
 static var continue_file := "user://continue.save"
 ## Rising prices: every pick (card or ability level) makes everything cost
 ## this much more for the rest of the run — for you and red alike. Buy what
-## matters first, while it's cheap.
+## matters first, while it's cheap. A side owning a card with the `price_rise`
+## mod (Deflation) rises more slowly, never below PRICE_RISE_MIN.
 const PRICE_RISE := 0.08
+const PRICE_RISE_MIN := 0.01
 
 ## Gold for winning a round (you only; flat, so it matters less as prices rise).
 const WIN_GOLD := 0  # removed 2026-10-02 (was 200)
@@ -147,7 +164,9 @@ const DIFFICULTY := [
 ## autoplay matrix), and gets smarter round by round: smartness SMART_START in round 1
 ## up to 1.0 by SMART_FULL_ROUND. Personalities are never shown to the player.
 const SMART_START := 0.3
-const SMART_FULL_ROUND := 6
+const SMART_FULL_ROUND := 8  # the end of cycle 2 (was 6, mid-cycle): the
+## characters arrive at 5 and sharpen across their cycle instead of maxing out
+## in the middle of it.
 
 static var round_num := 0
 static var phase := "pick"
@@ -300,27 +319,32 @@ static func picks(ups: Array, lvls: Dictionary) -> int:
 	return cards + int(lvls.values().reduce(func(a, b): return a + b, 0)) - 4
 
 
-## `base` gold after `n` picks of rising prices (rounded to 5).
-static func inflate(base: int, n: int) -> int:
-	return int(roundf(base * (1.0 + PRICE_RISE * n) / 5.0) * 5.0)
+## How fast prices rise for the side owning `ups` (Deflation slows it).
+static func rise(ups: Array) -> float:
+	return maxf(PRICE_RISE_MIN, PRICE_RISE + float(Upgrades.stacked(ups).get("price_rise", 0.0)))
+
+
+## `base` gold after `n` picks of prices rising at `step` (rounded to 5).
+static func inflate(base: int, n: int, step := PRICE_RISE) -> int:
+	return int(roundf(base * (1.0 + step * n) / 5.0) * 5.0)
 
 
 ## What a card / level costs you right now.
 static func card_cost(u: Dictionary) -> int:
-	return inflate(Upgrades.price(u), picks(upgrades, levels))
+	return inflate(Upgrades.price(u), picks(upgrades, levels), rise(upgrades))
 
 
 static func level_cost(slot: String, to: int) -> int:
-	return inflate(Upgrades.level_price(slot, to), picks(upgrades, levels))
+	return inflate(Upgrades.level_price(slot, to), picks(upgrades, levels), rise(upgrades))
 
 
 ## …and what it costs red right now.
 static func red_card_cost(u: Dictionary) -> int:
-	return inflate(Upgrades.price(u), picks(red_upgrades, red_levels))
+	return inflate(Upgrades.price(u), picks(red_upgrades, red_levels), rise(red_upgrades))
 
 
 static func red_level_cost(slot: String, to: int) -> int:
-	return inflate(Upgrades.level_price(slot, to), picks(red_upgrades, red_levels))
+	return inflate(Upgrades.level_price(slot, to), picks(red_upgrades, red_levels), rise(red_upgrades))
 
 
 static func buy(id: String) -> bool:

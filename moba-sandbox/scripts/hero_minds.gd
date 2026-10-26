@@ -26,6 +26,7 @@ extends RefCounted
 ##             threat           px: an enemy hero this close while it's in its wave → it turns on them
 ##             keep_burning     attacks a burning enemy hero in range (KYLE: each hit restarts the burn)
 ##             boop_peel        px: a melee hero this close → BOOP between, knocking both apart
+##             peel_add         added to boop_peel (matchups; inert before he has boop_peel)
 ##             boop_into_fire   BOOP from behind an enemy standing just outside its IGNITE → into it
 ##             ignite_deny      IGNITE on its own low creeps near the enemy hero (farm them = stand in fire)
 ##             stance_add       px added to its stance (matchups)
@@ -39,10 +40,45 @@ extends RefCounted
 ##             bank_nerve       how long it dares bank a capsule (× bot.gd BANK_ROT; 1 = standard)
 ##             deny_lurk        how keen it waits by your cracked capsule for the deny (0..1, × smartness)
 ##             capsule_tow      how keen it tows a banked SHELL/RAMPAGE along (0..1, × smartness; bot.gd _tow_worth)
+##           stance.crowd_pull  px it gives up per creep it's outnumbered by nearby (bot.gd _hold_back):
+##                              standing in the clash is for an even clash
+##             bully_reach      px past its own reach that still counts as "you stepped up to me": the
+##                              anchor turns on what it can actually catch, and keeps pushing when it can't
+##             shove_peel       charge through you when you crowd its wave — knock you aside and gain
+##                              ground, instead of starting a fight it has to walk into (bot.gd _zone_tick)
+##             bully_when_behind  its tower under threat: it fights whether or not it wins the damage race
+##             drag_to_trap     tethered by POUNCE with its own TRAP down: walk back and haul you into
+##                              the spikes before the rest of the combo lands (bot.gd _drag_tick)
 ##   stages  [{"from": round, "traits": {...}, "rules": {...}}]: how it grows
-##           (later stages layer over earlier ones)
+##           (later stages layer over earlier ones). THE BASE IS THE TAME ONE:
+##           see TAME_UNTIL.
 ##   vs      {"<hero name>": {"traits": {...}, "rules": {...}}}: matchup tweaks
 ## Personalities stay a black box to players: none of this is ever shown.
+
+## TAME EARLY ROUNDS (2026-10-25). The base of each mind is the round-1 red:
+## the same character, pruned - shorter reach, no chasing, and none of the
+## rules that grind down a player who owns nothing (the diver's drag, the
+## zoner's shove and burn, the anchor's bully). Each mind's first stage
+## puts the real numbers back, so from that round red is exactly what it was.
+## Why: smartness only blends how WELL red decides (bot.gd DUMB: think,
+## blunder, healed_at, trade_margin, race_need, plus some odds rolls) - never
+## how HARD it plays. So a smartness-0.3 diver had the same reach, chase depth
+## and hunt threshold as a smartness-1.0 one, against a player with no cards.
+## Round 1 was lost for the first time on 2026-10-25 (KYLE vs CHAD, 0-2, red's
+## tower untouched), and 2 of the 3 round 2s before it, all to aggressive
+## draws. Keep the two axes apart: run.gd's ladder = how well, these = how hard.
+## The last round red plays its tame base; every mind's first stage is
+## TAME_UNTIL + 1, where it becomes its real self. Raise it to keep red gentle
+## for longer, lower it to hand the characters back sooner.
+## 4 (2026-10-25, user): red's heroes are a shuffle of the four that repeats
+## every 4 rounds (run.gd bot_hero_for), so rounds 1-4 are one full cycle. Tame
+## for exactly that cycle means you meet all four gentle versions, then all
+## four real ones from round 5 — instead of meeting three tame and one grown.
+const TAME_UNTIL := 4
+## Cycle 3's stage: the late form of each mind, all on one boundary (they were
+## scattered at 7, 7, 7 and 8 — mid-cycle, so you met two heroes before the
+## change and two after, and could not compare them).
+const LATE_FROM := 9
 
 const MINDS := {
 	# KYLE — the zoner: back by most of his attack reach (his shortest wave
@@ -51,64 +87,87 @@ const MINDS := {
 	"KYLE": {"name": "the zoner", "from": "opportunist",
 		"stance": {"base": 0.0, "on_wave": 0.7, "tough_pull": 120.0, "sustain_pull": 200.0, "min": 40.0, "max": 360.0},
 		# controls where fights happen: keeps you burning, knocks you out of his
-		# face or into his fire, and burns the creeps you want to farm
-		"rules": {"keep_burning": true, "boop_peel": 200.0, "bank_nerve": 1.0, "deny_lurk": 0.7, "capsule_tow": 0.6},
+		# face or into his fire, and burns the creeps you want to farm.
+		# Tame start: he farms his own wave from range - no shove, no burn held
+		# on you, and he doesn't step out to trade.
+		"rules": {"bank_nerve": 1.0, "deny_lurk": 0.3, "capsule_tow": 0.6},
 		"stages": [
-			{"from": 4, "rules": {"boop_into_fire": true}},   # learns to use BOOP with IGNITE
-			{"from": 7, "rules": {"ignite_deny": true}},      # learns to zone the farm
+			# becomes the zoner: his reach, his shove, his burn - and BOOP into IGNITE
+			{"from": TAME_UNTIL + 1, "traits": {"engage": 800.0, "trade_cap": 0.5, "dash_at": 0.5, "chase_depth": 600.0},
+				"rules": {"keep_burning": true, "boop_peel": 200.0, "deny_lurk": 0.7, "boop_into_fire": true}},
+			{"from": LATE_FROM, "rules": {"ignite_deny": true}},   # learns to zone the farm
 		],
 		"vs": {
-			"CHAD": {"rules": {"boop_peel": 260.0}},      # the diver: knock him off sooner
+			"CHAD": {"rules": {"peel_add": 60.0}},        # the diver: knock him off sooner (inert while he has no shove)
 			"KAREN": {"rules": {"stance_add": 40.0}},     # stays out of the anchor's threat zone
 			"BECKY": {"rules": {"stance_add": -60.0}},    # the artillery out-ranges him: step in to reach her
 		},
 		"personality": {"order": ["abilities", "clear", "trade", "farm", "deny", "push", "siege"], "retreat_at": 0.35, "trade_when": "vulnerable",
-		"hero_casts": "poke", "engage": 800.0, "trade_cap": 0.5, "dash_at": 0.5, "hold_back": 160.0,
-		"race_need": 1.1, "chase_depth": 600.0, "stutter": 1.0, "commit": 1.0,
-		"shop": ["arcane_edge", "overcharge", "echo", "haste", "hunters_mark", "kindling", "cold_read", "spellblade",
-		"reserve", "afterimage", "focus", "vigor", "boots", "wellspring", "colossus", "second_wind", "vampirism",
-		"whetstone", "quickdraw", "salve", "twin_shot", "executioner", "keen_eye", "clean_finish", "adrenaline",
-		"scavenger", "longbow", "tank_minion", "reinforcement", "siege_training", "healing_aura", "siphon"]}},
+		"hero_casts": "poke", "engage": 520.0, "trade_cap": 0.7, "dash_at": 0.3, "hold_back": 160.0,
+		"race_need": 1.1, "chase_depth": 250.0, "stutter": 1.0, "commit": 1.0,
+		"shop": ["tank_minion", "arcane_edge", "overcharge", "echo", "haste", "hunters_mark",
+		"kindling", "cold_read", "spellblade", "reinforcement", "reserve", "afterimage",
+		"focus", "vigor", "boots", "siege_training", "wellspring", "healing_aura",
+		"colossus", "second_wind", "vampirism", "whetstone", "quickdraw", "salve",
+		"twin_shot", "executioner", "keen_eye", "clean_finish", "adrenaline", "scavenger",
+		"longbow", "siphon"]}},
 	# CHAD — the diver: in the wave (TRAP drops at his feet, his attacks are
 	# melee), POUNCE ready for whoever comes.
 	"CHAD": {"name": "the diver", "from": "brawler",
 		"stance": {"base": -10.0, "on_wave": 0.5, "tough_pull": 60.0, "sustain_pull": 100.0, "min": -40.0, "max": 80.0},
 		# waits in the wave for an opening, then POUNCEs and commits fully; never
 		# lets a hurt hero walk away. Grows from impulsive to patient.
-		"rules": {"hunt_at": 0.25, "bank_nerve": 1.3, "deny_lurk": 0.4, "capsule_tow": 0.9},  # the diver holds SHELL for a dive — and carries it there; too impatient to lurk
+		# Tame start: still the impulsive brawler (trading on sight IS young
+		# CHAD), but he swings at what is beside him and lets it go - no long
+		# step-in, no chase over the middle, no haul into his spikes, and he
+		# finishes you only when you are nearly dead.
+		"rules": {"hunt_at": 0.12, "bank_nerve": 1.3, "deny_lurk": 0.4, "capsule_tow": 0.4},
 		"stages": [
-			{"from": 4, "traits": {"trade_when": "vulnerable"}, "rules": {"hunt_at": 0.35, "wait_escape": true}},  # learns patience
-			{"from": 7, "rules": {"hunt_at": 0.4}},
+			# becomes the diver: patient, long-armed, and he carries SHELL to the dive
+			{"from": TAME_UNTIL + 1, "traits": {"trade_when": "vulnerable", "engage": 650.0, "trade_cap": 0.6, "dash_at": 0.6, "chase_depth": 700.0},
+				"rules": {"hunt_at": 0.35, "wait_escape": true, "drag_to_trap": true, "capsule_tow": 0.9}},
+			{"from": LATE_FROM, "rules": {"hunt_at": 0.4}},
 		],
 		"vs": {
 			"BECKY": {"rules": {"hunt_add": 0.1}},    # fragile: finish her sooner
 			"KAREN": {"rules": {"hunt_add": -0.1}},   # tanky: don't chase her too early
 		},
 		"personality": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"], "retreat_at": 0.3, "healed_at": 0.75,
-		"engage": 650.0, "trade_cap": 0.6, "trade_margin": -0.25, "dash_at": 0.6, "hold_back": 20.0,
-		"race_need": 0.85, "chase_depth": 700.0, "stutter": 0.6, "commit": 1.0,
-		"shop": ["vigor", "whetstone", "quickdraw", "serrated", "vampirism", "second_wind", "colossus", "spellblade",
-		"cold_read", "twin_shot", "arcane_edge", "aftershock", "hunters_mark", "salve", "haste", "spite", "boots",
-		"overcharge", "echo", "reserve", "afterimage", "kindling", "executioner", "clean_finish", "adrenaline",
-		"scavenger", "tank_minion", "reinforcement", "vanguard", "standard_bearer", "siege_training", "healing_aura",
-		"focus", "wellspring", "longbow", "siphon"]}},
+		"engage": 420.0, "trade_cap": 0.75, "trade_margin": -0.25, "dash_at": 0.35, "hold_back": 20.0,
+		"race_need": 0.85, "chase_depth": 250.0, "stutter": 0.6, "commit": 1.0,
+		"shop": ["tank_minion", "vigor", "whetstone", "quickdraw", "serrated", "vampirism",
+		"second_wind", "colossus", "spellblade", "vanguard", "cold_read", "standard_bearer",
+		"twin_shot", "reinforcement", "arcane_edge", "siege_training", "aftershock", "healing_aura",
+		"hunters_mark", "salve", "haste", "spite", "boots", "overcharge",
+		"echo", "reserve", "afterimage", "kindling", "executioner", "clean_finish",
+		"adrenaline", "scavenger", "focus", "wellspring", "longbow", "siphon"]}},
 	# KAREN — the anchor: plants herself in the wave and gnaws it away, too tanky
 	# to move, and punishes anyone who steps in to stop her pushing. (hold_back
 	# −30: she stands in the clash, ahead of her own front creep.)
 	"KAREN": {"name": "the anchor", "from": "brawler",
-		"stance": {"base": -40.0, "on_wave": 0.3, "tough_pull": 60.0, "sustain_pull": 100.0, "min": -70.0, "max": 30.0},
-		"personality": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"], "retreat_at": 0.3, "healed_at": 0.75,
-		"engage": 650.0, "trade_cap": 0.6, "trade_margin": -0.25, "dash_at": 0.6, "hold_back": -30.0,
-		"race_need": 0.85, "chase_depth": 700.0, "stutter": 0.6, "commit": 1.0,
-		"shop": ["vigor", "whetstone", "quickdraw", "serrated", "vampirism", "second_wind", "colossus", "spellblade",
-		"cold_read", "twin_shot", "arcane_edge", "aftershock", "hunters_mark", "salve", "haste", "spite", "boots",
-		"overcharge", "echo", "reserve", "afterimage", "kindling", "executioner", "clean_finish", "adrenaline",
-		"scavenger", "tank_minion", "reinforcement", "vanguard", "standard_bearer", "siege_training", "healing_aura",
-		"focus", "wellspring", "longbow", "siphon"]},
-		"rules": {"grind_for_kills": true, "front_first": true, "threat": 250.0, "bank_nerve": 0.7, "deny_lurk": 0.5, "capsule_tow": 0.3},  # the anchor plays it straight
+		"stance": {"base": -40.0, "on_wave": 0.3, "tough_pull": 60.0, "sustain_pull": 100.0, "crowd_pull": 25.0, "min": -70.0, "max": 200.0},  # crowd_pull: she holds the clash, but not against a wave that outnumbers hers
+		# Her own order, not the brawler's: she wins by attrition and lane pressure,
+		# so the wave comes first and the tower before the fight. Trading is the
+		# last thing she reaches for — the anchor rule (threat) still turns her on
+		# anyone who steps up to her wave, out of turn.
+		"personality": {"order": ["abilities", "clear", "farm", "siege", "push", "deny", "trade"], "retreat_at": 0.3, "healed_at": 0.75,
+		"engage": 320.0, "trade_cap": 0.75, "trade_margin": -0.25, "dash_at": 0.35, "hold_back": -30.0,
+		"race_need": 0.85, "chase_depth": 250.0, "stutter": 0.6, "commit": 1.0,
+		"shop": ["tank_minion", "healing_aura", "reinforcement", "colossus", "vigor", "vampirism",
+		"second_wind", "salve", "vanguard", "standard_bearer", "siege_training", "boots",
+		"haste", "serrated", "whetstone", "spite", "aftershock", "quickdraw",
+		"spellblade", "cold_read", "executioner", "clean_finish", "twin_shot", "adrenaline",
+		"scavenger", "arcane_edge", "overcharge", "echo", "reserve", "kindling",
+		"hunters_mark", "afterimage", "focus", "wellspring", "longbow", "siphon"]},  # her own list: survive, then make the wave win
+		# Tame start: she holds her ground on the wave and turns only on someone
+		# right on top of her - no shoving for room, no fighting out of spite
+		# because her tower is being hit.
+		"rules": {"grind_for_kills": true, "front_first": true, "threat": 150.0, "bank_nerve": 0.7, "deny_lurk": 0.5, "capsule_tow": 0.3},
 		"stages": [
-			{"from": 4, "rules": {"threat": 350.0}},   # reads the lane: steps up sooner
-			{"from": 8, "rules": {"threat": 400.0}},
+			# becomes the anchor: reads the lane, steps up sooner, bullies for room
+			{"from": TAME_UNTIL + 1, "traits": {"engage": 400.0, "trade_cap": 0.6, "dash_at": 0.6, "chase_depth": 700.0},
+				"rules": {"threat": 350.0, "bully_reach": 60.0, "shove_peel": true, "bully_when_behind": true}},
+			{"from": LATE_FROM, "rules": {"threat": 400.0}},
 		],
 		"vs": {
 			"KYLE": {"rules": {"threat_add": 50.0}},   # ranged: they poke from afar, she steps up
@@ -122,10 +181,13 @@ const MINDS := {
 		"stance": {"base": 0.0, "on_wave": 0.75, "tough_pull": 150.0, "sustain_pull": 150.0, "min": 150.0, "max": 460.0},
 		# never in reach, always in range: poke-farms from safety, punishes anyone
 		# who stands still or walks in a straight line
-		"rules": {"keep_out": 60.0, "bank_nerve": 1.0, "deny_lurk": 0.9, "capsule_tow": 0.4},  # the artillery lurks denies from range
+		# Tame start: already the gentlest of the four - she poke-farms and keeps
+		# her distance. Only her capsule lurking waits for the grown stage.
+		"rules": {"keep_out": 60.0, "bank_nerve": 1.0, "deny_lurk": 0.4, "capsule_tow": 0.4},
 		"stages": [
-			{"from": 4, "traits": {"hero_casts": "poke"}, "rules": {"predictable_only": true}},  # learns to punish
-			{"from": 7, "rules": {"keep_out": 100.0}},
+			# becomes the artillery: punishes anyone predictable, lurks your capsules
+			{"from": TAME_UNTIL + 1, "traits": {"hero_casts": "poke"}, "rules": {"predictable_only": true, "deny_lurk": 0.9}},
+			{"from": LATE_FROM, "rules": {"keep_out": 100.0}},
 		],
 		"vs": {
 			"CHAD": {"rules": {"keep_add": 100.0}},   # POUNCE's long reach
@@ -133,10 +195,12 @@ const MINDS := {
 		},
 		"personality": {"order": ["clear", "farm", "deny", "abilities", "trade", "push", "siege"], "retreat_at": 0.4, "trade_when": "vulnerable",
 		"hero_casts": "vulnerable", "clump": 2, "hold_back": 200.0, "race_need": 1.2, "chase_depth": 0.0, "stutter": 1.0, "commit": 0.6, "totem_keen": true,
-		"shop": ["arcane_edge", "haste", "focus", "wellspring", "siphon", "keen_eye", "clean_finish", "bounty_hunter",
-		"echo", "reserve", "overcharge", "executioner", "adrenaline", "homeguard", "afterimage", "second_wind",
-		"scavenger", "recruit", "vigor", "whetstone", "quickdraw", "longbow", "salve", "boots", "colossus", "twin_shot",
-		"healing_aura", "reinforcement", "tank_minion", "siege_training", "vampirism"]}},
+		"shop": ["tank_minion", "arcane_edge", "haste", "focus", "wellspring", "siphon",
+		"keen_eye", "clean_finish", "bounty_hunter", "reinforcement", "echo", "healing_aura",
+		"reserve", "overcharge", "executioner", "siege_training", "adrenaline", "homeguard",
+		"afterimage", "second_wind", "scavenger", "recruit", "vigor", "whetstone",
+		"quickdraw", "longbow", "salve", "boots", "colossus", "twin_shot",
+		"vampirism"]}},
 }
 
 
@@ -159,4 +223,6 @@ static func mind_for(hero_name: String, round_num: int, foe_name: String) -> Dic
 		rules["hunt_at"] = float(rules["hunt_at"]) + float(rules["hunt_add"])
 	if rules.has("keep_add") and rules.has("keep_out"):
 		rules["keep_out"] = float(rules["keep_out"]) + float(rules["keep_add"])
+	if rules.has("peel_add") and rules.has("boop_peel"):
+		rules["boop_peel"] = float(rules["boop_peel"]) + float(rules["peel_add"])
 	return {"name": str(m.get("name", hero_name)), "personality": traits, "rules": rules, "stance": m.get("stance", {})}

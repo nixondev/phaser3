@@ -19,6 +19,7 @@ extends RefCounted
 ##   tower_attack (+fraction)   mana_cost (+fraction)   spellblade (+dmg next attack)
 ##   aftershock (dmg)   q_charges   afterimage   hunters_mark (missing-hp share)
 ##   recruit (s)   bounce (Excess: every 5th attack jumps on, this damage share)
+##   price_rise (−per pick, read by run.gd not hero.gd: Deflation)
 ##
 ## `on_buy`: a one-time effect when bought, no mods (run.gd buy): "reroll"
 ## (Gamble: the shop rolls new offers). Such cards aren't offered in Training (nothing to do there).
@@ -79,6 +80,7 @@ const LIST := [
 	{"id": "glass_cannon", "tier": "rare", "max": 2, "name": "Glass Cannon", "text": "+35% ability damage, −20% max health", "mods": {"ability_damage": 0.35, "max_hp_pct": -0.2}},
 	{"id": "overclock", "tier": "rare", "max": 1, "name": "Overclock", "text": "−30% cooldowns; abilities cost 40% more mana", "mods": {"cooldown": 0.3, "mana_cost": 0.4}},
 	{"id": "spellblade", "tier": "rare", "name": "Spellblade", "text": "After a cast, your next attack deals +40 and slows 20% for 1 s", "mods": {"spellblade": 40.0}},
+	{"id": "deflation", "tier": "rare", "max": 1, "name": "Deflation", "text": "Each pick raises your prices 5% instead of 8%", "mods": {"price_rise": -0.03}},
 
 	{"id": "twin_shot", "tier": "epic", "name": "Twin Shot", "text": "Auto-attacks also hit a second enemy nearby", "mods": {"twin_shot": 1.0}},
 	{"id": "echo", "tier": "epic", "name": "Echo", "text": "Q hits twice: again 0.4 s later, half damage", "mods": {"echo": 1.0}},

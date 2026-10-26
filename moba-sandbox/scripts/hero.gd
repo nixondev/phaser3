@@ -59,7 +59,29 @@ const HURT := Color("#ff5252") # damage numbers on the hero
 const HERO_BOUNTY := 120       # gold for killing a hero in round 1 (× lane growth after)
 const DEATH_GOLD_LOSS := 0.15  # share of carried gold lost on death — to the killer if it's a hero
 const DEATH_GOLD_CAP := 300    # …but never more than this per death
+## Earned minions: every EARN_EVERY last hits, one extra creep joins your next
+## wave (lane.gd `earn_creep`, a bonus creep like any other — no gold). Which
+## kind is rolled off how many of those kills were NOT ability hits: a share of
+## EARN_FLOOR or less rolls the low end of each range, EARN_CEIL or more the
+## high end. The band between them is where play actually lands — measured
+## 2026-10-24 over 13 rolls: the player averaged 4.3 of ten and red 5.0, and
+## nothing ever went above 6. (The first guess was a floor of 0.6 with no
+## ceiling, on the assumption that last hits are mostly attacks. They aren't:
+## wave-clear abilities take most of them — in R8, 35 creeps died to the
+## player's abilities against 15 to attacks — and heroes like CHAD, whose
+## STARS cuts a whole line, farm lower still. Every roll landed on the floor
+## and 13 of 13 came up short of a tank.)
+## Nothing announces any of this: no counter, no mark on the creep. The tell is
+## meant to be a sound (IDEAS.md "Sound effects"), which doesn't exist yet.
+const EARN_EVERY := 10
+const EARN_FLOOR := 0.2
+const EARN_CEIL := 0.7
+const EARN_TANK := [0.02, 0.10]    # chance of a tank at the floor → at the ceiling
+const EARN_RANGED := [0.15, 0.30]  # …of a ranged one; melee takes the rest
+
 const LEASH_POINTS := 2        # leash capacity before upgrades
+const LEASH_RANGE := 700.0     # px: how far you can clip a leash on (to the creep's edge). The longest
+                               # ability reach in the game — the trim knob if reaching this far is too much.
 
 var facing := Vector2.RIGHT
 ## Driven by bot.gd instead of the mouse: no input, no click markers.
@@ -71,6 +93,8 @@ var velocity := Vector2.ZERO
 ## Gold earned from killing blows, and how many of those were creeps.
 var gold := 0
 var last_hits := 0
+var _earn_count := 0  # last hits since the last earned minion (resets with the hero each round)
+var _earn_autos := 0  # how many of those weren't ability hits
 var denies := 0
 ## Upgrade ids owned (upgrades.gd) and their summed mods — read via mod().
 var upgrade_ids: Array = []
@@ -166,10 +190,13 @@ var _detour_for := Vector2.ZERO  # the target it was made for
 ## `leashed` the creeps following you. Capacity in leash points: LEASH_POINTS
 ## plus the Command card; a melee creep costs 1, ranged / tank 2. Your own
 ## capsule leashes too (2 points, power_capsule.gd): it floats after you —
-## open to the enemy at any health while it does.
+## open to the enemy at any health while it does. Clipping a leash on needs
+## the creep within LEASH_RANGE; letting one go never does, so a follower
+## dragged out of reach can always be released.
 var leashing := false
 var leashed: Array = []
 var leash_flash := 0.0
+var leash_flash_msg := ""  # why the last leash was refused (shown by the ability bar)
 ## Recast abilities in flight (slot -> the Orb): pressing the key again
 ## detonates instead of aiming.
 var recast := {}
@@ -186,7 +213,7 @@ var _second_wind_cd := 0.0
 var _aftershock_cd := 0.0
 var decoy: Node2D = null
 const SECOND_WIND_EVERY := 40.0
-## Power-ups (power_capsule.gd): overtime capsules from ranged last hits. One at
+## Power-ups (power_capsule.gd): capsules from last hits. One at
 ## a time for POWER_TIME s; a new one replaces it. A ring in its colour shows it.
 ##   spread   (out of the drops since 2026-10-20 — TWIN replaced it; code kept) each attack also fires at SPREAD_EXTRA more enemies in range (each Twin Shot shot gets its own triple)
 ##   twin     not timed: a TWIN (twin.gd) at your side, held in `twin`, until it breaks or you die
@@ -202,7 +229,7 @@ const SPREAD_EXTRA := 2
 const RAMPAGE_SPEED := 0.25
 const RAMPAGE_RADIUS := 140.0
 const RAMPAGE_DPS := 100.0
-const RAMPAGE_TICK := 0.25
+const RAMPAGE_TICK := 0.5  # s between its hits, like RAGE_TICK and BURN_TICK (the DPS is the same either way)
 const RAMPAGE_ARMOR := 0.5
 var _rampage_tick := 0.0
 const PIERCE_PAST := 1000.0  # px the shot carries on past its target
@@ -338,7 +365,7 @@ func _process(delta: float) -> void:
 				_rampage_tick += RAMPAGE_TICK
 				for u: Node2D in Targets.enemies_in(get_tree(), position, RAMPAGE_RADIUS, team):
 					if not u.is_in_group("towers"):
-						u.take_damage(RAMPAGE_DPS * RAMPAGE_TICK, CapsuleScript.POWER_COLOR["rampage"], false, u.is_in_group("creeps"), self)
+						u.take_damage(RAMPAGE_DPS * RAMPAGE_TICK, CapsuleScript.POWER_COLOR["rampage"], false, false, self)
 	if not is_targetable():
 		respawn_in -= delta
 		if respawn_in <= 0.0:
@@ -675,11 +702,14 @@ func _pierce(target: Node2D, from := Vector2.INF, scale := 1.0) -> float:
 	return dearest
 
 
-## You last-hit an enemy ranged creep (unit.gd): by chance it drops a capsule
-## of yours where it died — likelier in overtime; always in Training.
-func on_ranged_last_hit(creep: Node2D) -> void:
-	var odds: float = CapsuleScript.DROP_CHANCE_OVERTIME if Unit.no_gold else CapsuleScript.DROP_CHANCE
-	if randf() >= odds and not Unit.training_drops:
+## You last-hit an enemy creep (unit.gd): by chance it drops a capsule of
+## yours where it died — likelier in overtime. Any creep counts: see
+## DROP_CHANCE (power_capsule.gd) for why it isn't ranged ones only.
+## Training plays by the same odds (2026-10-24): it used to drop on every
+## ranged last hit, which made it the place to test powers rather than the
+## place to practise the game.
+func on_creep_last_hit(creep: Node2D) -> void:
+	if randf() >= (CapsuleScript.DROP_CHANCE_OVERTIME if Unit.no_gold else CapsuleScript.DROP_CHANCE):
 		return
 	var kinds: Array = CapsuleScript.POWERS.filter(func(k: String) -> bool: return k != power \
 		and not (k == "twin" and is_instance_valid(twin)) and not (k == "shield" and has_power_shield()))
@@ -1012,8 +1042,13 @@ func toggle_leash(c: Node2D) -> bool:
 		c.leader = null
 		PlayLog.event("unleash" if not is_bot else "red_unleash", {"kind": _leash_kind(c)})
 		return true
+	if position.distance_to(c.position) > LEASH_RANGE + c.radius:
+		leash_flash = 0.8
+		leash_flash_msg = "Too far away to leash"
+		return false
 	if leash_used() + c.leash_cost() > leash_capacity():
 		leash_flash = 0.8
+		leash_flash_msg = "Not enough leash points"
 		return false
 	c.leader = self
 	c.set("camp", null)  # (leashing a creep off a totem takes it off)
@@ -1426,9 +1461,17 @@ func _cancel_plant() -> void:
 
 
 ## Paid by unit.gd when this hero lands a killing blow worth `amount`.
-func earn_gold(amount: int, at: Vector2, last_hit: bool) -> void:
+## `auto`: the blow was not an ability hit (an attack, or a burn / bleed / aura
+## tick — none of those can be timed, so they all count as the harder way).
+func earn_gold(amount: int, at: Vector2, last_hit: bool, auto := true) -> void:
 	if last_hit:
 		last_hits += 1
+		_earn_count += 1
+		_earn_autos += int(auto)
+		if _earn_count >= EARN_EVERY:
+			_earn_minion()
+			_earn_count = 0
+			_earn_autos = 0
 		amount = int((amount + mod("last_hit_gold")) * (1.0 + mod("gold_mult")))
 		mana = minf(max_mana, mana + mod("last_hit_mana"))  # Siphon
 		cooldowns["R"] = maxf(0.0, cooldowns["R"] - mod("last_hit_ult"))  # Adrenaline
@@ -1443,6 +1486,21 @@ func earn_gold(amount: int, at: Vector2, last_hit: bool) -> void:
 	gold += amount
 	if not is_bot:
 		effects.add_child(Effects.GoldNumber.new(at, amount))
+
+
+## EARN_EVERY last hits done: roll a creep and send it with the next wave.
+func _earn_minion() -> void:
+	var x := clampf((float(_earn_autos) / float(EARN_EVERY) - EARN_FLOOR) / (EARN_CEIL - EARN_FLOOR), 0.0, 1.0)
+	var tank: float = lerpf(EARN_TANK[0], EARN_TANK[1], x)
+	var ranged: float = lerpf(EARN_RANGED[0], EARN_RANGED[1], x)
+	var roll := randf()
+	var kind := "tank" if roll < tank else ("ranged" if roll < tank + ranged else "melee")
+	var lane_node: Node = effects.get_parent().get_node_or_null("Lane") if effects else null
+	if lane_node == null:
+		return  # Training: no waves to join
+	lane_node.earn_creep(team, kind)
+	PlayLog.event("red_earned_minion" if is_bot else "earned_minion",
+		{"kind": kind, "autos": _earn_autos, "of": EARN_EVERY})
 
 
 ## Called by unit.gd for every hit this hero lands: Vampirism heals.
@@ -1628,7 +1686,7 @@ func _dash(dest: Vector2, colour: Color, damage: float, a: Dictionary = {}) -> v
 					if a.get("zone_slow", 0.0) > 0.0 and (u.is_burning_from(self) or u.in_zone_of(self)):  # combo: dashed through them while they burn
 						u.slow_moves(a["zone_slow"], a.get("slow_time", 2.0), "dash")
 					if a.get("move_slow", 0.0) > 0.0:
-						u.slow_moves(a["move_slow"], a.get("slow_time", 1.5), "dash")
+						u.slow_moves(a["move_slow"], a.get("slow_time", 1.5), "dash", a.get("slow_fade", false))
 					if a.get("expose", 0.0) > 0.0 and u.is_targetable():  # SHOVE: -armor for a few seconds
 						u.expose(a["expose"], a.get("expose_time", 3.0))
 					rage_contact(u)  # during RAGE, SHOVE's hits burn like a touch
@@ -1771,10 +1829,13 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, radius + float(_rage.get("contact_reach", 40.0)), 0.0, TAU, 48, Color(1.0, 0.5, 0.15, 0.35), 2.0)
 	if power != "" and power_left > 0.0:  # a power-up: a turning broken ring in its colour, outermost, shrinking as it runs out
 		var pc: Color = CapsuleScript.POWER_COLOR[power]
-		if power == "rampage":  # its damage area: a faint hot disc with a flickering edge
+		if power == "rampage":  # its damage area: a hot disc, a ring thrown out on every hit, and a glowing body
 			var fl := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 80.0)
-			draw_circle(Vector2.ZERO, RAMPAGE_RADIUS, Color(pc, 0.08 + 0.05 * fl))
-			draw_arc(Vector2.ZERO, RAMPAGE_RADIUS, 0.0, TAU, 48, Color(pc, 0.35 + 0.25 * fl), 2.0)
+			var beat := 1.0 - clampf(_rampage_tick / RAMPAGE_TICK, 0.0, 1.0)  # 0 at the hit, 1 just before the next
+			draw_circle(Vector2.ZERO, RAMPAGE_RADIUS, Color(pc, 0.16 + 0.08 * fl))
+			draw_arc(Vector2.ZERO, RAMPAGE_RADIUS, 0.0, TAU, 48, Color(pc, 0.55 + 0.25 * fl), 3.0)
+			draw_arc(Vector2.ZERO, RAMPAGE_RADIUS * beat, 0.0, TAU, 48, Color(pc, 0.75 * (1.0 - beat)), 4.0)
+			draw_circle(Vector2.ZERO, radius + 8.0 + 4.0 * fl, Color(pc, 0.2 + 0.12 * fl))  # it is the thing that's hot
 		var turn := Time.get_ticks_msec() / 400.0
 		var left := pierce_budget / pierce_budget_max if power == "pierce" else power_left / POWER_TIME  # Pierce drains by damage, not time
 		for i in 3:

@@ -60,7 +60,11 @@ top of `moba-sandbox/scripts/play_log.gd`.
 2. **Read the output, then dig** into the raw events only where a question
    needs it (a moment the user mentions, an anomaly, a death). Snapshots come
    4× a second: `you` / `bot` positions, health, red's `why` and `flags`,
-   `towers`, `creeps`, `front`, `at_tower`, `totems`.
+   `towers`, `creeps`, `front`, `at_tower`, `totems`. Each hero's line also
+   carries `near` (the creeps within 460 px of it, as [yours, red's]) and, only
+   while they are up, `power` / `power_left`, `twin` and `shield`. Distance off
+   the lane and time in the well aren't fields — work them out from `at`
+   against bounds.gd (HALF_HEIGHT 650, WELL_X 2600 / WELL_R 300).
 3. **Report** (sections below), plainly, with the numbers. Lead with the answer
    to what the user asked.
 
@@ -81,6 +85,28 @@ top of `moba-sandbox/scripts/play_log.gd`.
 - **Why each round went that way**: tower damage by source (creeps, heroes,
   siege, how much was overtime's crumble), melts (50% → rubble in seconds), the
   wave at the end, creep kills by killer, siege minions, totems.
+- **Gold, both sides** (added 2026-10-25): the script prints a line per round
+  — what each side earned, the picks each took into the round, what each has
+  banked, and the ratio. Red farms for everything it buys (no allowance since
+  2026-10-01), so the gold gap IS the power gap a round or two later, and the
+  ratio tracks results closely: in the won rounds of the 2026-10-24 run the
+  player earned ×6.19 and ×15.40 red's in rounds 1–2 (red made 91 then 48
+  gold and could not buy its first card until round 3), while every recent
+  *lost* round had red out-earning the player (×0.52, ×0.79, ×0.47). Flag a
+  side earning under ~250 in a round it is not plainly losing. Red's income
+  dial is `LAST_HIT_START` / `LAST_HIT_STEP` (run.gd) — never a personality
+  key, so it can be raised without making red meaner.
+- **Earned minions**: every ten last hits sends one extra creep with that
+  side's next wave (hero.gd EARN_EVERY, 2026-10-24), kind rolled off how many
+  of the ten weren't ability hits. The script prints a line per side: how many,
+  which kinds, and the average auto share. Nothing in the game tells the player
+  this happened, so the log is the only place it shows.
+- **Power-ups, if any ran**: the script prints a line per window — which power,
+  how long, **the closest it ever got to the other hero**, and what red spent
+  the window doing. A power that never came near anybody did nothing, however
+  long it was up (run of 2026-10-23 R3: red held RAMPAGE a full 10 s, opened it
+  2,200 px away and never came within 370 px). Before 2026-10-23 a log could
+  not say whether a hero had a power at all.
 - **Red's behaviour and why**: what it spent its time doing, its flags (wary,
   retreat, pressing…), combos and how they ended, cast hit rates, chances it
   passed up and the reasons, deaths (killer, what it was doing), key runs and

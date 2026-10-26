@@ -245,7 +245,7 @@ func _draw_hud() -> void:
 		_panel.draw_string_outline(font, Vector2(0, origin.y - 70.0), "LEASH: click one of your creeps   ·   T or right-click to cancel", HORIZONTAL_ALIGNMENT_CENTER, view.x, 18, 6, Color(0, 0, 0, 0.8))
 		_panel.draw_string(font, Vector2(0, origin.y - 70.0), "LEASH: click one of your creeps   ·   T or right-click to cancel", HORIZONTAL_ALIGNMENT_CENTER, view.x, 18, Color("#80deea"))
 	if hero.leash_flash > 0.0:
-		_panel.draw_string(font, Vector2(0, origin.y - 96.0), "Not enough leash points", HORIZONTAL_ALIGNMENT_CENTER, view.x, 18, Color(1, 0.5, 0.5, minf(1.0, hero.leash_flash * 2.0)))
+		_panel.draw_string(font, Vector2(0, origin.y - 96.0), hero.leash_flash_msg, HORIZONTAL_ALIGNMENT_CENTER, view.x, 18, Color(1, 0.5, 0.5, minf(1.0, hero.leash_flash * 2.0)))
 	_draw_tooltips(font, view, origin)
 	if lane and lane.winner < 0:  # the moment overtime begins: say what it means, for a few seconds
 		var since: float = lane.elapsed - lane.overtime_start()

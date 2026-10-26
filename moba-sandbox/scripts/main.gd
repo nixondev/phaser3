@@ -140,7 +140,6 @@ func _ready() -> void:
 	bar.cooldowns_clicked.connect(toggle_no_cooldowns)
 	bar.mana_clicked.connect(toggle_no_mana)
 	hero.no_cooldowns = lane == null and training_no_cooldowns
-	Unit.training_drops = lane == null  # Training: ranged last hits always drop a power-up
 	hero.no_mana = lane == null and training_no_mana
 	add_child(bar)
 
