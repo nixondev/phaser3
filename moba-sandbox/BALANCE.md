@@ -69,10 +69,10 @@ now on a boundary, one theme per cycle:
 
 | Cycle | Theme | What opens it |
 |---|---|---|
-| **1-4** | learn the game | tame minds (`hero_minds.gd` `TAME_UNTIL` 4); no new systems |
-| **5-8** | the characters | minds grow; **totems appear** (`TOTEM_FROM` 5, `TOTEM_ALL` 5); smartness finishes across the cycle (`SMART_FULL_ROUND` 8) |
-| **9-12** | past human | reaction floors, hesitation ends, `SUPER_FROM` 9; red contests your totems (`TOTEM_CONTEST_FROM` 9); late mind stages (`LATE_FROM` 9) |
-| **13+** | the wall | `RED_RAMP_FROM` 13 — red's body grows, uncapped |
+| **1-4** | learn the game | tame minds (`hero_minds.gd` `TAME_UNTIL` 4); smartness **.30** |
+| **5-8** | the characters | minds grow; **totems appear** (`TOTEM_FROM` 5, `TOTEM_ALL` 5); smartness **.50** |
+| **9-12** | past human | reaction floors, hesitation ends, `SUPER_FROM` 9; red contests your totems (`TOTEM_CONTEST_FROM` 9); late mind stages (`LATE_FROM` 9); smartness **.70** |
+| **13+** | the wall | `RED_RAMP_FROM` 13 — red's body grows, uncapped — **and smartness reaches 1.00**, so cycle 4 is red at its best in a body that keeps growing |
 
 Already on a boundary and left alone: overtime capping at round 8, red's
 last-hit odds capping at 8, its deny odds at 9. Still mid-cycle: `RED_EXTRA_FROM`
@@ -93,12 +93,21 @@ this round. Heroes never scale. It's a **straight line**:
 +6.5 points of base a round.
 
 **Where 0.0925 comes from:** the best straight-line fit (rounds 1–20, pinned
-to 1.0 in round 1) to a model of an average player's damage growth:
+to 1.0 in round 1) to a model of an average player's damage growth — fitted
+when `PRICE_RISE` was 0.08:
 
 1. Gold spent before round R: 1,000 × (R − 1) (an average round pays 1,000).
 2. Picks it buys: an average pick costs 258 base and every pick raises prices
-   8% of base, so n picks cost 258 × (n + 0.04 × n(n − 1)). Solve for n.
+   `PRICE_RISE` (7%) of base, so n picks cost 258 × (n + 0.035 × n(n − 1)).
+   Solve for n.
 3. Damage: 1.0314 ^ n.
+
+**Deliberately not re-fit for the 0.07 rise** (user, 2026-10-26). The re-fit
+would be 0.0986; left at 0.0925, the average player runs *ahead* of the line,
+so the lane is a little easier than the model says it should be — by +0.05
+from round 5 and +0.11 by round 20. That is a knowing choice, not drift: one
+constant moved, one playtest to read. Re-fit values if it is ever wanted:
+rise 0.07 → 0.0986, 0.06 → 0.1062, 0.05 → 0.1158.
 
 | Pick type | Share | Base price | Damage per pick |
 |---|---|---|---|
@@ -110,14 +119,16 @@ to 1.0 in round 1) to a model of an average player's damage growth:
 
 | Round | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12 | 15 | 20 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Model (average player damage) | 1.00 | 1.12 | 1.22 | 1.31 | 1.41 | 1.50 | 1.59 | 1.67 | 1.76 | 1.85 | 2.02 | 2.29 | 2.74 |
-| **Lane growth (line)** | 1.00 | 1.09 | 1.19 | 1.28 | 1.37 | 1.46 | 1.56 | 1.65 | 1.74 | 1.83 | 2.02 | 2.30 | 2.76 |
+| Model (average player damage) | 1.00 | 1.12 | 1.22 | 1.32 | 1.42 | 1.52 | 1.61 | 1.71 | 1.80 | 1.89 | 2.08 | 2.37 | 2.87 |
+| **Lane growth (line)** | 1.00 | 1.09 | 1.19 | 1.28 | 1.37 | 1.46 | 1.55 | 1.65 | 1.74 | 1.83 | 2.02 | 2.29 | 2.76 |
 | Tower HP (both) | 2,600 | 2,785 | 2,970 | 3,155 | 3,340 | 3,525 | 3,710 | 3,895 | 4,080 | 4,265 | 4,635 | 5,190 | 6,115 |
 | Creep HP (both, × base) | 70% | 76% | 83% | 89% | 96% | 102% | 109% | 115% | 122% | 128% | 141% | 161% | 193% |
-| …melee / ranged HP | 385 / 224 | 421 / 245 | 456 / 265 | 492 / 286 | 527 / 307 | 563 / 328 | 599 / 348 | 634 / 369 | 670 / 390 | 706 / 410 | 777 / 452 | 884 / 514 | 1,062 / 618 |
+| …melee / ranged HP | 350 / 224 | 382 / 245 | 415 / 265 | 447 / 286 | 480 / 307 | 512 / 328 | 544 / 348 | 577 / 369 | 609 / 390 | 641 / 410 | 706 / 452 | 803 / 514 | 965 / 618 |
 
-Within 0.04 of the model every round (slightly under it in rounds 2–6,
-matching from round 8). Health only: creep damage, tower damage (110) and gold
+The model now sits **above** the line every round after the first (+0.05 by
+round 5, +0.06 by round 10, +0.11 by round 20) because the rise dropped to
+0.07 and the line was left at its 0.08 fit — see the note above. The melee row
+also picks up the 550 → 500 base-HP nerf of 2026-10-25, which it had not yet. Health only: creep damage, tower damage (110) and gold
 don't change. Training uses the base numbers (3,000 tower, 100% creeps).
 **Re-fit** the step if the economy (gold per round, prices) or the cards
 change.
@@ -147,18 +158,36 @@ change.
   95% denies. Faster than a person can play; the endless engine now that
   stats are even.
 
-### Smartness (`run.gd`: `SMART_START` 0.3, `SMART_FULL_ROUND` 8; `bot.gd`: `DUMB`, `ULT_SMARTS`, `SIEGE_SMARTS`)
+### Smartness (`run.gd`: `SMART_BY_CYCLE`, `CYCLE_LEN` 4; `bot.gd`: `DUMB`, `ULT_FROM`, `SIEGE_FROM`)
 
-| Round | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8+ |
-|---|---|---|---|---|---|---|---|---|
-| Smartness | .30 | .40 | .50 | .60 | .70 | .80 | .90 | 1.00 |
-| Decides every (s) — dumb 0.6, smart 0.2 | .48 | .44 | .40 | .36 | .32 | .28 | .24 | .20 |
-| Skips the right action — dumb 30%, smart 0 | 21% | 18% | 15% | 12% | 9% | 6% | 3% | 0% |
-| Notices your openings (= smartness) | 30% | 40% | 50% | 60% | 70% | 80% | 90% | 100% |
-| Comes back at health — dumb 75%, smart 90% | 80% | 81% | 83% | 84% | 86% | 87% | 89% | 90% |
-| Trades when ahead by — dumb +20%, smart −10% | +11% | +8% | +5% | +2% | −1% | −4% | −7% | −10% |
-| Uses its ultimate (from 0.4) | no | yes | yes | yes | yes | yes | yes | yes |
-| Sieges your tower (from 0.4) | no | yes | yes | yes | yes | yes | yes | yes |
+**One step per cycle, not per round** (2026-10-26). The heroes rotate on the
+same 4-round clock, so a per-round ladder welded each hero to one smartness for
+the whole run — the slot-0 hero only ever saw .30/.70/1.0 and which hero got
+which column came from the seed. Per-cycle makes the four heroes inside a cycle
+directly comparable, and +0.1 a round was below the noise floor anyway.
+Back-loaded because rounds 5 and 9 are already crowded and 13 had nothing.
+
+| Cycle (rounds) | **1-4** | **5-8** | **9-12** | **13+** |
+|---|---|---|---|---|
+| Smartness | .30 | .50 | .70 | 1.00 |
+| Decides every (s) — dumb 0.6, smart 0.2 | .48 | .40 | .32 | .20 |
+| Skips the right action — dumb 30%, smart 0 | 21% | 15% | 9% | 0% |
+| Notices your openings / its danger (= smartness) | 30% | 50% | 70% | 100% |
+| Takes a kill on the table (0.2 + 0.8×s) | 44% | 60% | 76% | 100% |
+| Comes back at health — dumb 75%, smart 90% | 80% | 83% | 86% | 90% |
+| Trades when ahead by — dumb +20%, smart −10% | +11% | +5% | −1% | −10% |
+| Waits after a combo (3.5 × (1−s) s) | 2.45 | 1.75 | 1.05 | 0 |
+
+The **skill** dial (reaction, hesitation, aim) deliberately stays per-round, so
+a cycle still escalates mechanically while red's judgement holds steady.
+
+**Ultimate and siege are ROUND gates, not smartness ones** (`ULT_FROM` 2,
+`SIEGE_FROM` 2). They were both smartness 0.4, which on the old per-round
+ladder meant "round 2" — these constants preserve exactly that. They had to
+move: a 0.4 threshold against a per-cycle ladder would have switched both off
+for all of rounds 1-4, so red would never have threatened your tower by hand in
+cycle 1 and you could safely ignore it. Round 1 being the odd one out is
+deliberate (it is the gentle round).
 
 Blend: every `DUMB` key = `lerp(dumb, personality value, smartness)`.
 Retreat health is **not** blended: a dumb bot wants to leave at the same
@@ -214,7 +243,7 @@ before. Knob: `TAME_UNTIL` (hero_minds.gd).
 | Casts on creep clumps | yes (3+) | no | yes (2+) | yes, first (2+) | yes (3+) |
 | Dashes in below your health | 35% | 60% | 35% | 35% | 50% |
 | Holds behind its front creep (px) | 140 | 20 | 200 | 60 | 160 |
-| Sieges | from smartness 0.4 | — | — | always, reach 400 | — |
+| Sieges | from round 2 (`SIEGE_FROM`) | — | — | always, reach 400 | — |
 | Damage race it needs to trade (`race_need`) | 1.0 (even) | 0.85 | 1.2 | 1.0 | 1.1 |
 | Chases past the middle (`chase_depth`, px) | 300 | 700 | 0 | 200 | 600 |
 
@@ -310,7 +339,7 @@ cooldown (cooldown cards apply). Training is exempt.
 | Enemy hero kill | 120 in round 1, × lane growth | `hero.gd` `HERO_BOUNTY` |
 | Enemy tower kill (your killing blow) | 250 | `tower.gd` `GOLD` |
 | Winning a round | 0 (removed; was +200) | `run.gd` `WIN_GOLD` |
-| Killing the enemy hero (on top) | 15% of its gold, max 300 | death loss, below |
+| Killing the enemy hero (on top) | 0 (removed 2026-10-26; was 15% of its gold, max 300) | death loss, below |
 
 **Target:** a *good* round 1 (75% of the last hits before overtime, no kills)
 pays just over an epic. Round 1 has 8 farmable waves (20 s waves, overtime at
@@ -330,18 +359,19 @@ Card modifiers on last hits: no card adds gold any more; Refund +20 mana; Elegan
 
 | Sink | Value | Where |
 |---|---|---|
-| Dying | lose 15% of carried gold, max 300 — to the enemy hero if it got the kill | `hero.gd` `DEATH_GOLD_LOSS`, `DEATH_GOLD_CAP` |
-| Rising prices | every pick (card or level) raises all prices 8% of base, rounded to 5 | `run.gd` `PRICE_RISE` |
+| Dying | lose 15% of carried gold, max 300 — the gold leaves the game; nobody gains it | `hero.gd` `DEATH_GOLD_LOSS`, `DEATH_GOLD_CAP` |
+| Rising prices | every pick (card or level) raises all prices 7% of base, rounded to 5 | `run.gd` `PRICE_RISE` |
 | Rerolls | none — the shop has no Reroll button; the Gamble card rerolls once per run | — |
 
-**Price after n picks** = base × (1 + 0.08 n): after 5 picks +40%, after 10
-+80%, after 20 +160%.
+**Price after n picks** = base × (1 + 0.07 n): after 5 picks +35%, after 10
++70%, after 20 +140%.
 
 ### Red's economy
 
-- Red earns **only** what its bot gets in the lane: last hits, hero kills, the
-  death-gold it takes from you. **No allowance** (`RED_ALLOWANCE` 0) and **no
-  guaranteed floor** (user decision, never add one).
+- Red earns **only** what its bot gets in the lane: last hits and hero
+  bounties. It no longer takes a share of your bank when it kills you
+  (2026-10-26). **No allowance** (`RED_ALLOWANCE` 0) and **no guaranteed
+  floor** (user decision, never add one).
 - Red shops when your shop opens, from its own seeded offers: 50% chance per
   purchase to take an ability level (lowest letter first), otherwise **the
   first affordable card on its next hero's personality's priority list**
@@ -410,7 +440,7 @@ Levels belong to the **letter** and carry across hero switches.
 | | Glass Cannon | +35% ability damage, −20% max health (max 2; max health never below 20% of base) |
 | | Overclock | −30% cooldowns, abilities cost +40% mana (max 1) |
 | | Spellblade | after a cast, the next attack +40 damage and slows 20% for 1 s |
-| | Deflation | each pick raises your prices 5% instead of 8% (max 1; run.gd PRICE_RISE, red's own prices unaffected) |
+| | Deflation | each pick raises your prices 4% instead of 7% (max 1; run.gd PRICE_RISE, red's own prices unaffected) |
 | Epic (600) | Twin Shot | auto-attacks also hit a second enemy nearby |
 | | Echo | Q hits twice: again 0.4 s later, half damage |
 | | Overcharge | ultimate: half cooldown, +30% damage |
@@ -436,7 +466,7 @@ Cooldown cards (Efficiency, Overclock) add up to at most −60% (`ability_info.g
 |---|---|---|---|
 | Reinforcement | 500 | 3 | +1 melee creep per wave |
 | Healing Aura | 350 | 1 | ranged creeps heal nearby allies (and you) 8/s, radius 250 |
-| Tank Minion | 550 | 1 | a tank leads each wave (1,100 HP), stuns the closest enemy within 300 for 1 s every 6 s |
+| Tank Minion | 550 | 1 | a tank leads each wave (800 HP), stuns the closest enemy within 300 for 1 s every 6 s |
 | Siege Training | 400 | 1 | your creeps +50% damage to towers |
 | Command | 300 | 2 | +1 leash point |
 | Vanguard | 400 | 1 | melee creeps gain a 60 shield (8 s) on entering the enemy tower's range |
@@ -685,6 +715,15 @@ Run a fresh baseline before the next tuning pass.
 
 Newest first. One line per tuning change: what, from → to, why.
 
+- **2026-10-28** — **Tank Minion's creep health 1,100 → 800** (creep.gd `KINDS.tank.hp`). User's call after run_2026-10-28T00-47-53 (KYLE, 16 rounds, the best run yet): *"tank minion is just a bit too crazy … mostly due to hp pool"*. It was bought at the R8 shop for 1,010 and is the single biggest swing in the log. Block means: **R1-8** (no wave cards) wave +1.38, rounds 6:18 → **R9-14** (Tank Minion, then Siege Training) wave **+3.37**, rounds **2:58** → **R15-16** (red's `RED_EXTRA_FROM` +1 melee finally lands) wave +0.40, rounds 6:21. R8 → R9 is a clean single-card A/B — nothing else changed between them: wave +1.4 → +2.9, round 6:37 → 2:24, red earned 33 gold to the player's 895. The tell that it was the tank and not the player: from R9 the player's creeps stopped dying to red's creeps and started dying to the **tower** (R12 tower 23 / creeps 13, R13 tower 10 / creeps 3; before, R2 creeps 73 / tower 24) — the wave stopped losing its fights and simply walked in, which is what a stunning body at the front does. At 1,100 base the tank had **more health than any hero in the game** (KYLE 700, CHAD 800, KAREN 1000, BECKY 650), and creep health scales with the round while hero base health does not: 770 in round 1, 1,340 in round 9, 1,838 in round 16 — a flat 2.2× a melee creep, one leading *every* wave. At 800 it is 1.6× a melee (560 / 974 / 1,337), still the toughest body in the lane, and its health-per-gold lands beside Reinforcement (500 gold, +1 melee = +500 HP, max 3) with the stun as the premium for the higher price and max 1. Damage (14 / 1.2 s), the stun (300 px, 1 s, every 6 s) and the 42 gold bounty are **unchanged** — one knob at a time so the next run can attribute the difference. Trim knob: `KINDS.tank.hp` again, then `stun_cd` 6 → 8. **The same card decides rounds for red too**, which is why this is a trim and not a one-sided nerf: in run_2026-10-27T08-04-56 (BECKY, 14 rounds) the player won 13 straight at wave +0.3 to +2.5, red bought Tank Minion at the **R13** shop, and **R14 was the only loss of the run** at wave −1.7. Same signature as the R8 → R9 jump above, pointing the other way. **Still open, not touched here:** red reaches the wave tier far too rarely — across all 323 logged red shops it bought a wave card in 23 (7.1%), `tank_minion` in 4. The rate broke on 2026-10-03: **26.8% of shops before, 1.6% after**, with red's median leftover gold unchanged (73 → 69), so it is not poverty. It is the offer roll — 2026-10-04 made the WAVE row roll `WAVE_OFFERS` 3 like the other tiers and added four new wave cards, so the pool went 5 → 9 and `tank_minion` went from shown every shop to a 1-in-3 roll — compounded by `run.gd` `red_shop()` being a `while true:` loop that spends until nothing is affordable, so red can never bank across shops to be ready when the roll lands (leftover gold peaked at 146 across this run's 15 shops). Those two multiply: red must be offered the card *and* hold ~900 gold in that one shop. Red's only wave answer this run was Healing Aura at R8 and the hardcoded `RED_EXTRA_FROM` creep at round 15.
+
+- **2026-10-27** — **Red learned the y axis** (bot.gd, hero_minds.gd; four changes, user's observation from watching rounds 9-11 of run_2026-10-27T08-04-56: *"red seems to work very x axis, very little y axis movement, if you want to position safe you don't always have to retreat backwards"*). Measured over those three rounds: the player put **29 / 28 / 33%** of their distance on the y axis against red's **20 / 15 / 11%**, reversed x direction 28-32 times a minute to red's 11-15, stood still 16-21% of the time to red's 31-45%, and ranged 578-628 px off centre in a +-650 lane to red's 493-563. **95% of red's retreat movement was within 20 degrees of the lane axis.** (1) **Danger retreats go sideways.** `_danger_retreat` clears on a pure *distance* test (`_threat_reach + CLEAR_MARGIN`) but moved to `home`, so red walked down the lane when a step aside would have done — giving up farm it never had to give up. New `_backoff_spot` picks the cheapest legal point outside your reach from a fan of directions (`BACKOFF_FAN` 0-120 degrees off straight-away), skipping spots the lane edge pushes back inside and spots under your tower, with `BACKOFF_HOME_PULL` breaking ties homeward; `_escape` takes that target too, so the dash goes the same way. Low-health retreats still walk home — that one really is going home to heal. (2) **`_lane_y` is a decision, not a dice roll.** It was `randf_range(-90, 90)` **once per round**, held all round, picked before red knew anything — red lived in 14% of the lane's width. `_lane_y_tick` now re-takes it every `LANE_Y_EVERY` 1.5 s: stand on your own wave's line (`_wave_y`), and when keeping out of reach, `LANE_Y_BAND` 240 px to the far side of it. Capped at `LANE_Y_CAP` 340 so red stays near the wave, slid at most `LANE_Y_STEP` 120 px a re-pick and scaled by **smartness**, so a dull red still mostly stands where it first stood (a how-WELL dial). (3) **New `sidestep` rule (0..1) per mind** — KYLE 0.8, CHAD 0.5 (= the old behaviour exactly), KAREN 0.2, BECKY 0.9. It sets the backoff home-pull (0.10 / 0.25 / 0.40 / 0.05) and scales the lane offset and the shuffle: the anchor holds her line and edges home, the artillery slides out sideways to keep range. First personality axis that is purely about *where someone stands*. (4) **Red shuffles while farming with you near.** It already stutter-steps while **trading** (`_stutter_tick`, gated on `_roll("stutter", smartness x pref)` with a cancel window that tightens on the reaction dial) — what it did not do was move at all while farming or holding, which is a free skillshot and the most mechanical thing it does. Inside `_threat_reach + WATCHED_PAD` 250 the lane re-pick drops to `LANE_Y_WATCHED` 0.8 s and adds an alternating `JUKE_MIN`-`JUKE_MAX` 50-110 px offset, scaled by `sidestep` and smartness; sides alternate with a rolled distance because a fixed wobble reads as easily as standing still. KAREN's share lands at 10-22 px, under the `LANE_Y_DEAD` 25 px deadzone, so the anchor effectively opts out — intended. Trim knobs, in order: `sidestep` per mind, then `LANE_Y_BAND` / `LANE_Y_CAP`, then `JUKE_MIN`/`JUKE_MAX`, then `BACKOFF_FAN`. Expect to measure it the same way next run: red's y-share should move off ~10-15% toward the player's ~30%, and retreat should stop being 95% axial.
+
+- **2026-10-26** — **A hero kill no longer transfers the victim's gold**: `killed_by.gold += lost` removed from `hero.gd`'s death handler. You still lose 15% of your carried bank, capped at 300 (`DEATH_GOLD_LOSS` / `DEATH_GOLD_CAP` unchanged) — the gold now leaves the game instead of changing hands, and the killer is paid by `HERO_BOUNTY` alone. Why: the run of 2026-10-26T00-53-02 lost at round 8 with the player **out-farming red 53 last hits to 31** (987 gold of creeps to 492) and still shopping second, 8 picks to 10. Red's 1,307 that round was 62% funded by the player's four deaths — ~396 in bounties plus **413 taken straight off the bank** — and because the tax is a share of *carried* gold it is regressive against the better farmer: the same 15% cost 15 gold in round 2 and 83-118 a death by round 8. A mechanic that converts your farming lead into red's shopping lead points directly against the premise that farming decides runs, and it was a double swing (you −413, red +413 = an 826 gap). Dying still hurts: the loss, the respawn timer and the bounty all remain. Expected effect on that round: red 1,307 → ~894 (still ~3× the 320 it managed in round 8 of the previous run, so the wary-spiral fix is not undone). The death-gold number now draws over **whichever** hero died (it was player-only, with a separate +gold number over red's corpse for the share you took) — same rule, same feedback, both sides; red's purchases were never part of the personality black box. Trim knob: `DEATH_GOLD_LOSS`, or put the transfer back behind a smaller share. **Losing gold on death during overtime is KEPT — user's call, 2026-10-26** ("I like losing gold on death after overtime starts for now, will keep in mind"). Raised as a leak: the death tax is the only gold transaction still running after `Unit.no_gold`, because it writes `gold` directly instead of going through `earn_gold()`, and 493 of the 948 gold the player lost to deaths this run went during the phase that pays nobody. Kept deliberately, and there is a case for it: overtime pays nothing, so with the tax gated too, dying in overtime would cost only the respawn timer and the last act would have no economic brake at all. Do not "fix" this without asking. If it is ever wanted gated, it is one condition: `var lost := 0 if no_gold else mini(...)` at the top of `hero.gd` `_die()`.
+
+- **2026-10-26** — Prices rise more slowly so farming pays: `PRICE_RISE` 0.08 → **0.07** (run.gd); `LANE_GROWTH_STEP` was left alone. Why: the user wants winning the late game to require a genuinely rich run, and the price curve is what forbids one — cost compounds at 8% a pick while a pick is worth +3.14% damage, so earning 2.7× more gold only made you 1.5× stronger. At 0.07 a great economy (~13,400 gold) reaches 27 picks / ×2.31 damage instead of 25 / ×2.23, while a poor one (~5,000) is unmoved at 13 / ×1.52 — the spread between good and bad farming goes **1.49× → 1.53×**. Deliberately small. `LANE_GROWTH_STEP` is fitted to the average player's damage curve (run.gd model above `LANE_TOWER_HP`, which says to re-fit when the economy changes) and was **deliberately left at 0.0925** (user's call: one constant at a time, so the next playtest is readable). The re-fit would be 0.0986, so as it stands the average player also runs a little ahead of the lane — +0.05 by round 5, +0.11 by round 20 — i.e. this is a small across-the-board easing on top of the widened spread, not only the spread. Deflation's text follows the base: "4% instead of 7%" (mod unchanged at −0.03, so it is now a 43% discount rather than 37.5% — relatively stronger, which is the right direction for a card whose whole job is making a rich run richer). Trim knob: `PRICE_RISE`. Re-fit values for `LANE_GROWTH_STEP` if the line is ever wanted back on the model: rise 0.07 → 0.0986, 0.06 → 0.1062, 0.05 → 0.1158. Note this is a player buff in practice since the player out-earns red most rounds. See IDEAS.md "The blocker: you currently cannot become OP".
+- **2026-10-26** — **Smartness steps once per 4-round cycle instead of every round** (user), and it is back-loaded: `SMART_BY_CYCLE` `[0.30, 0.50, 0.70, 1.00]` over rounds 1-4 / 5-8 / 9-12 / 13+, replacing `SMART_START` 0.3 + `SMART_FULL_ROUND` 8 and its +0.1-a-round line (run.gd). Why: red's heroes rotate on the **same** 4-round clock (`bot_hero_for`), so a per-round ladder welded every hero to one smartness column for the entire run — the slot-0 hero only ever met you at .30/.70/1.0, the slot-3 hero only at .60/1.0, and which hero landed in which column came from the seed, so "how hard is BECKY" was a different question every run and the play-log history keyed on hero was comparing different difficulties. Per-cycle, the four heroes inside a cycle share a value, so a difference you notice between them is *character* — the whole premise of hero minds. Also +0.1 a round is below the noise floor; a step at a boundary is an event. Back-loaded because rounds 5 and 9 are already crowded (5 brings totems **and** every mind dropping its tame base; 9 brings the reaction floor, the end of hesitation, SUPER, totem contests and the late mind stages) while 13 carried nothing but a 5% stat multiplier — so the big step (+0.30) goes to 13 and gives cycle 4 an identity instead of arithmetic. Net effect vs the old line: rounds 2-4 and 5-12 are softer (−0.1 to −0.3), 1 and 13+ unchanged. The **skill** dial (reaction, hesitation, aim) stays per-round on purpose, so a cycle still escalates mechanically and any exploit that depends on red being slow decays inside the cycle. Trim knob: the four numbers in `SMART_BY_CYCLE`.
+- **2026-10-26** — Red's ultimate and siege move from smartness gates to **round** gates: `ULT_SMARTS` / `SIEGE_SMARTS` (both 0.4) → `ULT_FROM` / `SIEGE_FROM` (both **2**), bot.gd. Behaviour-preserving — 0.4 on the old ladder was exactly round 2 — and nothing else changed. They had to move before the ladder did: against a per-cycle ladder holding 0.30 across rounds 1-4, a 0.4 threshold would have switched off **both** systems for the whole of cycle 1, so red would never have hit your tower by hand or run a key leash, you could have ignored your tower for four rounds, and the game would never have taught the lesson. `siege_always` still bypasses `SIEGE_FROM`. If cycle 1 should instead be kits-only, raise `ULT_FROM` to 5 — but leave `SIEGE_FROM` early so the tower threat is taught from the start.
 - **2026-10-25** — A wary red **pokes** instead of freezing: the wary gate in `_farm_target` becomes `_poke_ok`, a new judgement (bot.gd, `POKE_BITE` 0.35). Wary was binary — either red played its whole order at full reach, or it held outside your threat and skipped every creep, capsule, push target and combo target inside it. There was no middle, so being behind switched off red's income and kept it behind. Now it may lean up to 35% into your reach for a last hit, judged at the spot it would **stand** to take the shot rather than at the creep, so attack range buys safety: a ranged hero farms under pressure, a melee one takes real risk for the same creep — character for free. Still gated while wary: pushing, clearing, denying, capsules, combos, chasing. Deliberately not safe — red can misjudge the lean and eat a combo for one creep, which is the mistake a person makes; `_in_danger` is a separate check on a separate roll, so it still bails out of burst it can see. The step back out needs no code: `order_attack` walks it to the creep and the next decision's `_lane_spot` pulls it back out with the `WARY_BAND` hysteresis already there. Trim knob: `POKE_BITE` 0.35 → 0.2 if red dies farming, → 0.5 if it still starves. Pairs with the `WARY_RACE` change below — that one makes red go wary less often, this one makes it cost less when it does.
 - **2026-10-25** — Red's "outmatched" bar stops borrowing the trade knob: `WARY_RACE` was a multiplier on `race_need` (×0.8), now it is its own absolute bar, **0.7** for every character (bot.gd). Why: `race_need` is documented as the TRADE gate — how hard a personality plays — and `_pv` blends it toward the personality's own value as smartness rises, so the cautious characters became the ones that froze. BECKY (race_need 1.2) called herself outmatched at a race of 0.96, almost even: in the run of 2026-10-25 21:38 she ran `wary 89%` in round 8, held for 73% of it, **took zero damage** and lost in 2:56 — while the same BECKY at smartness 0.6 in round 4 dealt 8,867 damage and nearly won the round. Wary blocks farming, pushing, totem trips and pressing at six call sites, so once red was behind on picks it could not farm, which kept it behind: rounds 8–11 of that run were 11 straight wins ending 2:56 / 3:05 / 4:43 / 2:12 with red earning 96 / 105 / 234 / 320 gold (33/min, against 58/min in round 1). Smartness still decides whether red *notices* it is outmatched (the `notice_outmatched` roll, unchanged — round 1 red stays oblivious); the bar it reads against is now the same for everyone. Caution is untouched where it belongs: `_wants_trade` still reads `race_need`, so BECKY still refuses trades. The hurt-and-losing retreat keeps the old coupling under its own name, `LOSING_RACE` 0.8 × `race_need` (same numbers as before — it only fires near retreat health). Dev log gains `trade_need` beside `odds_need`. Trim knob: `WARY_RACE` 0.7 → 0.8 if red starts dying in your reach. The matching half, letting a wary red still take last hits (`_farm_target`), is **not** done yet — IDEAS.md "The wary spiral".
 - **2026-10-25** — **Every round gate moved onto a 4-round cycle boundary** (user). Red's heroes are a seeded shuffle of the four repeating every 4 rounds, so a run is cycles of 1-4 / 5-8 / 9-12 / 13-16 and you meet each hero once per cycle; a gate firing mid-cycle made the heroes incomparable (two met before the change, two after). Moved: `TAME_UNTIL` 3 → 4 (cycle 1 is now entirely tame, so you meet all four gentle versions, then all four real ones) · `TOTEM_FROM` 6 → 5 and `TOTEM_ALL` 6 → 5 (totems open cycle 2 with the grown minds) · `SMART_FULL_ROUND` 6 → 8 (smartness is now a clean line .30 .40 .50 .60 .70 .80 .90 1.00 finishing at the end of its cycle instead of maxing mid-cycle) · `STAT_ANCHOR_ROUND` 6 → 5 (inert while the starts are 1.0, but anchored for when the stat nerf comes back) · `REACTION_FLOOR_ROUND` and `HESITATE_END_ROUND` 10 → 9, `SUPER_FROM` 10 → 9, `TOTEM_CONTEST_FROM` 8 → 9, and the four late mind stages (scattered at 7, 7, 7, 8) all to a named `LATE_FROM` 9 — so cycle 3 opens with one clear jolt: human-floor reflexes, no hesitation, red contesting your totems and every hero in its late form · `RED_RAMP_FROM` 12 → 13 (cycle 4 = the wall; this is the one change that makes the game *harder*, and it pays for the taming). Left alone, already on a boundary: overtime capping at 8, last-hit odds at 8, deny odds at 9. Still mid-cycle: `RED_EXTRA_FROM` 15. How to Play's totem line now says round 5.

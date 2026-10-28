@@ -27,7 +27,7 @@ const KINDS := {
 	"ranged": {"hp": 320.0, "radius": 17.0, "speed": 240.0, "range": 400.0, "damage": 24.0, "interval": 1.0, "gold": 55, "leash": 2},
 	# Tank Minion (a wave upgrade): leads the wave; every stun_cd s stuns the
 	# closest enemy (creep or hero) within stun_range for stun_time s
-	"tank":   {"hp": 1100.0, "radius": 26.0, "speed": 240.0, "range": 18.0, "damage": 14.0, "interval": 1.2, "gold": 70, "leash": 2,
+	"tank":   {"hp": 800.0, "radius": 26.0, "speed": 240.0, "range": 18.0, "damage": 14.0, "interval": 1.2, "gold": 70, "leash": 2,
 		"stun_cd": 6.0, "stun_range": 300.0, "stun_time": 1.0},
 }
 

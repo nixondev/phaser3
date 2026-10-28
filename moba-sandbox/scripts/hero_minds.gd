@@ -35,6 +35,10 @@ extends RefCounted
 ##             wait_escape      hold its combo until the enemy's escape (dash / blink / BOOP) is spent
 ##             keep_out         px past the enemy hero's threat reach it keeps (steps back when inside)
 ##             keep_add         added to keep_out (matchups)
+##             sidestep         0..1: would it rather step aside than give up ground down the lane when
+##                              backing off from your burst (bot.gd _backoff_spot; 0.5 = neutral). The
+##                              anchor holds her line and walks straight back; the ranged two slide
+##                              sideways to keep their range without losing the wave
 ##             predictable_only skillshots / delayed blasts at the enemy hero only when it's predictable
 ##                              (standing still, or moving in a straight line for ~0.5 s)
 ##             bank_nerve       how long it dares bank a capsule (× bot.gd BANK_ROT; 1 = standard)
@@ -90,7 +94,7 @@ const MINDS := {
 		# face or into his fire, and burns the creeps you want to farm.
 		# Tame start: he farms his own wave from range - no shove, no burn held
 		# on you, and he doesn't step out to trade.
-		"rules": {"bank_nerve": 1.0, "deny_lurk": 0.3, "capsule_tow": 0.6},
+		"rules": {"bank_nerve": 1.0, "deny_lurk": 0.3, "capsule_tow": 0.6, "sidestep": 0.8},
 		"stages": [
 			# becomes the zoner: his reach, his shove, his burn - and BOOP into IGNITE
 			{"from": TAME_UNTIL + 1, "traits": {"engage": 800.0, "trade_cap": 0.5, "dash_at": 0.5, "chase_depth": 600.0},
@@ -121,7 +125,7 @@ const MINDS := {
 		# CHAD), but he swings at what is beside him and lets it go - no long
 		# step-in, no chase over the middle, no haul into his spikes, and he
 		# finishes you only when you are nearly dead.
-		"rules": {"hunt_at": 0.12, "bank_nerve": 1.3, "deny_lurk": 0.4, "capsule_tow": 0.4},
+		"rules": {"hunt_at": 0.12, "bank_nerve": 1.3, "deny_lurk": 0.4, "capsule_tow": 0.4, "sidestep": 0.5},
 		"stages": [
 			# becomes the diver: patient, long-armed, and he carries SHELL to the dive
 			{"from": TAME_UNTIL + 1, "traits": {"trade_when": "vulnerable", "engage": 650.0, "trade_cap": 0.6, "dash_at": 0.6, "chase_depth": 700.0},
@@ -162,7 +166,7 @@ const MINDS := {
 		# Tame start: she holds her ground on the wave and turns only on someone
 		# right on top of her - no shoving for room, no fighting out of spite
 		# because her tower is being hit.
-		"rules": {"grind_for_kills": true, "front_first": true, "threat": 150.0, "bank_nerve": 0.7, "deny_lurk": 0.5, "capsule_tow": 0.3},
+		"rules": {"grind_for_kills": true, "front_first": true, "threat": 150.0, "bank_nerve": 0.7, "deny_lurk": 0.5, "capsule_tow": 0.3, "sidestep": 0.2},
 		"stages": [
 			# becomes the anchor: reads the lane, steps up sooner, bullies for room
 			{"from": TAME_UNTIL + 1, "traits": {"engage": 400.0, "trade_cap": 0.6, "dash_at": 0.6, "chase_depth": 700.0},
@@ -183,7 +187,7 @@ const MINDS := {
 		# who stands still or walks in a straight line
 		# Tame start: already the gentlest of the four - she poke-farms and keeps
 		# her distance. Only her capsule lurking waits for the grown stage.
-		"rules": {"keep_out": 60.0, "bank_nerve": 1.0, "deny_lurk": 0.4, "capsule_tow": 0.4},
+		"rules": {"keep_out": 60.0, "bank_nerve": 1.0, "deny_lurk": 0.4, "capsule_tow": 0.4, "sidestep": 0.9},
 		"stages": [
 			# becomes the artillery: punishes anyone predictable, lurks your capsules
 			{"from": TAME_UNTIL + 1, "traits": {"hero_casts": "poke"}, "rules": {"predictable_only": true, "deny_lurk": 0.9}},

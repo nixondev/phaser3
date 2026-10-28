@@ -1183,6 +1183,107 @@ empty each round; a charged cast (hold R, longer = bigger, can be
 interrupted); a hybrid of cooldown and meter; once per round. See the
 discussion; nothing chosen yet.
 
+**2026-10-26 — a deny bar, measured.** User: *"something unlocked after
+charging up a bar somehow"*, then *"an interesting thing would be denies
+building the bar up … so maybe you unlock a one time use something that can be
+used in overtime"*, then the right objection: *"we would need to deduce what an
+impressive amount of denies is, as a deny also kills pushing power, a big part
+of this game that is not totally a moba."*
+
+**There is already a charge bar with no bar drawn.** `hero.gd` `EARN_EVERY` 10
+— every ten last hits sends an extra creep with your next wave, and the source
+comment admits the gap: *"Nothing announces any of this: no counter, no mark on
+the creep. The tell is meant to be a sound, which doesn't exist yet."*
+`totem.gd` has `meter()` too. So fill-state has precedent on both sides and the
+cheapest version of this idea is drawing a bar that already exists.
+
+**Denies are the better filler than last hits, because the brake is built in.**
+A deny pays no gold and removes a body from your own wave, so filling the bar
+weakens your push — no invented cost or cooldown needed. It is also the expert
+layer (most players never learn it) and it is anti-snowball (you always have
+your own creeps, so a losing player can still fill it). The hook exists:
+`hero.gd:1082` `on_deny()` already grants `deny_mana` / `deny_heal` from card
+mods, so a bar is a third line in the same function.
+
+**BLOCKER: you cannot deny in overtime.** `unit.gd:486` `deniable_by()` ends
+`and not no_gold`, and `lane.gd:157` sets `Unit.no_gold = elapsed >=
+overtime_start()`. The comment is explicit: *"a creep worth no gold, or
+overtime: nothing to deny."* That rule is load-bearing — overtime pays nothing
+precisely so the round stops being about farming and becomes about the tower.
+
+**The fix improves the idea: fill in act one, spend in act two.** Bank denies
+during the farming phase; the one-time use unlocks *for* overtime. No rule
+change, and it maps exactly onto the two acts the game already has (out-farm
+first, then find a way to win). It also removes the round-length confound
+below, since the reward is spent in the same round that earned it.
+
+**What "impressive" is — 324 logged rounds, from round_end's own `denies`:**
+
+| | median | 75th | 90th | 95th | 99th | max |
+|---|---|---|---|---|---|---|
+| denies in a round | 1 | 3 | **5** | **7** | **10** | 18 |
+
+28% of rounds have zero; mean 2.0. So **5 is top-decile, 7 is top-5%, 10 is
+top-1%.** For something earned but achievable, 5 is the band; 7 if it should be
+rare.
+
+**The pushing cost is smaller than intuition says.** Win rate by deny count is
+flat — 94% / 87% / 91% / 88% / 91% across 0, 1-2, 3-4, 5-7, 8+ (caveat: these
+logs win ~90% overall, so this is absence of evidence rather than proof).
+Mechanically, `DENY_BELOW` is 0.5, so you can only deny a creep already under
+half health — one about to die anyway. The real cost is the *attack* and your
+position, not the body.
+
+**One confound:** high-deny rounds are simply long rounds — mean last hits
+climbs 20 → 24 → 27 → 32 → 52 and length 282s → 418s across those buckets. In
+today's data denies track exposure, not intent, so a raw threshold partly
+rewards slow play. Spending the reward inside the same round's overtime
+cancels this.
+
+**Open:** what the one-time use is (it should help a *push* land — a wave
+surge, a tower shield, an instant respawn, or the ganker — not raw damage,
+which folds back into the power curve); and the trigger, with no new button
+(F is reserved). Neat way out: **it fires on your next deny after the bar
+fills** — the verb that charges it also spends it, and you choose the moment.
+
+**`DENY_BELOW` 0.5 → 0.33? ⏸ HELD (user, 2026-10-26: "what if we made denial
+33% instead" → "ok hold it for now").** Analysed, not built — deliberately kept
+out of v1.0.34, which already has four changes competing for credit in the next
+log. One constant, `unit.gd:23`; reverting is the same edit.
+
+*It makes denying harder but cheaper.* A narrower window means the denied creep
+lived longer, absorbed more damage and dealt more on your behalf before you
+took it — so 0.33 **reduces the push cost** that prompted the whole question.
+That is the non-obvious point in its favour.
+
+*The cost is supply.* At 0.5 the deny box is up for half a creep's life — not a
+skill window, an errand: time enough to notice, walk over and click. At 0.33 it
+is something you must be ready for, which is what would make denying feel like
+a technique. But the baseline is already thin (median 1, mean 2.0, **28% of
+rounds have zero**), and a window 1.5× narrower in HP terms is roughly 1.5× less
+time in it — estimated mean 1.2-1.4 and zero-deny rounds toward 40%. That is an
+estimate, not a measurement: snapshots carry hero data and creep *counts*, not
+per-creep HP, so there is no way to count time spent in the 33-50% band from
+the logs. Making a neglected mechanic harder usually gets it neglected more,
+unless something gives a reason to care.
+
+*So it hinges on the bar.* **With** the bar, 0.33 is good — the bar supplies
+the reason — but lower the threshold alongside it (roughly 7 → 4, 5 → 3). The
+window sets *difficulty per deny*, the threshold sets *how many you need*; tune
+them together for precision without rarity. **Without** the bar it is a small
+net loss: a rarer under-used mechanic bought for "it feels more skillful when
+it happens".
+
+*Side effect worth knowing:* red's deny odds ramp **0% → 95%** across the run,
+one of the few dials that genuinely escalates late, and red uses the same
+`deniable_by()` window — so tightening it dampens red's late denial at exactly
+the rounds the finish-line work is trying to make harder.
+
+*UX:* `creep.gd` draws a yellow box on deniable creeps (lighter when it is a
+one-shot). At 0.33 the box appears later and lives briefly, so denying shifts
+from planned to reactive. That is the feel change, and it wants judging by hand
+rather than by argument.
+
 ### 4.3g Bot personalities ✅ built (hero_minds.gd MINDS — KYLE the zoner, CHAD the diver, KAREN the anchor, BECKY the artillery; each with its own order, rules, stages and per-opponent `vs` overrides) (user, 2026-09-30: "we could create different personalities for each of our enemy types by giving them each different decision trees")
 The bot is a short priority list driven by a few numbers, so:
 1. **Same list, different numbers per personality** (cheap): retreat
@@ -2279,6 +2380,561 @@ starves.
 early-round rate, not fall to 33) and `wary` at smartness 1.0 (want the 20–40%
 the mid rounds showed, not 89%). If red starts dying in your reach while
 farming, trim `WARY_RACE`, never reinstate the farm gate.
+
+## Smartness per cycle, not per round (user, 2026-10-26) — ✅ BUILT
+
+User: *"my thoughts seem to think we rounds and then groups of rounds and then
+the whole match. it maybe seems smartness should rise per group of rounds
+instead, you get a round of each hero at a certain smartness."*
+
+**The flaw that instinct found.** Red's heroes rotate on a 4-round clock
+(`bot_hero_for` = a seeded shuffle indexed `(r-1) % 4`) and smartness stepped
+on a 1-round clock. Same period → they lock:
+
+| slot | rounds | the only smartness it ever had |
+|---|---|---|
+| 0 | 1, 5, 9, 13 | .30 · .70 · 1.0 |
+| 1 | 2, 6, 10, 14 | .40 · .80 · 1.0 |
+| 2 | 3, 7, 11, 15 | .50 · .90 · 1.0 |
+| 3 | 4, 8, 12, 16 | .60 · 1.00 · 1.0 |
+
+In the 2026-10-25 21:38 run that meant the player **never saw KYLE above 0.7 or
+BECKY below 0.6** all run — and which hero lands in which column comes from the
+seed, so "how hard is BECKY" was a different question every run, and the
+play-log history keyed on hero was quietly comparing different difficulties.
+
+**Built:** `SMART_BY_CYCLE := [0.30, 0.50, 0.70, 1.00]` over rounds 1-4 / 5-8 /
+9-12 / 13+ (run.gd), replacing the +0.1-a-round line. The four heroes in a
+cycle now share a value, so a difference you notice between them is character.
+
+**Back-loaded on purpose.** The shapes considered were even (.30 .53 .77 1.0)
+and front-loaded (.30 .70 .85 1.0). What decided it was what each boundary
+already carries: **round 5** brings totems *and* every mind dropping its tame
+base; **round 9** brings the reaction floor, the end of hesitation, SUPER,
+totem contests and the late mind stages; **round 13** had nothing but a 5% stat
+multiplier. So the big step (+0.30) goes where there was nothing — and cycle 4
+becomes "red at its best in a body that keeps growing", which is a real answer
+to *"why is thirteen the end?"* instead of arithmetic.
+
+Cost, stated plainly: flattening a rising line always loses area, so rounds
+2-12 are softer than before (−0.1 to −0.3; rounds 1 and 13+ unchanged). That
+is only acceptable because the wary spiral is fixed — a dumber-but-functional
+red is a better opponent than a sharp-but-frozen one.
+
+**The skill dial stays per-round** (reaction, hesitation, aim). Red keeps
+sharpening mechanically inside a cycle while its judgement holds steady, so a
+cycle still escalates — and any exploit that depends on red being *slow* decays
+across the four rounds on its own. Only judgement-shaped exploits stay flat for
+a full cycle, which is the accepted cost of a learnable opponent.
+
+### The exploit it would have created, closed first ✅ BUILT
+
+User: *"will there be any weirdness around things that will exist in the game
+that the bot is too dumb to use properly? too exploitable?"* — yes, exactly
+one, and it was a hard threshold rather than a soft one.
+
+The bot has only **two** hard smartness gates, both at 0.4: `ULT_SMARTS` (its
+ultimate) and `SIEGE_SMARTS` (hitting your tower while creeps tank, and key
+leashes). Against a per-cycle ladder holding 0.30 across rounds 1-4 they would
+have switched **both systems off for the whole of cycle 1** — red would never
+threaten your tower by hand, you could ignore it for four rounds, and the game
+would never teach the lesson, then round 5 would hand red sieges, leashes,
+ultimates, totems, the un-taming and +0.2 smartness at once.
+
+Fixed by making them what they always were — progression statements, not skill
+ones: `ULT_FROM` 2 and `SIEGE_FROM` 2 (bot.gd). 0.4 on the old ladder *was*
+round 2, so this is behaviour-preserving and immune to any future ladder shape.
+Round 1 being the odd one out is deliberate: it is the gentle round.
+
+Everything else that scales with smartness is continuous, so nothing else
+switches off — red just does it less well (`capsule_simple`, `shell_block`,
+`commit_kill`, the `notice_*` family). The one to watch is `notice_*` (chance =
+smartness): at .30 red misses 70% of your overextensions and at .50 half, so
+standing deep in red's half is cheap through cycles 1-2. That is what "dumb"
+means rather than a hole, but it is the behaviour that will feel most like one
+if the numbers are too low for too long.
+
+**Watch:** whether cycle 1 reads as trivial — tame minds and .30 smartness now
+cover rounds 1-4 exactly, so they stack. If so the knob is `TAME_UNTIL`, not
+the ladder.
+
+## A finish line, and a meta ladder past it (user, 2026-10-26, idea only)
+
+User: *"I feel like if we did the thing where we have something like beating
+round 20 a win of the game and stops there, but having that outside
+progression system as well, maybe making bots being smarter earlier after you
+get a full 20 round win or something."*
+
+**Why a finish line is the bigger half of this.** Today the game has no win
+state — every run ends in a loss, by construction. That makes the north star
+("the run ends because the player was finally outpaced") true but bleak, and
+it is the root of the round-13 problem: with no destination, the late game can
+only be a multiplier climbing forever, because nothing is allowed to be the
+last thing. Give it an end and the whole escalation becomes finite and
+designable — `red_ramp()` has to work for 7 more rounds, not for ever, and
+×1.40 at round 20 stops being an arbitrary point on a line and starts being
+the intended final boss.
+
+It also fits the structure that already exists. Rounds are cycles of four, so:
+
+| cycle | rounds | theme |
+|---|---|---|
+| 1 | 1-4 | learn the game |
+| 2 | 5-8 | the characters |
+| 3 | 9-12 | past human |
+| 4 | 13-16 | the wall (red's body grows) |
+| 5 | 17-20 | **?** — the last cycle, currently unwritten |
+
+**16 vs 20.** 16 is four cycles and our four themes already cover it exactly;
+20 needs a fifth theme, and the obvious candidate is already parked below
+("Bosses / special maps"). 20 also resolves `RED_EXTRA_FROM` 15, which is the
+last gate still sitting mid-cycle — 17 would open cycle 5. Against 20: session
+length. Rounds in the 2026-10-25 run ran 2:12 to 9:13, so twenty of them is
+90-120 minutes. Continue already stitches a run across sittings, so this is a
+"does a win feel like one sitting" question, not a blocker.
+
+**The meta ladder is nearly free now.** Smartness is a four-element array
+(`SMART_BY_CYCLE`), so a difficulty tier is literally another row:
+
+```
+tier 0 (default)  [0.30, 0.50, 0.70, 1.00]
+tier 1            [0.50, 0.70, 1.00, 1.00]
+tier 2            [0.70, 1.00, 1.00, 1.00]
+```
+
+One data structure, no new systems — this is Hades' Heat / Slay the Spire's
+Ascension, and the per-cycle ladder accidentally built the right shape for it.
+`TAME_UNTIL` and `RED_RAMP_FROM` are the same kind of knob and could join the
+row later.
+
+**Open questions, in the order they matter:**
+
+1. **Opt-in, not automatic.** Escalating difficulty *at* a player for winning
+   is the thing people resent. Slay the Spire asks; Hades lets you choose how
+   much. A win should unlock the next tier and let you pick it, never impose
+   it — and a tier-0 run should stay playable for ever.
+2. **Does the player gain anything across runs, or only face more?** Pure
+   "harder next time" is a punishment with extra steps. The usual answer is to
+   pair it with unlocks the player keeps — new cards, a new hero, new maps —
+   so meta progress is a widening, not just a tightening.
+3. **How is a tier named to the player?** Personalities are a black box and
+   dev language never ships, so it cannot be "smartness 0.5". It needs a plain
+   name on the hero-select screen and nothing in-run (no new buttons; F stays
+   reserved).
+4. **What does winning look like at the moment it happens?** Right now a round
+   ends and the shop opens. Round 20 needs an actual ending screen, and the
+   run history needs somewhere to record "won" rather than "reached 20".
+
+**Not building any of it yet** — pontification, per the user. The cheapest
+first move if it firms up is the finish line alone (a win state at a round
+constant), because it makes the late-game tuning finite without touching
+anything else.
+
+### The blocker: you currently cannot become OP (2026-10-26)
+
+User: *"part of being able to win MUST be that you farm well and got lots of
+gold and spent it well, you will need to be almost OP to even have a chance."*
+As the economy stands that is **unreachable, not hard**. `PRICE_RISE` 0.08
+(run.gd) makes every pick 8% dearer while a pick is worth +3.14% damage, so
+cost compounds faster than power on purpose (IDEAS 4.3e, "curb buy
+everything"):
+
+| gold earned | picks | your damage |
+|---|---|---|
+| ~5,000 | 13 | ×1.49 |
+| ~9,100 | 20 | ×1.85 |
+| ~13,400 | 26 | ×2.24 |
+
+Earning **2.7× more gold makes you 1.5× stronger**, against a flat ×1.40 red
+ramp at round 20 and lane growth that lifts both sides equally. So a brutal
+cycle 5 built on top of this is simply an unwinnable cycle 5.
+
+**Two jobs, and the first is the non-obvious one:**
+
+1. **Raise the ceiling** so an excellent economy can run away with it. The seed
+   exists: `price_rise` is a *mod*, floored at `PRICE_RISE_MIN` 0.01, and
+   Deflation lowers it. That is the only thing in the game that compounds —
+   the reward for a strong early economy is not a bigger number, it is **a
+   better exchange rate for the rest of the run**. Open: is one card enough, or
+   does the last cycle need a rich-only tier, priced where a mediocre run never
+   arrives?
+2. **Make the last cycle demand it** — and demand *specific* investments, not
+   generic power, since generic power is exactly what the price curve caps.
+
+**The strongest single lever for (2): overtime.** The crumble currently does
+most of the work in a long round — 1,014 of 2,600 tower damage in round 1 of
+the 2026-10-25 21:38 run, 1,911 of 3,526 in round 6. **Over half the damage in
+a long round is the game eventually handing it to you.** Cut `tower_per_min`
+(0.5, lane.gd `OVERTIME`) in cycle 5 and the tower only falls to a real push,
+which makes the win condition literally "farm well and spend well":
+earned minions (10 last hits = +1 creep) start deciding rounds, creep upgrades
+stop being optional, and a fed hero alone cannot finish — which is the
+"almost-OP *build*, not almost-OP *character*" distinction. One number, cheap
+to try, cheap to revert.
+
+**The constraint that decides whether this is fun or cruel:** if round 17
+demands a wave build, the player must have known by round 8 to buy one.
+Otherwise it is a ninety-minute gotcha — a run lost on the merits to a
+requirement never shown, which is the north star's "never feels bad" clause.
+So the parked item *"nothing announces a cycle turn to the player"* stops being
+a nicety and becomes load-bearing, and the shop probably has to start saying it
+from cycle 2.
+
+### Secrets: round events, and a hidden round 21 (user, 2026-10-26, idea only)
+
+User: *"maybe a really bonkers LEVEL 21 that becomes unlocked if you do
+something special? … level events like a weird something minion shows up in a
+round and if you kill it something is unlocked or a secret … like in dynasty
+warriors when you have to find a weird short lived shipment."*
+
+**This answers the open question above it.** The meta ladder tightens the game
+when you win; secrets widen it when you are curious. Two different appetites,
+served without fighting each other — so "does the player gain anything, or only
+face more?" has an answer that is not just more cards.
+
+**Most of the machinery exists.** A Dynasty Warriors convoy is mechanically a
+**power capsule**: a thing that appears mid-round, sits in the world, costs
+tempo to reach, and which red already contests, tows, banks and denies with its
+own opinions (`capsule_tow`, `deny_lurk`, `_open_reason`). The one genuinely
+new part is the **window** — capsules never fade (`power_capsule.gd`), and
+here-now-gone-in-twenty-seconds is precisely what makes a convoy a convoy.
+
+Three shapes, cheapest first:
+- **A straggler in the wave** — one odd-looking minion that does not fight and
+  walks for your base; kill it before it arrives. Reuses `creep.gd` wholesale
+  and "something weird is in this wave" reads at a glance. **Start here.**
+- **A marked capsule** — gold or black, gives no power, means something else.
+  Reuses `power_capsule.gd` wholesale, red included; red fighting you over a
+  thing it does not understand is a feature.
+- **Something off the lane** — forces you to leave the lane line, the largest
+  tempo cost available and the most distinct, but the most to build.
+
+**Four questions it has to answer:**
+1. **Visible thing, hidden meaning.** A secret nobody finds is wasted work; an
+   announced secret is not one. Make it unmissable when it appears and never
+   explain it — the first chase should be pure curiosity.
+2. **It must cost something real**, or it is free candy and not a decision. But
+   if chasing it costs a round inside a 90-minute run, nobody ever takes it —
+   so either it appears in rounds you can afford to spend, or the reward
+   outlives the run (which points back at the meta layer).
+3. **Never mandatory.** The moment it is the only route to the good ending it
+   becomes a checklist and rounds 1-20 feel like a prologue you did wrong.
+4. **Round 21 is a modifier, not a new game.** At 90-120 minutes for a win,
+   nothing exotic justifies its build cost — but "the same round with one
+   bonkers rule" is nearly free, because the work is the unlock flag.
+
+Somewhere for balance-free payouts already exists: `skins/` (template +
+README, excluded from the export). A secret that pays out in a skin costs
+nothing in tuning.
+
+### Two mechanisms, both wanted (user, 2026-10-26)
+
+User: *"in kirby epic yarn when you do well enough with how much yarn you have
+it opens secret levels, or running into the weird face meteor in battletoads"*
+— and then: *"I want to explore both ideas eventually."* They are genuinely
+different and should both exist:
+
+| | **Threshold** (Kirby) | **Encounter** (Battletoads) |
+|---|---|---|
+| Trigger | you played well enough, measured after | a thing appeared and you went to it |
+| Found by | mastery of the core loop | attention and curiosity |
+| Timing | quiet, retroactive, end of round/run | live, in the moment, a window |
+| Costs you | nothing extra — you were already farming | tempo: you left the wave |
+| Risk | invisible if never explained | a random event deciding a round |
+
+They compose rather than compete: a **threshold** can gate whether encounters
+appear at all, an **encounter** can have a threshold inside it ("kill the
+shipment before it reaches the well"), and a run can pay out on both axes.
+Thresholds reward being good at what the game already is; encounters create
+new things to be good at. A game that scales to mastery needs both.
+
+**Thresholds fit this game unusually well** because the measure is already the
+core skill and we have just spent a whole pass making it matter: gold earned,
+lh%, earned minions. "Farm well enough to win round 20, farm absurdly well to
+find the door" is one number doing two jobs. The analyzer already computes all
+of it per round (`economy()`); the player-facing version does not exist.
+
+### Encounters: overtime is already one (2026-10-26)
+
+The reframe that makes these cheap: **overtime is already an encounter** — a
+timed global rule change that transforms a round (ability haste, extra melee
+creeps, the climbing tower multiplier) and which both sides understand and
+respond to. So encounters are not a new system; they are *more overtimes —
+shorter, rarer, varied, and not always at the end*.
+
+**The real cost is not the encounter, it is teaching red to care about it.**
+Capsules look trivial (a thing appears, go break it) but needed a whole rule
+family — `capsule_tow`, `deny_lurk`, `_open_reason`, bank / park / lurk, and
+the hunt-vs-push choice while you are dead. Without that, red ignores the
+encounter and the player collects free stuff. So the menu sorts by *bot* cost,
+not apparent cost:
+
+**Cheap — a timed rule change, no new entity, red already understands it:**
+- **Open doors.** Both towers drop their shields for ~20 s. Already modelled
+  (`shielded_from`, and `OVERTIME.shield_drops` in lane.gd, currently `false`).
+  Instantly a race; symmetric; no new bot code. **Best first one.**
+- **Bounty window.** For ~30 s a hero kill pays triple — a farming round turns
+  into a fight round and back. Red needs its trade gate weighted: one number.
+- **A rich wave.** The next wave is worth double gold. Pure farming pressure,
+  directly rewarding the skill that is supposed to decide runs, and
+  `_farm_target` already wants last hits.
+
+**Mid — a new unit the bot's existing code mostly handles:**
+- **The shipment** (the Dynasty Warriors one). A neutral creep that walks the
+  lane, does not fight, carries a big gold lump. Leaving the wave to kill it
+  costs farm — a real decision. Red needs one rule, the same shape as its
+  existing key-run / capsule-tow "is it worth the walk" judgement.
+- **A defector.** A neutral creep that joins whoever last-hits it. Moves the
+  wave count, which is the best single predictor of who wins a round.
+
+**Expensive — a new unit with its own AI:**
+- **The face meteor.** Something hostile to *both* sides walking the middle.
+  Lovely, and a third faction red has to understand from scratch.
+
+### Blue-centric, and why that is the better design (user, 2026-10-26)
+
+User: *"I think encounters and the reward for doing insanely good could just be
+blue-centric, as the challenge to get them is different and the benefits are
+things red would never get."* This overturns the "symmetric by default" rule
+written above it an hour earlier, and it is right on three counts:
+
+1. **It dissolves the cost problem.** The menu above is sorted by bot cost
+   purely because red needs opinions about each encounter. Blue-only, red needs
+   none — the face meteor drops from "a whole third faction to teach red" to
+   merely "a new unit". Symmetry *was* the expense.
+2. **It dissolves the fairness problem.** The worry was a random event flipping
+   a round you had won. An upside-only boon cannot: the worst case is you do
+   not get it, and that was your decision, not something done to you.
+3. **It is the right frame for what this game is.** Symmetry is a competitive
+   value; this is a one-player roguelite and red is a difficulty curve in a
+   hero costume. Nobody minds that Mario gets mushrooms and Goombas do not.
+   And the user's point is the sharp one — red farms by standing in a lane,
+   the player farms by timing last hits, so a reward for *mastery* is
+   meaningless to something that has a smartness number instead of skill.
+
+It also frees the rewards to be strange. Anything red could also take has to be
+balanced from both directions, and everything that survives that collapses
+toward stat boosts. Blue-only is what makes "things red would never get"
+possible at all.
+
+**Two refinements:**
+
+- **Red interferes, never benefits.** If a glowing thing appears mid-lane and
+  red strolls past it, that trips "bot mistakes should look human, never
+  stupid" — a person would contest it. Red *denying* you is good tension,
+  costs almost nothing (close to existing capsule-deny behaviour), and keeps
+  red looking alert. So: blue-only **benefit**, red-contestable **access**.
+  That is also exactly the Dynasty Warriors feel — the convoy is yours to take
+  and the enemy is in the way.
+- **Never balance the curve around them.** The moment rounds 17-20 assume you
+  caught the shipments, catching them stops being a delight and becomes a tax,
+  and missing one costs a 90-minute run to a requirement nobody stated. Strictly
+  upside, strictly outside the difficulty curve.
+
+**Two rules to keep them from feeling bad** (the third, "symmetric by default",
+is withdrawn — see above):
+1. **Seeded** off `run_seed`, like the hero rotation — so runs stay
+   reproducible, the play log can analyse them, and the shop can foreshadow.
+2. **Telegraphed, then surprising.** A few seconds' warning — enough to
+   decide, not enough to pre-position. The surprise is *which* and *when*, not
+   that something is happening at all.
+
+### What the rewards should be: fun, not power (user, 2026-10-26)
+
+User: *"we will need to make the bonuses from them feel like they match, maybe
+just make things more fun than making the player OP idk, the punishment should
+fit the crime sorta inverted I guess."*
+
+This resolves a tension left open above. The user earlier required that winning
+round 20 take an almost-OP build; here they want rewards that are fun rather
+than powerful. Both hold if power and delight come from different places:
+
+- **Power comes from the loop** — farming, the economy, spending well. Earned,
+  systemic, *on* the difficulty curve (`PRICE_RISE`, Deflation, a possible
+  rich-only card tier). This is what makes round 20 winnable.
+- **Delight comes from encounters** — lateral, memorable, strictly *off* the
+  curve.
+
+That split is also what makes the "never balance around them" guardrail
+keepable, which it was not while encounters paid in power: a shipment worth 400
+gold is quietly on the curve whether we intend it or not; a shipment worth
+something *weird* cannot be.
+
+**Proportionality — the reward's KIND changes with the deed, not just its size:**
+
+| deed | what it cost you | reward shape |
+|---|---|---|
+| grabbed a thing that walked past | seconds, a little farm | small, immediate, spent this round |
+| played a round exceptionally | sustained attention | lasts the round or the run |
+| played a *run* exceptionally | the whole run | a door, a secret, a skin |
+
+The step from "bigger number" to "different kind of thing" as you climb is what
+makes the top of the ladder read as a discovery instead of a payout.
+
+**Reward classes that are fun without being power** — the richest vein, and the
+only ones that are genuinely free in balance terms:
+- **Agency**: choose your next opponent; reroll the shop; skip a round and bank.
+- **Information**: see what red bought; see the next few rounds' heroes early.
+  Costs nothing, feels enormous. (Mind the standing rule — red's *purchases*
+  are fair game, its *personality* stays a black box.)
+- **Insurance**: keep your gold on death; one free revive. Not stronger, just
+  safer, which changes how boldly you play.
+- **Spectacle**: something big and dumb you will tell someone about.
+- **Expression**: a one-round ability you would never otherwise have.
+
+Agency and information are the two to push hardest — free in balance terms, and
+literally unusable by a bot, which is the purest form of "things red would
+never get".
+
+**The inverted half, taken literally:** no encounter should directly punish.
+The risk stays **opportunity cost and exposure** — going for the shipment means
+leaving your wave and standing where red can reach you. Dying for greed is
+punishment enough and it is self-inflicted, which keeps it fair. A trap that
+simply takes something from you breaks "never feels bad".
+
+### A neutral wave passing through (user, 2026-10-26)
+
+User: *"I have been thinking on new minion types … maybe an encounter could be
+a sort of independent minion wave passing through."* Probably the strongest
+encounter candidate so far:
+
+- **It is a last-hitting exam.** Creeps belonging to neither side do not
+  permanently shift the wave balance (the best single predictor of a round), so
+  they cannot flip a round — but they are a burst of last-hit chances, and the
+  better last-hitter profits. That is **blue-favouring by nature rather than by
+  fiat**: the player runs 65-90% lh in the logs, red runs off a
+  `last_hit_chance` table. No special-casing, and no "red walks past the
+  treasure" problem — red competes honestly and honestly loses more of them,
+  because that is the skill gap the game is about.
+- **It reuses the most mature system there is.** Creeps already fight, are
+  fought, are shot by towers, are last-hit, are denied, and feed the
+  earned-minion counter.
+- It ties straight to the economy thread: more last-hit chances = a farming
+  check = the thing that is supposed to decide round 20.
+
+**The real prize: it is a sandbox for new minion types.** `creep.gd` `KINDS` is
+three entries in one dictionary (melee / ranged / tank), so a kind is one
+entry. Ship a new kind as **neutral-only first**, where it has no balance
+implication for either side's wave composition, watch it play, and promote the
+good ones into buyable creep upgrades — a path that already exists
+(Reinforcement, Healing Aura, Tank Minion, Siege Training are all wave cards).
+Neutral first, card second: minion design stops having to be right before it
+ships.
+
+**Settle early:** there is already a neutral convention — capsules are
+`team -1`, meaning "creeps and towers pass it by". A neutral wave needs the
+opposite, a team everything *does* engage, so it is a third team value rather
+than a reuse, and it touches targeting in several places. Worth knowing before
+it is sketched.
+
+## Summon a ganker (user, 2026-10-26, idea only)
+
+User: *"summon a ganker! it is kinda similar to SHELL in a way actually, but
+just a thought."* — and it is more than kinda: **SHELL already is a ganker, a
+one-shot one.** `bullet_minion.gd` is an autonomous unit you launch that
+travels the lane hunting the enemy hero, and red has a complete counterplay
+vocabulary for it: shoot it down, dodge, or D-block at the last moment to eat
+the stun (`_bullet_tick`, gated on a `shell_block` roll so a dull red fumbles
+the timing). The play log tracks it already (hit / shot down / burnt in the
+well).
+
+So a ganker is **SHELL with persistence**: instead of dying on contact it
+arrives, fights for a window, can be killed, and leaves. Precedent, code shape
+and red's answers all exist.
+
+**Where it belongs: a sixth capsule power** (beside twin, shield, bullet,
+pierce, rampage). By the reward taxonomy above a ganker is squarely a *power*
+reward, not a fun one, so it belongs in the loop rather than as an encounter
+prize. As a capsule power it costs very little:
+- No new button — it rides the existing break-a-capsule flow, and F stays
+  reserved for the round-5 choosable power.
+- Red gets opinions nearly free: one `_open_reason` entry, with banking,
+  towing, denying and lurking already working.
+- Symmetric without extra work, so **red can gank you**, which is probably the
+  best thing about the idea.
+
+**The one thing that genuinely breaks it.** Red's threat model is hero-only:
+`_race(foe)` and `_threat_reach(eh)` are computed against the enemy *hero*, so
+a third hostile unit is invisible to red's danger maths. Red would stand in the
+lane being beaten to death by a ganker while correctly calculating that it wins
+the race against your hero — the "looks stupid, never human" failure. The fix
+is contained (fold nearby hostile non-creep units into `_fight_dps` so the race
+sees them) but it is not optional; without it the feature ships broken. Worth
+noting this is the same blind spot any future third-party unit hits, including
+the neutral wave above — so it is one fix serving several ideas.
+
+**No fog, one screen, so a gank cannot surprise anyone positionally.** It has
+to walk in visibly and red will see it coming and back off — which is not a
+problem, it is how ganks actually work in a MOBA most of the time. The value is
+tempo, not the kill: free farm, free tower damage and a free totem trip while
+red retreats. Given farming is what is supposed to decide runs, that is the
+right currency for it to pay in.
+
+## Red plays on one axis (user, 2026-10-27) — ✅ BUILT
+
+User, watching rounds 9-11 of run_2026-10-27T08-04-56: *"red seems to work
+very x axis, very little y axis movement, if you want to position safe you
+don't always have to retreat backwards."* Both halves measured true.
+
+**The two players, measured from the 4 Hz snapshots:**
+
+| rounds 9-11 | you | red |
+|---|---|---|
+| share of distance on the y axis | 29 / 28 / 33% | 20 / 15 / 11% |
+| x-direction reversals per minute | 31 / 28 / 32 | 15 / 14 / 11 |
+| time standing still | 16-21% | 31-45% |
+| spread of y position (SD) | 182-200 | 123-131 |
+| furthest from the lane centre (of +-650) | 578-628 | 493-563 |
+
+Move bursts: the player's run a median of 1.75 s broken by **0.50 s** stops;
+red's 1.50 s broken by **1.00 s** stops. (Snapshots are every 0.25 s, so this
+is the envelope of the player's stutter, not the individual cancels.)
+
+The player's y-share is **30.6%** with red within 700 px and **29.9%** with it
+far away — so the lateral movement is not a dodge reflex, it is simply how
+they move. That is a wider gap than a dodge habit would be.
+
+**Red by state, same rounds** — the capability was never missing, it was
+missing from the two states red lives in:
+
+```
+hold      10.2%      trade        41.5%
+retreat    7.9%      grind chase  35.3%
+push      19.7%      totem        31.4%
+```
+
+And retreat direction: **95% within 20 degrees of the lane axis**, 5%
+diagonal, 1% sideways. Retreat was also red's single biggest consumer of
+movement in those rounds (87,324 px, more than `hold`).
+
+**Two root causes, both one line.**
+
+1. `_lane_y = randf_range(-90.0, 90.0)` in `_ready` — rolled once per round,
+   before red knew anything about the wave, your hero or the matchup, and held
+   for the whole round. Every standing spot read off it. Red used **14% of the
+   lane's width**.
+2. The retreat move was `_go(home + Vector2(0, _lane_y * 0.5))` for *both*
+   retreats — but `_danger_retreat` is not going home, it is leaving your
+   reach, and its own clear test says so (`_threat_reach + CLEAR_MARGIN`). The
+   stated goal was a distance from you; the implementation was a fixed point.
+
+**Built, in the order the user asked for** (see BALANCE.md 2026-10-27 for the
+constants): lateral danger-retreat (`_backoff_spot`), the `sidestep` rule per
+mind, `_lane_y` as a live decision (`_lane_y_tick` / `_wave_y`), and a shuffle
+while farming with you near.
+
+**What was already there, and is worth remembering:** red *does* stutter-step
+— `_stutter_tick` shoots, steps to a scored spot on a ring around you, and
+turns back a reaction-scaled lead time before the next shot. It is gated on
+`_roll("stutter", smartness x the mind's pref)`. It only ever ran while
+**trading**. So "teach red to stutter-step" was the wrong framing; the gap was
+that it stood perfectly still the rest of the time.
+
+**Still open — CHAD should approach off-axis.** The user's fourth example was
+the diver closing distance at an angle rather than walking down your barrel.
+That is an *approach* behaviour, not a standing or backing-off one, and it
+wants its own rule (a `flank` px offset applied to the engage point) plus a
+look at `_commit` / `dive:chase`. Not built.
 
 ## Bosses / special maps (2026-10-09, idea)
 

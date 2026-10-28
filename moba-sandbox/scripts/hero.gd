@@ -57,7 +57,7 @@ const RESPAWN := 6.0
 const HP_REGEN := 2.0          # per second, always
 const HURT := Color("#ff5252") # damage numbers on the hero
 const HERO_BOUNTY := 120       # gold for killing a hero in round 1 (× lane growth after)
-const DEATH_GOLD_LOSS := 0.15  # share of carried gold lost on death — to the killer if it's a hero
+const DEATH_GOLD_LOSS := 0.15  # share of carried gold lost on death — it leaves the game (2026-10-26: the killer takes the bounty, not your bank)
 const DEATH_GOLD_CAP := 300    # …but never more than this per death
 ## Earned minions: every EARN_EVERY last hits, one extra creep joins your next
 ## wave (lane.gd `earn_creep`, a bonus creep like any other — no gold). Which
@@ -1597,16 +1597,10 @@ func _die() -> void:
 		if is_instance_valid(c):
 			c.leader = null
 	leashed.clear()
-	var lost := mini(int(gold * DEATH_GOLD_LOSS), DEATH_GOLD_CAP)  # dying costs gold; an enemy hero who killed you takes it
+	var lost := mini(int(gold * DEATH_GOLD_LOSS), DEATH_GOLD_CAP)  # dying costs gold, and the gold leaves the game — the killer is paid by the bounty alone
 	gold -= lost
-	if lost > 0:
-		var to_hero: bool = killed_by != null and killed_by.is_in_group("heroes") and killed_by.team != team
-		if to_hero:
-			killed_by.gold += lost
-		if not is_bot:
-			effects.add_child(Effects.GoldNumber.new(position + Vector2(0, -30), -lost, Color("#ef5350")))
-		elif to_hero:
-			effects.add_child(Effects.GoldNumber.new(position + Vector2(0, -30), lost))
+	if lost > 0:  # both sides: the red number shows over whoever died, so red's losses are visible too
+		effects.add_child(Effects.GoldNumber.new(position + Vector2(0, -30), -lost, Color("#ef5350")))
 	if not is_bot:
 		PlayLog.death(killed_by, position)
 	else:

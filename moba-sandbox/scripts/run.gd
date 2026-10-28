@@ -40,11 +40,13 @@ const STAT_STEP := 0.0
 ## that changes mid-cycle makes the heroes incomparable — you cannot tell
 ## whether CHAD got harder or you just drew him after the change. Every gate
 ## below is therefore aligned to a cycle boundary, one theme each:
-##   1-4   learn the game    tame minds (hero_minds.gd TAME_UNTIL), no new systems
-##   5-8   the characters    minds grow, totems appear, smartness finishes by 8
+##   1-4   learn the game    tame minds (hero_minds.gd TAME_UNTIL), smartness .30
+##   5-8   the characters    minds grow, totems appear, smartness .50
 ##   9-12  past human        reaction floors, hesitation ends, SUPER starts,
-##                           red contests your totems, late mind stages
-##   13+   the wall          RED_RAMP_FROM: red's body grows, uncapped
+##                           red contests your totems, late mind stages, .70
+##   13+   the wall          RED_RAMP_FROM: red's body grows, uncapped — and
+##                           smartness reaches 1.00, so cycle 4 is red at its
+##                           best in a body that keeps growing
 ## Already on a boundary and left alone: overtime capping at round 8, red's
 ## last-hit odds capping at 8, its deny odds at 9.
 ## LATE RAMP: from RED_RAMP_FROM, all of red's stats (creeps, tower health and
@@ -110,6 +112,10 @@ const LANE_TOWER_HP := 2000.0
 ## Flat, not ×: the most help early, fading as the growth takes over.
 const LANE_TOWER_EXTRA := 600.0
 const LANE_CREEP_START := 0.7
+## Left at the PRICE_RISE 0.08 fit on purpose (user, 2026-10-26). At the
+## current rise of 0.07 the re-fit would be 0.0986, so the average player now
+## runs AHEAD of this line — +0.05 by round 5, +0.11 by round 20 — i.e. the
+## lane is deliberately a little easier than the model says it should be.
 const LANE_GROWTH_STEP := 0.0925
 ## Late rounds: red's waves get +1 melee creep from RED_EXTRA_FROM, and another
 ## every RED_EXTRA_EVERY rounds after (more of them, not stronger ones).
@@ -125,7 +131,14 @@ static var continue_file := "user://continue.save"
 ## this much more for the rest of the run — for you and red alike. Buy what
 ## matters first, while it's cheap. A side owning a card with the `price_rise`
 ## mod (Deflation) rises more slowly, never below PRICE_RISE_MIN.
-const PRICE_RISE := 0.08
+## 0.08 → 0.07 (2026-10-26, user) so that farming well pays more: the curve is
+## what caps a rich run, and a great economy (~13,400 gold) now reaches 27
+## picks / ×2.31 damage instead of 25 / ×2.23, while a poor one (~5,000) is
+## unmoved at 13 / ×1.52. The spread between them goes 1.49× → 1.53×. Small on
+## purpose. LANE_GROWTH_STEP is fitted to this number and was deliberately NOT
+## re-fit (user's call), so this change also makes the lane a little easier for
+## everyone, not only for the rich — see the note there.
+const PRICE_RISE := 0.07
 const PRICE_RISE_MIN := 0.01
 
 ## Gold for winning a round (you only; flat, so it matters less as prices rise).
@@ -161,12 +174,32 @@ const DIFFICULTY := [
 
 ## The personality ladder: each red hero plays its own personality
 ## (hero_minds.gd; each started from the type it played best in the 2026-10-01
-## autoplay matrix), and gets smarter round by round: smartness SMART_START in round 1
-## up to 1.0 by SMART_FULL_ROUND. Personalities are never shown to the player.
-const SMART_START := 0.3
-const SMART_FULL_ROUND := 8  # the end of cycle 2 (was 6, mid-cycle): the
-## characters arrive at 5 and sharpen across their cycle instead of maxing out
-## in the middle of it.
+## autoplay matrix) and gets smarter ONE STEP PER CYCLE — rounds 1-4, 5-8, 9-12,
+## 13+. Personalities are never shown to the player.
+##
+## Per CYCLE, not per round (2026-10-26, user), for two reasons:
+##  1. The heroes rotate on the same 4-round clock (bot_hero_for), so a ladder
+##     that moved every round WELDED each hero to one smartness for the whole
+##     run: the slot-0 hero only ever saw .30/.70/1.0, the slot-3 hero only ever
+##     .60/1.0, and which hero got which column came from the seed. You could
+##     not form a read on a character, and the play-log history keyed on hero
+##     was comparing different difficulties run to run.
+##  2. +0.1 a round is below the noise floor — nobody can feel it. A step at a
+##     boundary is an event, and the four heroes inside a cycle become directly
+##     comparable to each other, which is the entire premise of hero minds.
+##
+## Back-loaded on purpose: rounds 5 and 9 are already crowded (5 brings totems
+## AND every mind dropping its tame base; 9 brings the reaction floor, the end
+## of hesitation, SUPER, totem contests and the late mind stages), while 13 had
+## nothing but a 5% stat multiplier. So the big step goes to 13, which gives
+## cycle 4 an identity instead of arithmetic.
+##
+## The SKILL dial (reaction, hesitation, aim) deliberately stays per-round: red
+## keeps sharpening mechanically inside a cycle while its judgement holds, so
+## a cycle still escalates, and any exploit that depends on red being slow
+## decays across the four rounds on its own.
+const CYCLE_LEN := 4  # = the hero count (bot_hero_for cycles through them)
+const SMART_BY_CYCLE := [0.30, 0.50, 0.70, 1.00]  # cycles 1-4; the last one holds
 
 static var round_num := 0
 static var phase := "pick"
@@ -408,8 +441,8 @@ static func red_shop_list(i: int) -> Array:
 static func red_smartness_now() -> float:
 	if red_smartness >= 0.0:
 		return red_smartness
-	var t := float(maxi(round_num, 1) - 1) / float(SMART_FULL_ROUND - 1)
-	return clampf(lerpf(SMART_START, 1.0, t), 0.0, 1.0)
+	var c: int = (maxi(round_num, 1) - 1) / CYCLE_LEN
+	return float(SMART_BY_CYCLE[mini(c, SMART_BY_CYCLE.size() - 1)])
 
 
 ## How much tougher the lane is this round (1 in round 1).

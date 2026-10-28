@@ -22,7 +22,7 @@ extends "res://scripts/hero.gd"
 ##   5b. deny      nothing to last-hit: finish off its own nearly-dead creep
 ##                 so you don't get the gold (odds: the round's deny_chance)
 ##   6. siege      its creeps are tanking the enemy tower: hit the tower too
-##                 (once it's smart enough: SIEGE_SMARTS)
+##                 (from round SIEGE_FROM)
 ##   7. hold       stand just behind its own front-line creep; with no creeps
 ##                 out, wait by its tower
 ##
@@ -74,7 +74,8 @@ extends "res://scripts/hero.gd"
 ## (at 0) to the personality's own (at 1). A dumb bot thinks slowly, blunders
 ## (skips the right step), comes back a bit early, only
 ## trades when well ahead, misses your openings, and hasn't learned to use its
-## ultimate (ULT_SMARTS) or siege (SIEGE_SMARTS).
+## ultimate or siege — those two are ROUND gates now (ULT_FROM, SIEGE_FROM),
+## not smartness ones.
 ##
 ## How hard it plays comes from three dials (see run.gd): stats (its health
 ## and damage, set on it by main), skill (`difficulty`: how often it casts, how
@@ -113,7 +114,7 @@ const LAST_HIT_SLACK := 1.6  # swing when a creep is within this many hits of dy
 ##   dash_at      dash in when your health is under this fraction
 ##   hold_back    px behind its front creep    home_leash   stay within this of its
 ##                                                           tower unless you're vulnerable
-##   siege_always sieges even before SIEGE_SMARTS  siege_reach  px it walks in to siege
+##   siege_always sieges even before SIEGE_FROM  siege_reach  px it walks in to siege
 ##   (No freezing: pushing matters more here than in other MOBAs — every
 ##   personality pushes and clears with its abilities. With you near it pushes
 ##   from behind its own wave, never out in front of it.)
@@ -207,12 +208,23 @@ const FASTER_MARGIN := 0.12     # vs a faster enemy it leaves this much health e
 ## it's just slower about it — think, plus the skill dial's hesitation and
 ## reaction.)
 const DUMB := {"think": 0.6, "blunder": 0.3, "healed_at": 0.75, "trade_margin": 0.2, "race_need": 0.8}
-const ULT_SMARTS := 0.4     # uses its ultimate from this smartness
+## Red learns its ultimate and learns to siege in round 2. These were
+## smartness gates (both 0.4) until 2026-10-26, which on the old +0.1-a-round
+## ladder happened to mean "round 2" — so these constants preserve exactly the
+## behaviour that proxy produced, and nothing else changes. They had to move:
+## smartness now steps per 4-round CYCLE (run.gd SMART_BY_CYCLE), so a 0.4
+## threshold would have switched BOTH systems off for the whole of rounds 1-4,
+## meaning red never threatened your tower by hand in cycle 1 and you could
+## safely ignore it — an exploit, and a lesson the game would never teach.
+## Round 1 being the odd one out is deliberate (it is the gentle round); if
+## cycle 1 should instead be kits-only, raise ULT_FROM to 5, but leave
+## SIEGE_FROM early so the tower threat is taught from the start.
+const ULT_FROM := 2         # uses its ultimate from this round
 ## How keen each personality is on stutter-stepping (× smartness = the odds).
 const STUTTER_DEFAULT := 0.8
 const STEP_MIN := 40.0      # px: a step point closer than this isn't worth moving for (no jitter)
 const STEP_FROM_CD := 0.25  # s: only steps out with at least this much reload left
-const SIEGE_SMARTS := 0.4   # hits your tower (creeps tanking) from this smartness
+const SIEGE_FROM := 2       # hits your tower (creeps tanking) and runs key leashes from this round
 
 var enemy_hero: Node2D
 var lane: Node2D
@@ -235,7 +247,20 @@ var _p := {}
 var _think := 0.0
 var _cast_gap := 2.0
 var _retreating := false
-var _lane_y := 0.0  # its own lateral spot in the lane
+var _lane_y := 0.0  # its own lateral spot in the lane (_lane_y_tick re-takes it)
+var _lane_y_at := 0.0
+const LANE_Y_EVERY := 1.5   # s between re-picks: a hero repositions, it doesn't vibrate
+const LANE_Y_BAND := 240.0  # px off its wave's line it will stand to keep away from you
+const LANE_Y_CAP := 340.0   # px: it stays near the wave, never out at the lane edge
+const WAVE_Y_NEAR := 700.0  # px: its creeps this close count as the clash it is standing in
+const LANE_Y_STEP := 120.0  # px it will slide per re-pick: it walks across the lane, never snaps
+const LANE_Y_DEAD := 25.0   # px: a smaller correction than this isn't worth moving for
+## Shuffling while you are close enough to punish standing still (_lane_y_tick).
+const LANE_Y_WATCHED := 0.8  # s between re-picks while you are near (1.5 otherwise)
+const WATCHED_PAD := 250.0   # px past your reach that still counts as you watching it
+const JUKE_MIN := 50.0       # px of the shuffle, smallest...
+const JUKE_MAX := 110.0      # ...and largest (random each time: a fixed wobble is a free read)
+var _lane_y_flip := 1.0
 var _react_left := -1.0  # counting down to escaping (-1 = no danger noticed yet)
 var _hesitate_left := -1.0  # ignoring the urge to run for this much longer (-1 = not hurt yet)
 var _hesitate_hp := 0.0       # its health share when it started hesitating
@@ -305,6 +330,17 @@ const COMBO_BREATH := 3.5      # s a smartness-0 bot waits after finishing a com
 var _tower_shy_until := 0.0
 var _commit_block_until := 0.0
 const CLEAR_MARGIN := 150.0  # px past your reach that counts as clear
+## A danger retreat only has to leave your reach, so it walks to the nearest
+## spot outside it rather than home (see _backoff_spot).
+const BACKOFF_PAD := 60.0        # px past clear it aims for, so arriving doesn't re-trigger the retreat
+const BACKOFF_FAN := [0, 30, 60, 90, 120]  # degrees off "straight away from you" it will consider
+const BACKOFF_HOME_PULL := 0.25  # how much it prefers a spot nearer home over the shortest walk
+## How much this hero would rather step aside than give up ground down the
+## lane (the `sidestep` rule, 0..1; SIDESTEP is the neutral middle, so a mind
+## that sets nothing behaves exactly as before). It only tilts the choice —
+## the geometry above still decides, so nobody walks a long way sideways when
+## a short step back is the way out.
+const SIDESTEP := 0.5
 var _tower_hp_seen := -1.0          # its tower's health last frame
 var _defend_left := 0.0             # its tower was hit this recently: defend
 var _hp_marks: Array[float] = []     # its health share every 0.5 s, the last 4 s (for "losing health fast")
@@ -549,6 +585,7 @@ func _process(delta: float) -> void:
 		_foe_guard_at = _clock  # saw your D go up (the public ring): it guesses the 60 s
 	if _react_left > 0.0:
 		_react_left -= delta
+	_lane_y_tick()
 	if _clock >= _hp_mark_at:
 		_hp_mark_at = _clock + 0.5
 		_hp_marks.append(hp / max_hp)
@@ -839,8 +876,11 @@ func _decide_step(trading_with: Node2D) -> void:
 				for c: Variant in leashed.duplicate():
 					toggle_leash(c)
 				why = "unleash:retreat"
-		_escape(home)
-		_go(home + Vector2(0, _lane_y * 0.5))
+		var to := home + Vector2(0.0, _lane_y * 0.5)
+		if _danger_retreat and foe != null:
+			to = _backoff_spot(foe, home)  # not hurt, just out of your reach: sideways is usually nearer than home
+		_escape(to)
+		_go(to)
 		return
 
 	_release_at = -1.0
@@ -946,7 +986,7 @@ func _decide_step(trading_with: Node2D) -> void:
 							order_deny(own)
 						return
 			"siege":
-				if et and (smartness >= SIEGE_SMARTS or _pv("siege_always", false)) and _safe(et.position) and not et.shielded_from(team) \
+				if et and (Run.round_num >= SIEGE_FROM or _pv("siege_always", false)) and _safe(et.position) and not et.shielded_from(team) \
 						and position.distance_to(et.position) < attack_range() + et.radius + float(_pv("siege_reach", SIEGE_REACH)):
 					if attack_target != et:
 						order_attack(et.position)
@@ -1117,7 +1157,7 @@ func _key_tick(et: Node2D, eh: Node2D) -> bool:
 		return _key_run(et)
 	if not key_runs or _clock < _key_block_until or _defend_left > 0.0 or not et.shielded_from(team) or not _key_open(et, true):
 		return false
-	if not (smartness >= SIEGE_SMARTS or _pv("siege_always", false)):
+	if not (Run.round_num >= SIEGE_FROM or _pv("siege_always", false)):
 		return false
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.team == team and c.is_targetable() and c.leader == null \
@@ -1767,7 +1807,7 @@ func _combo_seq(eh: Node2D) -> Array:
 	if hero_index >= ComboBook.BOOK.size():
 		return []
 	var page: Dictionary = ComboBook.BOOK[hero_index]
-	if page.has("ult") and is_ready("R") and can_afford("R") and smartness >= ULT_SMARTS:
+	if page.has("ult") and is_ready("R") and can_afford("R") and Run.round_num >= ULT_FROM:
 		return page["ult"]  # its ult combo (KAREN: RAGE → SHOVE → GRIND → BRACE)
 	var away: bool = eh.velocity.length() > 100.0 and eh.velocity.dot(eh.position - position) > 0.0
 	return page["flee"] if away else page["still"]
@@ -2055,7 +2095,7 @@ func _defend(eh: Node2D) -> bool:
 	if eh and not shy and eh.position.distance_to(t.position) <= t.RANGE + DEFEND_NEAR:  # you, at its tower: everything at you
 		if _cast_gap <= 0.0:
 			for slot: String in SLOT_ORDER:
-				if not is_ready(slot) or not can_afford(slot) or (slot == "R" and smartness < ULT_SMARTS):
+				if not is_ready(slot) or not can_afford(slot) or (slot == "R" and Run.round_num < ULT_FROM):
 					continue
 				var at: Variant = _hero_cast(abilities[slot], eh)
 				if at != null:
@@ -2275,6 +2315,63 @@ func _free_target() -> Node2D:
 	return null
 
 
+# ------------------------------------------------------------------ lane spot
+
+## Where it stands ACROSS the lane. This used to be one random number rolled
+## at the start of the round and held for the whole of it - +-90 px of a +-650
+## lane, picked before it knew anything - which is why red's movement measures
+## as ~10% y while a player's is ~30% (IDEAS.md "Red plays on one axis").
+## Now it is a decision, re-taken every LANE_Y_EVERY s: stand on the line its
+## own wave is fighting on, and when it wants out of your reach, on the far
+## side of that line from you - how far is its `sidestep` rule, so the anchor
+## barely leaves the middle and the artillery slides right out to the band.
+## Smartness is how much of each decision it acts on, so a dull red still
+## mostly stands where it first stood: this is a how-WELL dial, not a how-hard
+## one (the per-mind lean is the how-hard half).
+func _lane_y_tick() -> void:
+	if _clock < _lane_y_at:
+		return
+	var foe := _enemy_hero_alive()
+	var watched: bool = foe != null and position.distance_to(foe.position) <= _threat_reach(foe) + WATCHED_PAD
+	_lane_y_at = _clock + (LANE_Y_WATCHED if watched else LANE_Y_EVERY)
+	var wave := _wave_y()
+	if wave == INF:
+		return  # no wave near it: nothing to line up on, stay where it is
+	var want := wave
+	if foe != null and (_wary or _retreating or float(_rule("keep_out", 0.0)) > 0.0):
+		var gap := want - foe.position.y
+		var side: float = signf(gap) if absf(gap) > 1.0 else signf(_lane_y) if _lane_y != 0.0 else 1.0
+		want += side * LANE_Y_BAND * float(_rule("sidestep", SIDESTEP))
+	if watched:
+		# Standing dead still inside a hero's reach is a free skillshot, and it
+		# is the most mechanical thing red does - a player in that spot never
+		# stops moving. It already stutter-steps while TRADING (_stutter_tick);
+		# this is the same idea while it farms and holds. Sides alternate and
+		# the distance is rolled, because a fixed wobble is just as readable as
+		# standing still. Scaled by `sidestep`, so the anchor barely shifts.
+		_lane_y_flip = -_lane_y_flip
+		want += _lane_y_flip * randf_range(JUKE_MIN, JUKE_MAX) * float(_rule("sidestep", SIDESTEP))
+	want = clampf(want, -LANE_Y_CAP, LANE_Y_CAP)
+	if absf(want - _lane_y) < LANE_Y_DEAD:
+		return  # close enough: standing still beats shuffling
+	# a bounded slide, not a jump: `wary` can flip on and off between re-picks,
+	# and a hero that teleported between two lines every 1.5 s would look like
+	# a bug rather than like someone repositioning
+	_lane_y += clampf(want - _lane_y, -LANE_Y_STEP, LANE_Y_STEP) * smartness
+
+
+## The line its own wave is fighting on: the mean y of its creeps near it, or
+## INF when there are none (between waves, or it walked off alone).
+func _wave_y() -> float:
+	var sum := 0.0
+	var n := 0
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team == team and c.is_targetable() and position.distance_to(c.position) <= WAVE_Y_NEAR:
+			sum += c.position.y
+			n += 1
+	return sum / float(n) if n > 0 else INF
+
+
 # ------------------------------------------------------------------ stutter-stepping
 
 ## Every frame while trading with stutter-stepping: shoot when ready; after a
@@ -2376,6 +2473,40 @@ func _enemy_hero_alive() -> Node2D:
 
 
 ## Is `p` safe from the enemy tower (out of range, or creeps are tanking it)?
+## Where to back off to when it is your burst it is running from, not its
+## health. The clear test above is purely a distance from you, so the right
+## target is the nearest point outside your reach — which is usually a step
+## sideways, not a walk home: backing off down the lane gives up farm it never
+## had to give up, and reads as panic. A low-health retreat still goes home,
+## because that one really is going home to heal.
+## Candidates fan out from "straight away from you"; the cheapest legal one
+## wins, with a pull toward home so ties break the safe way.
+func _backoff_spot(foe: Node2D, home: Vector2) -> Vector2:
+	var best := home + Vector2(0.0, _lane_y * 0.5)  # nothing legal: the old walk home
+	var need: float = _threat_reach(foe) + CLEAR_MARGIN + BACKOFF_PAD
+	need = maxf(need, position.distance_to(foe.position))  # never a target that walks it back towards you
+	var away := position - foe.position
+	if away.length_squared() < 1.0:
+		away = Vector2(-_forward(), 0.0)  # standing on top of each other: straight back
+	away = away.normalized()
+	var pull: float = BACKOFF_HOME_PULL * 2.0 * (1.0 - float(_rule("sidestep", SIDESTEP)))
+	var best_cost := INF
+	for turn: int in BACKOFF_FAN:
+		for side: int in ([0] if turn == 0 else [1, -1]):
+			var spot: Vector2 = foe.position + away.rotated(deg_to_rad(float(turn * side))) * need
+			if Bounds.active:
+				spot = Bounds.clamp_point(spot, radius)
+			if spot.distance_to(foe.position) < need - BACKOFF_PAD:
+				continue  # the lane edge pushed it back inside your reach
+			if not _safe(spot):
+				continue  # under your tower is not an escape
+			var cost: float = position.distance_to(spot) + absf(spot.x - home.x) * pull
+			if cost < best_cost:
+				best_cost = cost
+				best = spot
+	return best
+
+
 func _safe(p: Vector2) -> bool:
 	var et := _enemy_tower()
 	if et == null or p.distance_to(et.position) > et.RANGE + radius + 40.0:
@@ -2665,7 +2796,7 @@ func _use_abilities() -> void:
 	for slot: String in SLOT_ORDER:
 		if not is_ready(slot) or not can_afford(slot):
 			continue
-		if slot == "R" and smartness < ULT_SMARTS:
+		if slot == "R" and Run.round_num < ULT_FROM:
 			continue  # hasn't learned to use its ultimate yet
 		if spin_left > 0.0 and abilities[slot]["kind"] == "dash":
 			continue  # a dash would cut its own GRIND short (escapes still may: _escape)
@@ -3085,8 +3216,9 @@ func _creep_clump(reach: float, radius_: float) -> Variant:
 	return null
 
 
-## Running home with you or a tower on it: burn a dash / blink toward base.
-func _escape(home: Vector2) -> void:
+## Getting out with you or a tower on it: burn a dash / blink toward `to`
+## (home for a low-health retreat, the backoff spot for a danger retreat).
+func _escape(to: Vector2) -> void:
 	var eh := _enemy_hero_alive()
 	var et := _enemy_tower()
 	var threatened: bool = (eh and position.distance_to(eh.position) < 650.0) or (et and et.target == self)
@@ -3112,6 +3244,6 @@ func _escape(home: Vector2) -> void:
 	for slot: String in SLOT_ORDER:
 		var kind: String = abilities[slot]["kind"]
 		if (kind == "dash" or kind == "blink") and is_ready(slot) and can_afford(slot):
-			cast(slot, position + (home - position).normalized() * float(abilities[slot]["range"]))
+			cast(slot, position + (to - position).normalized() * float(abilities[slot]["range"]))
 			_react_left = _jitter(float(difficulty.get("reaction", REACTION)))  # a second escape takes another reaction
 			return
