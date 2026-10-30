@@ -6,7 +6,10 @@ extends "res://scripts/hero.gd"
 ##   1. retreat    below RETREAT_AT health: walk home (escaping with a dash or
 ##                 blink if you're close, after its reaction time); early on
 ##                 it hesitates first, fighting on a moment before it runs;
-##                 stays home until healed to HEALED_AT
+##                 stays home until healed to HEALED_AT. Also goes home under
+##                 BACK_MANA mana when the trip is free (nobody in reach, no
+##                 wave on its tower) and drinks to BACK_MANA_FULL — its well
+##                 refills the pool 15-20x faster than standing in lane does
 ##   2. back off   the enemy tower is shooting it: step out of range
 ##   3. abilities  (at most one per CAST_GAP) — skillshots, beams and ground
 ##                 AoEs at you, led by your movement with a little error;
@@ -61,7 +64,8 @@ extends "res://scripts/hero.gd"
 ## hits, retreating, moving) comes first and is never interrupted.
 ##
 ## Self-preservation (all personalities, odds of noticing = smartness):
-##   wary        you'd win the damage race by a lot (its race < WARY_RACE):
+##   wary        you'd win the damage race by a lot (its race < WARY_RACE)
+##               AND it out-reaches you, so holding off is worth something:
 ##               it holds outside your reach (attack range + your ready dash /
 ##               blink) and declines anything that means committing inside it
 ##               — but it still POKES for last hits it can take from the edge
@@ -90,6 +94,16 @@ const THINK := 0.2
 const CAST_GAP := 1.1        # reaction time between its ability casts (full strength)
 const RETREAT_AT := 0.3
 const HEALED_AT := 0.9
+## Going home to drink. The well restores BASE_HEAL (lane.gd, 0.2) of the pool
+## a second against 5-9/s in lane, so a full refill is ~5 s there against 50-100
+## standing still — but the round trip is ~19 s off the wave, and the wave is
+## what decides rounds. So the threshold stays low and the trip has conditions
+## (_dry_and_safe). `back_mana` is in DUMB at 0.0, so this scales in with
+## smartness: a dull bot still grinds on empty exactly as it did before, and
+## managing mana becomes one more thing a sharp bot does better.
+const BACK_MANA := 0.10      # under this share of mana, go home — if the trip is free
+const BACK_MANA_FULL := 0.8  # ... and come back out once the pool is back to this
+const BACK_WAVE := 300.0     # ... and only with its own wave this far past the middle (forward px)
 const AIM_ERROR := 35.0      # px of random miss on predicted shots (full strength)
 const REACTION := 0.3        # s from danger to escaping (full strength: a sharp human, not instant)
 const JITTER := 0.2          # reaction and hesitation vary ±20% around the round's value each time
@@ -181,7 +195,11 @@ const PUSH_LEAD := 40.0  # with you near, it pushes from at most this far ahead 
 const STANDARD_MARGIN := -0.1
 const STANDARD_RACE := 1.0      # standard bot: trades on an even damage race or better
 const STANDARD_CHASE := 300.0   # standard bot: chases you this far past the middle
-const RACE_WINDOW := 4.0        # s of fighting the damage race looks at (attacks + ready abilities)
+const RACE_WINDOW := 4.0        # s of fighting the damage race looks at (attacks + abilities, ready or amortised)
+## The race discounts a hero that has to walk before it can land anything
+## (_reach_frac) — but never to nothing. Standing apart is being out of
+## position, not being safe: either of you can simply walk in.
+const REACH_FLOOR := 0.25
 ## Outmatched: below THIS damage race it keeps out of your reach. Its own bar
 ## on purpose (2026-10-25) — it used to be race_need × 0.8, but race_need is the
 ## TRADE gate, i.e. how hard a personality plays, and reusing it here made the
@@ -194,11 +212,110 @@ const RACE_WINDOW := 4.0        # s of fighting the damage race looks at (attack
 ## smartness roll below); the bar it reads against is the same for everyone.
 ## Caution still lives in race_need, which `_wants_trade` reads unchanged.
 const WARY_RACE := 0.7
+## ...but a RATIO CANNOT SAY "I AM FINE". `_race` returns they_kill / we_kill,
+## so losing the damage comparison by 31% reads identically at 100% health and
+## at 25%, and the bot called itself outmatched either way. The shield is in
+## the sum (`_fight_hp` counts `shield_hp` and the D) but it only nudges the
+## ratio; an escape is not in `_race` at all, only in `_their_burst`. So a
+## hero with a full bar, a shield and a dash up — one that can leave the fight
+## whenever it likes — still held off and stopped pushing.
+##
+## User, watching it happen 2026-10-29: *"we want less wary, seems like we are
+## still scared even with full health a shield and an escape"*. Measured over
+## 24 rounds the same day, the smartness-1.0 seat was the most timid thing on
+## the field — wary 19.0% / 22.9% of snapshots against red's 15.5% / 11.4%,
+## and pushing LESS for it (24.8% / 27.2% against red's ~30.5%). Pushing is
+## what moves the wave and the wave is what takes towers.
+##
+## This also kills a decision loop. Watched the same evening (R3 t=131-139):
+## CHAD at **757 of 800 health** flickered wary on and off every 0.2 s tick,
+## ten times in eight seconds, because `odds` sat exactly on 0.70 against a
+## need of 0.70 and his own pushing closed the distance that set the odds —
+## push (dist 650, odds 0.70) -> wary -> hold -> back to 650 -> push. He paced
+## an 80 px band for eight seconds. At 95% health with POUNCE up he is now
+## never wary, so the loop cannot start.
+##
+## SAFE BECAUSE WARY IS POSTURE, NOT SURVIVAL. `_in_danger` is a separate path
+## and is untouched: it still tests `hp + shield_hp <= _their_burst` every
+## decision, so a real kill threat still retreats. This only governs whether
+## the bot holds off and declines to push — in the one state where holding off
+## is plainly wrong.
+##
+## Trim knobs: raise toward 0.9 if heroes get too brave; then WARY_RACE 0.7 ->
+## 0.55 if you want less wariness across the board rather than only when well.
+const WARY_SAFE_HP := 0.7
+## …AND NOT IN THE TAME ROUNDS. WARY_SAFE_HP is a global rule in bot.gd, but
+## rounds 1-4 are made easy by the MINDS (hero_minds.gd `TAME_UNTIL` 4), on the
+## principle this project keeps coming back to: **smartness blends how WELL red
+## decides, never how HARD it plays.** A global bravery rule crosses that line.
+##
+## Measured 2026-10-29, the gate was halving red's wariness inside the tame
+## window — R1 17.5% -> 6.0%, R3 14.9% -> 6.0%, R4 23.8% -> 11.7% — and the
+## same evening a smartness-1.0 blue lost ROUND 1 to a tame red. BALANCE.md
+## records the last round 1 lost on record (2026-10-25) as the thing that
+## triggered building the tame minds in the first place, so that is not a
+## coincidence worth ignoring. Round 1 has to be easy.
+##
+## 5 is `TAME_UNTIL + 1`, a 4-round cycle boundary, where every other gate in
+## this game sits (BALANCE.md 2026-10-25).
+##
+## Trim knobs: COMFY_FROM 1 puts it back everywhere, 9 (`LATE_FROM`) if cycle 2
+## still reads too brave.
+const COMFY_FROM := 5
+## …AND THE D COUNTS AS A WAY OUT. The gate first read "healthy AND my dash is
+## off cooldown", which is two thirds of what was actually asked for — the user
+## 2026-10-29: *"we want less wary, seems like we are still scared even with
+## full health a shield and an escape"*. Three things. The shield is the D, and
+## it was left out.
+##
+## The D (hero.gd `guard()`) is GUARD_SHIELD 300 for GUARD_TIME 2 s, plus a
+## cleanse and GUARD_IMMUNE status immunity, on a 60 s cooldown, no mana and no
+## level — and EVERY hero has it, so counting it favours nobody. 300 on a bar
+## of 650-1000 is a third of a health bar; for CHAD it is +37%. It is already
+## in the fight sums (`_fight_hp` adds it through GUARD_WORTH): the damage race
+## knew about the D all along and only the POSTURE rule did not.
+##
+## It belongs here rather than a second, invented health threshold because it
+## is not merely survival — the cleanse and the status immunity are what break
+## a tether or a stun, which is the thing that actually stops a hero leaving.
+## Measured 2026-10-29 the bots press it about once every 110 s of play against
+## a 60 s cooldown, so it is available most of the time. (They also waste most
+## of its uptime, which is a separate problem and not fixed here.)
+##
+## Trim knob: drop `or _has_guard(self)` to go back to escape-only.
 ## Hurt AND losing the race → go home rather than walk back in. Still scaled by
 ## race_need: this one only fires near retreat health, where a cautious
 ## character leaving earlier is in character and costs it nothing.
 const LOSING_RACE := 0.8
 const BURST_WINDOW := 2.0       # s of your attacks counted in "could you kill me right now"
+## The D (hero.gd `guard()`: GUARD_SHIELD for GUARD_TIME s, a cleanse and
+## GUARD_IMMUNE s of status immunity, 60 s, no mana, no level) is effective
+## health that every hero has and no fight sum counted. For CHAD that is +37%
+## on the health bar, left out of every decision about whether a fight is
+## affordable — the bots pressed it as a reflex, 1-4 times a round, and never
+## planned around having it. Counted in full while it is up: GUARD_TIME 2.0
+## matches BURST_WINDOW, so in the fight that matters the whole shield lands.
+## Trim knob: GUARD_WORTH down (the race looks RACE_WINDOW 4 s ahead, and the
+## shield only covers half of that).
+const GUARD_WORTH := 1.0
+## An escape ready does not add health — it takes time away from whoever is
+## trying to spend it. `_threat_reach` and `_damage_reach` both add the OTHER
+## hero's dash or blink; neither ever added your own, so mobility existed in
+## the maths only as a reason to be afraid of someone. With one up, a burst
+## gets this long instead of the full window. Trim knob: up toward RACE_WINDOW
+## if bots start trading on escapes they then fail to use.
+##
+## 1.5 -> 3.0 (2026-10-28, measured). 1.5 asserted "a dash ready means I am
+## exposed for a second and a half", and two deaths were traced the same
+## evening where a hero took that discount and then spent 3.5 s failing to
+## get out. A dash moves you ~520 px; it does not put you home. Worked
+## example, red CHAD at 1:57: 342 hp, 4 enemy creeps (~84 dps) and the enemy
+## hero at 174 px gave `_their_burst` ~291 over the 1.5 s window, so the check
+## returned false **by 51 points** — and 1.5 s later it was on 60 hp. At 3.0
+## the same moment reads ~500 against 342 hp and it leaves while leaving still
+## works. The second death (3:02, `doing hold`, 400 hp to dead in 2 s) has the
+## same shape.
+const ESCAPE_WINDOW := 3.0
 const FASTER_MARGIN := 0.12     # vs a faster enemy it leaves this much health earlier
 ## The dumb end of every personality (smartness 0). Numbers only; each blends
 ## toward the personality's value (or the standard bot's) as smartness rises.
@@ -207,7 +324,8 @@ const FASTER_MARGIN := 0.12     # vs a faster enemy it leaves this much health e
 ## (No retreat_at: a dumb bot wants to leave at the same health as a smart one;
 ## it's just slower about it — think, plus the skill dial's hesitation and
 ## reaction.)
-const DUMB := {"think": 0.6, "blunder": 0.3, "healed_at": 0.75, "trade_margin": 0.2, "race_need": 0.8}
+const DUMB := {"think": 0.6, "blunder": 0.3, "healed_at": 0.75, "trade_margin": 0.2, "race_need": 0.8,
+	"back_mana": 0.0}  # a dull bot never goes home for mana (it never did)
 ## Red learns its ultimate and learns to siege in round 2. These were
 ## smartness gates (both 0.4) until 2026-10-26, which on the old +0.1-a-round
 ## ladder happened to mean "round 2" — so these constants preserve exactly the
@@ -224,6 +342,17 @@ const ULT_FROM := 2         # uses its ultimate from this round
 const STUTTER_DEFAULT := 0.8
 const STEP_MIN := 40.0      # px: a step point closer than this isn't worth moving for (no jitter)
 const STEP_FROM_CD := 0.25  # s: only steps out with at least this much reload left
+const TRAVEL_ARRIVE := 60.0 # px: close enough to where it is walking to stop weaving
+## How WELL it stutter-steps, not whether (user, 2026-10-28). A sharp bot
+## stops the instant the gun is up and walks on the instant the shot is away,
+## so nearly all of the reload is spent moving; a dull one calls the reload
+## ready too early and then stands a beat too long after. That costs it the
+## trip's time without making it look stupid — over-eager is what a worse
+## player actually looks like, and it is the same how-WELL shape as
+## `_lane_y_tick`'s smartness term rather than a switch that turns the skill
+## off. Both scale with smartness × the mind's `stutter`.
+const WEAVE_SLOP := 0.35    # s of reload a dull bot stops early by (0 at full)
+const WEAVE_DWELL := 0.30   # s a dull bot stands there after the shot (0 at full)
 const SIEGE_FROM := 2       # hits your tower (creeps tanking) and runs key leashes from this round
 
 var enemy_hero: Node2D
@@ -241,12 +370,26 @@ const CROWD_SEE := 700.0   # px: the creeps it counts either side of itself for 
 const LANE_LOST_PUSH := 400.0  # px behind the middle: the clash this deep on its own half, advancing comes first
 const WAVE_BLUNDER := 0.33 # a dull bot skips wave steps (farm / clear / push) this much less often than others
 ## How well it decides, 0..1 (run.gd's ladder; 1 = the personality as tuned).
+## This is COMPETENCE ONLY: seeing openings, committing, landing combos,
+## judging races, playing its capsules and keys well. Thirteen rolls read it.
 var smartness := 1.0
+## How readily it notices it is in trouble, 0..1 — the two DEFENSIVE notices
+## (notice_danger, notice_outmatched) and how long it stays home healing.
+##
+## Separate from smartness on purpose. Both used to roll on smartness, so the
+## ladder's sharpest bot was also its most frightened: measured across the
+## user's played runs, red went from wary 9.4% / pushing 24.4% at smartness 0.3
+## to wary 41.1% / pushing 17.0% at 1.0. Getting smarter made it push LESS,
+## which is backwards for an escalation ladder — the wave is what decides
+## rounds. Caution is deliberately FLAT across the run (run.gd CAUTION): the
+## ladder now raises only how well it plays, never how scared it is.
+var caution := 0.5
 var _p := {}
 
 var _think := 0.0
 var _cast_gap := 2.0
 var _retreating := false
+var _mana_trip := false     # this retreat is a trip home to drink, not an escape
 var _lane_y := 0.0  # its own lateral spot in the lane (_lane_y_tick re-takes it)
 var _lane_y_at := 0.0
 const LANE_Y_EVERY := 1.5   # s between re-picks: a hero repositions, it doesn't vibrate
@@ -255,6 +398,12 @@ const LANE_Y_CAP := 340.0   # px: it stays near the wave, never out at the lane 
 const WAVE_Y_NEAR := 700.0  # px: its creeps this close count as the clash it is standing in
 const LANE_Y_STEP := 120.0  # px it will slide per re-pick: it walks across the lane, never snaps
 const LANE_Y_DEAD := 25.0   # px: a smaller correction than this isn't worth moving for
+const CREEP_CROWD := 3      # enemy creeps able to swing at it before standing there is a mistake
+const CREEP_STEP := 200.0   # px of the sidestep: clear of melee reach (18) without leaving the clash
+const CREEP_STEP_FAN := 8   # candidate directions round it
+const CREEP_STEP_GAIN := 2  # creeps a spot has to shed to be worth the walk (hysteresis: no shuffling)
+const CREEP_STEP_EVERY := 0.8  # s between steps — a hero repositions, it doesn't vibrate
+const CREEP_STEP_HOLD := 0.6   # s the step owns the hero: 200 px at ~400 px/s, plus slack
 ## Shuffling while you are close enough to punish standing still (_lane_y_tick).
 const LANE_Y_WATCHED := 0.8  # s between re-picks while you are near (1.5 otherwise)
 const WATCHED_PAD := 250.0   # px past your reach that still counts as you watching it
@@ -281,6 +430,11 @@ const NOTICE_HOLD := 4.0  # "notice" rolls (danger, outmatched, an opening, a lo
 var _lh_roll := {}    # creep id -> whether it decided to go for that last hit
 var _stutter_target: Node2D = null  # the hero it's trading with while stutter-stepping
 var _stepping := false              # walking to a step point between attacks
+var _escape_armed := false          # an escape is wanted: do not re-ask whether it still is
+var _diving := false                # the dash is committed to a dive, so it is not an escape
+var _travel_to: Variant = null      # where `_go` is walking it this decision, or null
+var _weaving: Node2D = null         # what it stopped to shoot on the way there
+var _weave_until := 0.0             # standing after a woven shot until this (a dull bot dawdles)
 var _idle := false                  # this decision found nothing to do: just holding its spot
 var _combo := {}                    # commit mode in progress: {seq, i, next, target, waited}
 ## What its latest decision was (retreat, backoff, combo, defend, commit,
@@ -292,6 +446,36 @@ var why := ""
 ## decision (round 10 of the 2026-10-06 run: 78 turnarounds in 40 s).
 var _danger_retreat := false
 var _shy_until := 0.0
+## The artillery's keep-out is a LATCH, not an opinion, so it cannot ride on
+## `_wary` — see `_art_tick` and `_lane_spot`. It used to: `_art_tick` set
+## `_shy_until`, `_shy_until` made `_wary` true, and `_wary` switched on the
+## keep-back clause in `_lane_spot` that actually holds the distance. The
+## WARY_SAFE_HP gate (2026-10-29) put `not comfy` in front of the whole wary
+## expression, which is right for the posture — a healthy hero with an escape
+## should not call itself outmatched — and wrong for the latch, which exists
+## only to stop two controllers taking turns. Its own window, so that gate and
+## this one can never disconnect again.
+var _keep_out_until := 0.0
+var _keep_out_need := 0.0  # px off the enemy hero the last keep-out step walked to
+
+
+## Am I keeping out of their reach right now — because I am outmatched
+## (`_wary`), or because the artillery just stepped out (`_keep_out_until`)?
+##
+## EVERY target filter that refuses to walk into the enemy's reach asks THIS,
+## never `_wary` directly. Those filters are one half of a latch whose other
+## half is `_art_tick`, and when the two disagree the bot walks in, gets pushed
+## back out, and walks in again: 2026-10-29, `art:keep out` <-> `push` 484 times
+## across five runs — and that was AFTER fixing the identical split between
+## `_art_tick` and `_lane_spot`, which only moved the loop from `hold` to
+## `push`. Two sites, one cause, so it gets one answer.
+##
+## The other `_wary` reads — contesting a totem, pressing a hurt hero, opening
+## a combo, starting a key run — are asking "am I outmatched?", which is a real
+## question with a real answer, and WARY_SAFE_HP is entitled to say no to it.
+## These six are not asking that. They are asking where my feet are allowed.
+func _keeping_out() -> bool:
+	return _wary or _clock < _keep_out_until
 const SHY_FOR := 2.5
 ## Every "back off" decision stays backed off for a while — hysteresis, so no
 ## step can undo it on the very next decision (autoplay --osc finds the loops):
@@ -335,6 +519,14 @@ const CLEAR_MARGIN := 150.0  # px past your reach that counts as clear
 const BACKOFF_PAD := 60.0        # px past clear it aims for, so arriving doesn't re-trigger the retreat
 const BACKOFF_FAN := [0, 30, 60, 90, 120]  # degrees off "straight away from you" it will consider
 const BACKOFF_HOME_PULL := 0.25  # how much it prefers a spot nearer home over the shortest walk
+## px deeper into their half a backoff spot may sit than we already are. The
+## home pull above is only a COST term, so when the enemy stands between us
+## and our base "straight away from them" is "further in" and the pull merely
+## loses the tie: watched 2026-10-29, blue retreated from x=1812 to x=1940
+## — toward red's well at +2600, away from its own at −2600 — and died there.
+## A hard ceiling, not a preference. The slack keeps a genuine sideways step
+## legal, since stepping across the lane drifts x a little.
+const BACKOFF_DEEPER := 80.0
 ## How much this hero would rather step aside than give up ground down the
 ## lane (the `sidestep` rule, 0..1; SIDESTEP is the neutral middle, so a mind
 ## that sets nothing behaves exactly as before). It only tilts the choice —
@@ -459,6 +651,18 @@ func _push_first() -> bool:
 	return _lane_lost() > LANE_LOST_PUSH and _crowd_gap() <= 0.0 and not _wary and not _retreating
 
 
+## How far its own most advanced creep has pushed past the middle, in forward
+## px — negative when the wave is still on its own half, -INF with no creeps
+## up at all. _lane_lost() is the same number clamped the other way.
+func _wave_front() -> float:
+	var fwd := _forward()
+	var front := -INF
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team == team and c.is_targetable():
+			front = maxf(front, c.position.x * fwd)
+	return front
+
+
 ## How badly its own wave is outnumbered around it (0 when even or ahead).
 func _crowd_gap() -> float:
 	var mine := 0
@@ -518,11 +722,37 @@ func _grind_worth(a: Dictionary, reach: float) -> bool:
 
 
 ## A personality value (or the standard bot's), blended toward DUMB by smartness.
+## DUMB entries that scale with `caution` instead of `smartness`: how long it
+## sits at home topping up is fear, not skill.
+const DUMB_BY_CAUTION := ["healed_at"]
+
+
 func _pv(key: String, standard: Variant) -> Variant:
 	var v: Variant = _p.get(key, standard)
 	if DUMB.has(key):
-		return lerpf(float(DUMB[key]), float(v), smartness)
+		return lerpf(float(DUMB[key]), float(v), caution if key in DUMB_BY_CAUTION else smartness)
 	return v
+
+
+## Dry, with nothing to lose by going. The pool refills ~15-20x faster in its
+## own well than in lane, so the trip pays for itself — but it costs ~19 s off
+## the wave, and the wave is what decides rounds. The first cut of this asked
+## only "will I be punished for leaving?" and that was not enough: it went
+## whenever nobody was looking, conceded the lane while it drank, and lost six
+## rounds of a measured seed (R10 → R4). So the real question is "does leaving
+## cost me anything?", and the answer is only yes-go when its own wave is
+## already pushing BACK_WAVE past the middle — then the lane holds itself for
+## the ~19 s it is away. Still never with a wave on its own tower, and never
+## with someone in reach to punish the turn. The threshold is smartness-scaled
+## (DUMB back_mana 0.0), so this fades in up the ladder.
+func _dry_and_safe(foe: Node2D) -> bool:
+	if mana >= max_mana * float(_pv("back_mana", BACK_MANA)):
+		return false
+	if _wave_threat() > 0 or _defend_left > 0.0:
+		return false  # its tower needs it more than its mana bar does
+	if _wave_front() < BACK_WAVE:
+		return false  # the lane will not hold without it: leaving now is what costs rounds
+	return foe == null or position.distance_to(foe.position) > _threat_reach(foe) + CLEAR_MARGIN
 
 
 ## Low health or mana, or deep in our half: what farmers and opportunists wait
@@ -578,6 +808,7 @@ func _process(delta: float) -> void:
 	super(delta)
 	if not is_targetable():
 		_retreating = false
+		_mana_trip = false
 		return
 	_cast_gap -= delta
 	_clock += delta
@@ -608,12 +839,14 @@ func _process(delta: float) -> void:
 		attack_target = null
 		_attack_move = null
 	_stutter_tick()
+	_travel_tick()
 	_free_hit()
 
 
 func _decide() -> void:
 	var trading_with := _stutter_target
 	_stutter_target = null  # set again below if it keeps trading
+	_travel_to = null       # set again by `_go` if this decision walks somewhere
 	_idle = false
 	_moving_only = false
 	_decide_step(trading_with)
@@ -621,7 +854,7 @@ func _decide() -> void:
 		_stepping = false
 	if why != _logged_why and PlayLog.recording():  # the play log: each change of mind, with its state
 		_logged_why = why
-		PlayLog.event("red_why", {"why": why, "flags": _flags(), "at": [roundi(position.x), roundi(position.y)],
+		PlayLog.event(log_tag("why"), {"why": why, "flags": _flags(), "at": [roundi(position.x), roundi(position.y)],
 			"hp": snappedf(hp / max_hp, 0.01), "mana": roundi(mana), "inputs": _inputs()})
 
 
@@ -638,9 +871,21 @@ var ledger := {"dealt": {}, "taken": {}, "skipped_last_hits": 0}
 var _casts_open := {}   # ability name -> {id, slot, you, creeps: {id: true}}
 var _cast_ids := 0
 var _commit_no := ""    # why _should_commit said no (the last time it was asked)
+## …and why `_wants_trade` said no. `_commit_no` only ever covered the combo
+## COMMIT path, so every "declined chance" tally was really a tally of that one
+## gate: measured 2026-10-30, 33 of 52 logged passes read "opener not ready"
+## largely because the opener check is the one that writes to the log. The trade
+## gate refuses for five other reasons and said nothing at all.
+var _trade_no := ""
 var _hero_hit_at := -99.0  # when your hero last hurt it (BRACE waits for a real fight)
 const GRIND_CHASE := 320.0  # px: you this close while it spins → it walks onto you
 var _passed_until := 0.0
+## The trade gate needs its OWN throttle: `_decide_step` asks the commit path
+## first (it calls `_log_pass` well before the order loop reaches `trade`), so a
+## single clock means the commit reason always wins and the trade reason is
+## never written. Found 2026-10-30 the moment the split logging went in — the
+## trade channel sat empty through a 20%-health chase.
+var _trade_passed_until := 0.0
 const PASS_LOW := 0.35  # you this low and in reach: a chance it should think about
 const PASS_EVERY := 4.0 # one "passed" line per chance, not one per decision
 const CAST_WINDOW := 2.5  # s after a cast its hits count toward that cast
@@ -651,10 +896,10 @@ func _inputs() -> Dictionary:
 	var eh := _enemy_hero_alive()
 	if eh == null:
 		return {"you": "dead or hidden"}
-	var atk: float = eh.attack_damage() / maxf(eh.attack_interval(), 0.05)
-	var burst: float = (_fight_dps(eh) - atk) * RACE_WINDOW + atk * BURST_WINDOW
 	var d := {"dist": roundi(position.distance_to(eh.position)), "your_reach": roundi(_threat_reach(eh)),
-		"your_burst": roundi(burst), "my_hp": roundi(hp), "you_hp": snappedf(eh.hp / eh.max_hp, 0.01)}
+		"your_burst": roundi(_their_burst(eh)), "my_hp": roundi(hp),
+		"my_eff_hp": roundi(_fight_hp(self, _has_guard(self))),  # the D, shields and BRACE counted
+		"escape": _escape_ready(self), "you_hp": snappedf(eh.hp / eh.max_hp, 0.01)}
 	if PlayLog.dev():  # its internal judgement (personality-tuned): dev runs only, never a shipped log
 		d.merge({"odds": snappedf(_race(eh), 0.01), "odds_need": WARY_RACE,
 			"trade_need": snappedf(float(_pv("race_need", STANDARD_RACE)), 0.01),
@@ -663,13 +908,17 @@ func _inputs() -> Dictionary:
 
 
 ## You're low and close, and it didn't commit: say why (once per chance).
-func _log_pass(eh: Node2D, reason: String) -> void:
-	if eh == null or not PlayLog.recording() or _clock < _passed_until or eh.hp / eh.max_hp > PASS_LOW:
+func _log_pass(eh: Node2D, reason: String, trade := false) -> void:
+	var until: float = _trade_passed_until if trade else _passed_until
+	if eh == null or not PlayLog.recording() or _clock < until or eh.hp / eh.max_hp > PASS_LOW:
 		return
 	if position.distance_to(eh.position) > float(ComboBook.BOOK[hero_index]["open"]) + 200.0:
 		return
-	_passed_until = _clock + PASS_EVERY
-	PlayLog.event("red_passed", {"reason": reason, "why": why, "inputs": _inputs()})
+	if trade:
+		_trade_passed_until = _clock + PASS_EVERY
+	else:
+		_passed_until = _clock + PASS_EVERY
+	PlayLog.event(log_tag("passed"), {"reason": reason, "why": why, "inputs": _inputs()})
 
 
 ## A dice roll that steers a decision: logged when it matters (a skipped step,
@@ -683,17 +932,37 @@ func _log_roll(key: String, chance: float, result: bool, prev: Variant) -> void:
 	elif not (key.begins_with("commit_") or key in ["kill_key", "totem_contest"]):
 		if prev != null and bool(prev[0]) == result:
 			return  # same as last time: nothing changed
-	PlayLog.event("red_roll", {"key": key, "chance": snappedf(chance, 0.01), "result": result})
+	PlayLog.event(log_tag("roll"), {"key": key, "chance": snappedf(chance, 0.01), "result": result})
 
 
 ## hero.gd _log_cast: a cast to follow for CAST_WINDOW s — did it hit you?
-func track_cast(ability: String, slot: String) -> void:
+func track_cast(ability: String, slot: String, point: Vector2 = Vector2.ZERO, aimed := false) -> void:
 	if _casts_open.has(ability):
 		_flush_cast(ability, int(_casts_open[ability]["id"]))
 	_cast_ids += 1
 	var id := _cast_ids
-	_casts_open[ability] = {"id": id, "slot": slot, "you": 0.0, "creeps": {}}
+	_casts_open[ability] = {"id": id, "slot": slot, "you": 0.0, "creeps": {}, "geo": _cast_geo(slot, point, aimed)}
 	_later(CAST_WINDOW, func() -> void: _flush_cast(ability, id))
+
+
+## Where the enemy hero was when this went off, and how far off the aim was.
+## For the question "why does CHAD's STARS never touch BECKY?" — 0 of 42 and
+## 0 of 37 across two builds, then 3 of 30 — reasoning from the code could not
+## separate "never in range when he fires" from "in range and aimed wrong".
+## `dist` vs `reach` answers the first, `aim_err` (degrees between where he
+## shot and where she was) answers the second.
+func _cast_geo(slot: String, point: Vector2, aimed: bool) -> Dictionary:
+	var foe := _enemy_hero_alive()
+	if foe == null:
+		return {}
+	var g := {"dist": roundi(position.distance_to(foe.position)),
+		"reach": roundi(float(abilities[slot].get("range", 0.0)))}
+	if aimed:
+		var to_foe := foe.position - position
+		var to_aim := point - position
+		if to_foe.length() > 1.0 and to_aim.length() > 1.0:
+			g["aim_err"] = roundi(absf(rad_to_deg(to_aim.angle_to(to_foe))))
+	return g
 
 
 ## Every cast still inside its CAST_WINDOW, logged now because the round is
@@ -710,8 +979,10 @@ func _flush_cast(ability: String, id: int) -> void:
 	if c == null or int(c["id"]) != id:
 		return
 	_casts_open.erase(ability)
-	PlayLog.event("red_cast_result", {"ability": ability, "slot": c["slot"], "hit_you": float(c["you"]) > 0.0,
-		"you_dmg": roundi(c["you"]), "creeps_hit": (c["creeps"] as Dictionary).size()})
+	var d := {"ability": ability, "slot": c["slot"], "hit_you": float(c["you"]) > 0.0,
+		"you_dmg": roundi(c["you"]), "creeps_hit": (c["creeps"] as Dictionary).size()}
+	d.merge(c.get("geo", {}))
+	PlayLog.event(log_tag("cast_result"), d)
 
 
 func on_dealt(amount: float, hit: Dictionary = {}, victim: Node2D = null) -> void:
@@ -762,7 +1033,7 @@ func ledger_summary() -> Dictionary:
 func _flags() -> Array:
 	var f := []
 	if _retreating:
-		f.append("danger_retreat" if _danger_retreat else "retreat")
+		f.append("danger_retreat" if _danger_retreat else ("mana_trip" if _mana_trip else "retreat"))
 	if _wary:
 		f.append("wary")
 	if _clock < _shy_until:
@@ -835,13 +1106,38 @@ func _decide_step(trading_with: Node2D) -> void:
 	var hp_frac := hp / max_hp
 	var foe := _enemy_hero_alive()
 	_guard_tick(foe, hp_frac)
-	_wary = foe != null and (_clock < _shy_until or (_roll("notice_outmatched", smartness) and _race(foe) < WARY_RACE))
+	# `_out_ranged`: holding off only works if we can still reach something from
+	# out there. The shy window after a danger retreat is left alone — that one
+	# is a disengage, not a plan, and it times out on its own.
+	# `comfy`: healthy and able to leave whenever it likes — see WARY_SAFE_HP.
+	var comfy: bool = Run.round_num >= COMFY_FROM and hp_frac >= WARY_SAFE_HP \
+			and (_escape_ready(self) or _has_guard(self))
+	_wary = foe != null and not comfy and (_clock < _shy_until
+		or (_roll("notice_outmatched", caution) and _race(foe) < WARY_RACE and not _out_ranged(foe)))
 	if _retreating and _danger_retreat:  # backing off from your burst: until clear of your reach, then shy for a moment
-		if foe == null or position.distance_to(foe.position) > _threat_reach(foe) + CLEAR_MARGIN:
+		# `_creep_dps`: a danger retreat can now be started by the wave alone, so
+		# it has to end on the wave too — with `foe == null` the old test cleared
+		# on the very next tick and the hero turned round still inside the creeps.
+		if (foe == null or position.distance_to(foe.position) > _threat_reach(foe) + CLEAR_MARGIN) and _creep_dps() <= 0.0:
 			_retreating = false
 			_danger_retreat = false
 			_shy_until = _clock + SHY_FOR
-			_wary = foe != null
+			# `not comfy`: THE GATE APPLIES HERE TOO. This is the second write to
+			# `_wary` and it was left unconditional when WARY_SAFE_HP went in the
+			# same day — so for SHY_FOR s after every danger retreat the gate was
+			# simply bypassed. It bites hardest where it is least wanted: a hero
+			# ending a danger retreat has usually just run home and healed (watched
+			# 2026-10-29: 231 hp -> 700 during the retreat itself), so it arrives
+			# back at full health with its escape recharged and was marked wary
+			# anyway. Measured over the three post-gate logs, 47 of the 75
+			# healthy-but-wary decisions came through this line and only 28 from
+			# the escape being down — so the oversight was the bigger half of the
+			# gap the gate was built to close.
+			_wary = foe != null and not comfy
+	elif _retreating and _mana_trip:  # home for a drink: stay until the pool is back
+		if mana >= max_mana * BACK_MANA_FULL or _wave_threat() > 0 or _in_danger(foe):
+			_retreating = false
+			_mana_trip = false  # (danger: the health rules re-decide next tick)
 	elif _retreating and hp_frac >= float(_pv("healed_at", HEALED_AT)):
 		_retreating = false
 	elif not _retreating and (hp_frac < float(_pv("retreat_at", RETREAT_AT)) or _in_danger(foe) or _low_and_losing(foe, hp_frac)):
@@ -854,8 +1150,13 @@ func _decide_step(trading_with: Node2D) -> void:
 		if _hesitate_left <= 0.0:
 			_retreating = true
 			_danger_retreat = hp_frac >= float(_pv("retreat_at", RETREAT_AT)) and not _low_and_losing(foe, hp_frac)  # healthy: it's your burst it's running from (low and losing: home to heal)
+	elif not _retreating and _dry_and_safe(foe):  # healthy but empty: nothing to cast with, so go fill up
+		_retreating = true
+		_danger_retreat = false  # not fleeing anyone: walk all the way home
+		_mana_trip = true
 	if not _retreating:
 		_react_left = -1.0  # out of danger: the next scare starts a fresh reaction
+		_escape_armed = false
 		if hp_frac >= float(_pv("retreat_at", RETREAT_AT)) and not _in_danger(foe):
 			_hesitate_left = -1.0
 	if _retreating:
@@ -863,7 +1164,7 @@ func _decide_step(trading_with: Node2D) -> void:
 		for slot: String in SLOT_ORDER:  # it Rushed in and now wants out: let go of the tether
 			if can_untether(slot):
 				cast(slot, position)
-		why = "retreat"
+		why = "mana" if _mana_trip else "retreat"
 		_log_pass(foe, "retreating")
 		_end_key("retreat")
 		if _trip:  # a totem trip ends too (its creeps go back to the lane below)
@@ -877,8 +1178,46 @@ func _decide_step(trading_with: Node2D) -> void:
 					toggle_leash(c)
 				why = "unleash:retreat"
 		var to := home + Vector2(0.0, _lane_y * 0.5)
-		if _danger_retreat and foe != null:
-			to = _backoff_spot(foe, home)  # not hurt, just out of your reach: sideways is usually nearer than home
+		# `_creep_dps() <= 0.0`: the sidestep answers a HERO's burst — step outside
+		# their reach and you have solved it without giving up the lane. It is the
+		# wrong answer to a wave, because `_backoff_spot` only ever looks at the
+		# enemy hero: it fans candidates around THEM and knows nothing about where
+		# the creeps are, so the spot it calls safe can be the middle of the pack.
+		#
+		# Worse, it can hand back the spot you are already standing on. Candidates
+		# sit on a ring of radius `need` around the foe, and `need` is floored at
+		# your current distance to them — so the `turn == 0` candidate IS your
+		# position, and it costs ZERO to walk to. The home pull is ~0.1/px against
+		# a walk cost of 1.0/px, so a rival spot must gain ten pixels toward home
+		# per pixel walked to beat standing still, which rotating around the foe
+		# cannot do. Staying put wins almost every time.
+		#
+		# Alone that is survivable. Combined with the `_creep_dps() <= 0.0` clause
+		# added to the danger-retreat CLEAR test earlier the same day, it deadlocks:
+		# retreat to where I stand, and never stop retreating. Watched live
+		# 2026-10-29 (the user spotted it: *"kyle got super low and barely made it
+		# away"*) — blue sat at x=428 for 3.6 s on `why = retreat`, moving two
+		# pixels, and went 352 hp -> 34 with four to seven creeps on it.
+		#
+		# The log also proves standing there bought nothing: the moment it finally
+		# moved it crossed 2,900 px to its well and took no further damage at all
+		# (health drifted UP on regen, 11 -> 25). The escape route had been clear
+		# the whole time. It could have left at 329 hp and walked home untouched.
+		#
+		# So: creeps on you -> walk home, which is the one destination guaranteed
+		# to get you out. This also unsticks the latch without removing it, since
+		# a hero that is actually WALKING sheds the creeps in a second or two.
+		#
+		# Trim knob: if heroes now go home too readily, gate on a share of max
+		# health (`_creep_dps() > max_hp * SOME_SHARE`) instead of on any damage at
+		# all, so one stray ranged creep does not send a healthy hero to the well.
+		#
+		# KNOWN EDGE, left alone: with no creeps on it `_backoff_spot` can still
+		# return the current position. Nothing is hitting the hero then and the
+		# ordinary clear test releases it, so forcing a move would only risk the
+		# jitter the hysteresis elsewhere exists to prevent.
+		if _danger_retreat and foe != null and _creep_dps() <= 0.0:
+			to = _backoff_spot(foe, home)  # their burst, not a wave: sideways is usually nearer than home
 		_escape(to)
 		_go(to)
 		return
@@ -907,6 +1246,7 @@ func _decide_step(trading_with: Node2D) -> void:
 			_go(eh.position)  # (already on you: stays put — re-walking onto you every decision jittered)
 		return
 	if _defend(eh):
+		_defend_pass_why = ""  # it acted: the next pass logs afresh
 		if why != "defend:key":
 			why = "defend"
 		return
@@ -927,13 +1267,16 @@ func _decide_step(trading_with: Node2D) -> void:
 		return
 	if _zone_tick(eh):
 		return
-	if _dive_tick(eh):
+	_diving = _dive_tick(eh)  # committing the dash to a hunt: `_their_burst` stops counting it as an escape
+	if _diving:
 		return
 	if _art_tick(eh):
 		return
 	if _key_tick(et, eh):
 		return
 	if _totem_tick(eh):
+		return
+	if _creep_step_tick(eh):
 		return
 	if _push_first():  # the lane is being fought on its own half and its wave can take the walk
 		var lane_creep := _push_target(eh)
@@ -943,7 +1286,30 @@ func _decide_step(trading_with: Node2D) -> void:
 				order_attack(lane_creep.position)
 			return
 	var blunder: float = _pv("blunder", 0.0)
-	for step: String in _pv("order", STANDARD_ORDER):
+	# THE ROUND'S TWO ACTS (user, 2026-10-28). Before overtime the round is a
+	# farming contest: last hits are the ONLY income in the game (run.gd
+	# WIN_GOLD is 0, and lane.gd's `Unit.no_gold` stops creeps, kills and denies
+	# paying the moment overtime starts), and unspent gold carries into the
+	# shop. After it, coins are off and the tower is the only thing left worth
+	# taking — and it gets softer every minute (`tower_vulnerability`, +50%/min,
+	# plus a melee creep every two waves and +25% ability haste).
+	#
+	# The bots never read any of that. One order per round, and the stage system
+	# re-picks it by ROUND, never by the clock inside one: measured across 37,255
+	# snapshots, `push` went DOWN at the whistle — blue 19.2% -> 17.9%, red 31.9%
+	# -> 29.6% — and 42% of every last hit a bot took was in overtime, paying it
+	# nothing (64% of them in one round). They kept filling a bucket after the
+	# money stopped.
+	#
+	# So each mind gets a second list. `deny` comes out (overtime bans it
+	# anyway), `push` and `siege` come up behind whatever that mind leads with,
+	# and the rest keep their order, so the personalities stay distinct instead
+	# of all collapsing into one tower rush. A mind with no `order_overtime`
+	# falls back to its own `order`, unchanged.
+	var order: Variant = _pv("order", STANDARD_ORDER)
+	if Unit.no_gold:
+		order = _pv("order_overtime", order)
+	for step: String in order:
 		var skip: float = blunder * (WAVE_BLUNDER if step in ["farm", "clear", "push"] else 1.0)
 		if _roll("blunder_" + step, skip):
 			continue  # a dumb bot skips what it should be doing (the wave basics far less often: it misses timing, not the lane)
@@ -957,7 +1323,11 @@ func _decide_step(trading_with: Node2D) -> void:
 				if _clear_wave(eh):
 					return
 			"trade":
-				if eh and _wants_trade(eh):
+				# asked ONCE: `_wants_trade` runs `_race`, `_dive_worth` and rolls
+				var want: bool = eh != null and _wants_trade(eh)
+				if eh and not want and _trade_no != "":
+					_log_pass(eh, "trade: " + _trade_no, true)  # its own throttle, see above
+				if want:
 					if _roll("stutter", smartness * float(_p.get("stutter", STUTTER_DEFAULT))):
 						_stutter_target = eh  # _stutter_tick fires and steps between attacks
 						if _stepping and trading_with == eh:
@@ -986,21 +1356,55 @@ func _decide_step(trading_with: Node2D) -> void:
 							order_deny(own)
 						return
 			"siege":
-				if et and (Run.round_num >= SIEGE_FROM or _pv("siege_always", false)) and _safe(et.position) and not et.shielded_from(team) \
-						and position.distance_to(et.position) < attack_range() + et.radius + float(_pv("siege_reach", SIEGE_REACH)):
-					if attack_target != et:
-						order_attack(et.position)
-					return
+				if et and (Run.round_num >= SIEGE_FROM or _pv("siege_always", false)) and _safe(et.position) and not et.shielded_from(team):
+					var reach: float = attack_range() + et.radius + float(_pv("siege_reach", SIEGE_REACH))
+					if position.distance_to(et.position) < reach:
+						if attack_target != et:
+							order_attack(et.position)
+						return
+					if Unit.no_gold:  # overtime: walk at it (see _march_spot)
+						why = "siege:march"
+						_go(_march_spot(et, reach))
+						return
 
 	_idle = true  # nothing to do: hold the spot (free hits may fill the time)
 	why = "hold"
 	_hold_at(_lane_spot())
 
 
+## Where to stand to hit the tower, walked to from wherever it is now. The
+## bot had no way to CROSS the map: `push` hits an enemy creep already inside
+## FARM_RANGE and `siege` hits the tower only once you are already beside it,
+## and nothing moved a hero between the two. So heroes fought whatever was in
+## front of them and the waves took every tower on their own — watched
+## 2026-10-28, three minutes of overtime with 22 creeps out and **zero** tower
+## damage from either side, blue "pushing" 72% of the time at x = -611, in its
+## OWN half, clearing creeps off its doorstep. Activity, not progress.
+##
+## Overtime only (`Unit.no_gold`): before that, farm position is worth
+## protecting and walking at a tower is how you lose it. The suicide case is
+## already covered by the `_safe(et.position)` test above — that is only true
+## while the tower is busy shooting one of our creeps, so the march never
+## starts into an untanked tower.
+func _march_spot(et: Node2D, reach: float) -> Vector2:
+	var away := position - et.position
+	if away.length() < 1.0:
+		away = Vector2(_forward(), 0.0)
+	return et.position + away.normalized() * (reach * 0.85)
+
+
 ## Pushing: the nearest enemy creep to hit (not just last hits) — nobody
 ## freezes. Never under your tower unless its creeps are tanking it.
 func _push_target(eh: Node2D) -> Node2D:
-	var away := eh == null or position.distance_to(eh.position) > AWAY
+	# `Unit.no_gold`: in overtime nothing pays but the tower, so "do not
+	# overextend" is advice about protecting a farming position that no longer
+	# exists. Worse, the cap is measured in absolute lane position, so the side
+	# WINNING the creep wave is the side whose targets go out of bounds first:
+	# building a wave lead switched your hero off. Watched live 2026-10-28 —
+	# across five rounds and all four minds, red never once committed to a tower
+	# at the whistle, and both heroes sat on `hold` through three minutes of
+	# overtime with zero tower damage between them.
+	var away := eh == null or position.distance_to(eh.position) > AWAY or Unit.no_gold
 	# with you around, push only from behind its own wave and not past its chase limit
 	var fwd := _forward()
 	var front := -INF  # its most advanced creep, in "toward you" terms
@@ -1011,7 +1415,7 @@ func _push_target(eh: Node2D) -> Node2D:
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.team == team or not c.is_targetable() or not _safe(c.position) or position.distance_to(c.position) > FARM_RANGE:
 			continue
-		if _wary and _too_close_to_foe(c.position):
+		if _keeping_out() and _too_close_to_foe(c.position):
 			continue  # outmatched (or shy): push the creeps out of your reach, not those
 		if not away:
 			var reach_from := c.position.x * fwd - attack_range() - radius  # where it'd stand to hit it
@@ -1182,7 +1586,7 @@ func _key_tick(et: Node2D, eh: Node2D) -> bool:
 			return false
 	_key = group[0]
 	_key_more = group.slice(1)
-	PlayLog.event("red_key", {"creep": "+".join(group.map(func(g: Node2D) -> String: return g.kind)), "soak": snappedf(_key_soak(group), 0.1),
+	PlayLog.event(log_tag("key"), {"creep": "+".join(group.map(func(g: Node2D) -> String: return g.kind)), "soak": snappedf(_key_soak(group), 0.1),
 		"need": snappedf(_key_need(et), 0.1), "you_dead": not enemy_hero.is_targetable(), "overtime": Unit.no_gold})
 	_key_until = _clock + KEY_HOLD
 	_key_end = _clock + KEY_MAX
@@ -1271,7 +1675,7 @@ func _key_run(et: Node2D) -> bool:
 			g.set("dive_to", et)  # straight there: they mustn't stop to fight your creeps on the way (they did, and the run stalled)
 		_key_sent = true
 		_key_sent_at = _clock
-		PlayLog.event("red_key_send")
+		PlayLog.event(log_tag("key_send"))
 	why = "leash:key send" if _key_sent else "leash:key wait"
 	_go(Vector2(stage_x, position.y))
 	return true
@@ -1282,7 +1686,7 @@ func _end_key(reason := "") -> void:
 	if _key != null:
 		_key_block_until = _clock + (KEY_BLOCK_CLOSED if reason.begins_with("closed") or reason in ["raided", "contested"] else KEY_BLOCK)
 		key_ended = reason
-		PlayLog.event("red_key_end", {"reason": reason})
+		PlayLog.event(log_tag("key_end"), {"reason": reason})
 	_key = null
 	_key_more = []
 
@@ -1307,6 +1711,7 @@ const TOTEM_CONTEST_FROM := 9  # ...and from this one it also contests yours
 ## totems themselves in cycle 2, contesting is part of cycle 3's step up.
 const TOTEM_GAP := 25.0
 const TOTEM_TRIP_MAX := 20.0
+const TOTEM_STAND_GAP := 12.0  # px clear of the pole it stops at: walking AT a solid totem never arrives
 const TOTEM_FETCH := 550.0
 const TOTEM_FAR := 1600.0      # px: farther than this from its totem, no trip
 const TOTEM_FULL := 3
@@ -1342,7 +1747,7 @@ func _totem_tick(eh: Node2D) -> bool:
 		if best != null:
 			if _clock >= _contest_until:
 				_contest_until = _clock + TOTEM_CONTEST_HOLD
-				PlayLog.event("red_totem_contest", {"your_meter": snappedf(yours.meter(), 0.01)})
+				PlayLog.event(log_tag("totem_contest"), {"your_meter": snappedf(yours.meter(), 0.01)})
 			why = "totem:contest"
 			if attack_target != best:
 				order_attack(best.position)
@@ -1362,7 +1767,7 @@ func _totem_tick(eh: Node2D) -> bool:
 					toggle_leash(c)
 			return false
 		why = "totem:trip"
-		_go(to.position)
+		_go(_totem_stand(to))
 		return true
 	if mine == null or _clock < _trip_block_until or not _wants_totem() or _wave_threat() > 0 or _defend_left > 0.0 or _wary 			or position.distance_to(mine.position) > TOTEM_FAR or _totem_contested(eh, mine):
 		return false
@@ -1390,10 +1795,23 @@ func _totem_tick(eh: Node2D) -> bool:
 	_trip = true
 	_trip_totem = mine
 	_trip_end = _clock + TOTEM_TRIP_MAX
-	PlayLog.event("red_totem_trip", {"creeps": leashed.size(), "on_it": on, "meter": snappedf(mine.meter(), 0.01)})
+	PlayLog.event(log_tag("totem_trip"), {"creeps": leashed.size(), "on_it": on, "meter": snappedf(mine.meter(), 0.01)})
 	why = "totem:trip"
 	_go(mine.position)
 	return true
+
+
+## Where to stand to deliver a load: just off the pole, never on it. The totem
+## is solid, so ordering a move to its centre means pressing into the edge and
+## never arriving — the bot ran at it for the whole of TOTEM_TRIP_MAX while its
+## last creep sat outside the ring, which is what "stuck at the totem" looked
+## like (user, watching BECKY with Command, 2026-10-28). Standing at the edge is
+## enough: the ring reaches radius + LATCH, far past where it stops.
+func _totem_stand(t: Node2D) -> Vector2:
+	var away := position - t.position
+	if away.length() < 1.0:
+		away = Vector2.RIGHT
+	return t.position + away.normalized() * (t.radius + radius + TOTEM_STAND_GAP)
 
 
 ## THE CAPSULE BRAIN (power_capsule.gd). Red plays its own capsules with
@@ -1435,8 +1853,56 @@ var _tow_roll := {}             # capsule id -> bool: whether this red tows this
 var _open_logged := {}
 var _lurk_logged := {}
 
+## ONCE IT SETS OFF FOR A CAPSULE IT KEEPS GOING. The same latch as
+## `_art_tick`'s `_keep_out_until` and the creep step's hold, for the same
+## reason, written down in BALANCE.md after the creep step shipped broken:
+## **a behaviour that moves the hero must OWN it until it arrives, the way
+## `_dive_tick` and `_key_tick` do.** `_capsule_tick` did not. It issued
+## `order_attack(capsule)` and returned, and on the next decision any guard
+## inside it that had wobbled handed the wheel to the order loop, whose `hold`
+## walks to `_lane_spot()` instead — a different destination entirely.
+##
+## Watched 2026-10-29 (R1 t=47.0-50.1): fifteen `capsule:open` <-> `hold` flips
+## 0.2 s apart, the hero bouncing ±50 px around x=685 and netting ZERO
+## movement for seven seconds, then arriving and attacking the capsule happily
+## for 3.5 s with no flipping at all. The approach oscillates; the arrival is
+## fine — exactly what a missing commitment looks like. It was the largest
+## oscillator in the live run (16 cycles) and the top pair in every headless
+## control arm (`capsule:open <-> hold` 27, `capsule:open <-> totem:trip` 26).
+##
+## Deliberately NOT a fix to whichever guard flips. Distance thresholds on a
+## moving hero will always wobble; the bug is that a wobble could cancel a walk
+## already under way. This also covers the `totem:trip` pair for free, since
+## that is the same latch failing against a different rival.
+##
+## Everything above `_capsule_tick` in `_decide_step` still pre-empts it —
+## retreat, backoff, combo, grind, defend, commit, hunt, press — so the latch
+## only holds against the order loop below it. It drops the moment the capsule
+## dies, stops being safe, or falls inside a foe it is keeping out of.
+##
+## Trim knob: CAPSULE_COMMIT down toward 1.5 if heroes over-commit to a walk.
+const CAPSULE_COMMIT := 2.5
+var _capsule_until := 0.0
+var _capsule_held: Node2D = null
+
+
+func _capsule_hold_tick() -> bool:
+	if _clock >= _capsule_until or not is_instance_valid(_capsule_held):
+		return false
+	var c: Node2D = _capsule_held
+	if not c.is_targetable() or not _safe(c.position) or (_keeping_out() and _too_close_to_foe(c.position)):
+		_capsule_until = 0.0
+		_capsule_held = null
+		return false
+	why = "capsule:open" if c.owner_team == team else "capsule:deny"
+	if attack_target != c:
+		order_attack(c.position)
+	return true
+
 
 func _capsule_tick(eh: Node2D) -> bool:
+	if _capsule_hold_tick():  # already walking to one: see CAPSULE_COMMIT
+		return true
 	var best: Node2D = null
 	var best_why := ""
 	var lurk: Node2D = null
@@ -1444,7 +1910,7 @@ func _capsule_tick(eh: Node2D) -> bool:
 	for c: Node2D in get_tree().get_nodes_in_group("capsules"):
 		if not c.is_targetable() or not _safe(c.position):
 			continue
-		if _wary and _too_close_to_foe(c.position):
+		if _keeping_out() and _too_close_to_foe(c.position):
 			continue
 		var d := position.distance_to(c.position)
 		if c.owner_team == team:
@@ -1452,7 +1918,7 @@ func _capsule_tick(eh: Node2D) -> bool:
 			if reason == "":
 				if not _bank_logged.get(c.get_instance_id(), false):
 					_bank_logged[c.get_instance_id()] = true
-					PlayLog.event("red_capsule_bank", {"power": c.power})
+					PlayLog.event(log_tag("capsule_bank"), {"power": c.power})
 				if tow == null and _tow_worth(c, eh, d):
 					tow = c
 				continue
@@ -1485,13 +1951,15 @@ func _capsule_tick(eh: Node2D) -> bool:
 				best = c
 				best_why = "deny"
 	if best != null:
+		_capsule_held = best  # own the walk until it arrives (CAPSULE_COMMIT)
+		_capsule_until = _clock + CAPSULE_COMMIT
 		why = "capsule:open" if best.owner_team == team else "capsule:deny"
 		if best.owner_team == team and not _open_logged.get(best.get_instance_id(), false):
 			_open_logged[best.get_instance_id()] = true
-			PlayLog.event("red_capsule_open", {"power": best.power, "why": best_why, "age": snappedf(best.age(), 0.1)})
+			PlayLog.event(log_tag("capsule_open"), {"power": best.power, "why": best_why, "age": snappedf(best.age(), 0.1)})
 		if best.owner_team == team and best.leader == self:
 			toggle_leash(best)  # park it first: cracking it leashed is cracking it unprotected
-			PlayLog.event("red_capsule_park", {"power": best.power, "why": "opening"})
+			PlayLog.event(log_tag("capsule_park"), {"power": best.power, "why": "opening"})
 		if attack_target != best:
 			order_attack(best.position)
 		return true
@@ -1499,7 +1967,7 @@ func _capsule_tick(eh: Node2D) -> bool:
 		why = "capsule:lurk"
 		if not _lurk_logged.get(lurk.get_instance_id(), false):
 			_lurk_logged[lurk.get_instance_id()] = true
-			PlayLog.event("red_capsule_lurk", {"power": lurk.power, "left": snappedf(lurk.hp / lurk.max_hp, 0.01)})
+			PlayLog.event(log_tag("capsule_lurk"), {"power": lurk.power, "left": snappedf(lurk.hp / lurk.max_hp, 0.01)})
 		var spot: Vector2 = lurk.position + (position - lurk.position).normalized() * LURK_RANGE
 		if position.distance_to(spot) > 40.0:
 			_go(spot)
@@ -1508,7 +1976,7 @@ func _capsule_tick(eh: Node2D) -> bool:
 		why = "capsule:tow"
 		if position.distance_to(tow.position) <= TOW_REACH:
 			if toggle_leash(tow):
-				PlayLog.event("red_capsule_tow", {"power": tow.power})
+				PlayLog.event(log_tag("capsule_tow"), {"power": tow.power})
 		else:
 			_go(tow.position)
 		return true
@@ -1566,7 +2034,7 @@ func _tow_guard(eh: Node2D, et: Node2D) -> void:
 			park = "key run"
 		if park != "":
 			toggle_leash(c)
-			PlayLog.event("red_capsule_park", {"power": c.power, "why": park})
+			PlayLog.event(log_tag("capsule_park"), {"power": c.power, "why": park})
 
 
 ## Why red opens its own capsule `c` now — "" banks it. Windows are read a
@@ -1661,7 +2129,7 @@ func _hunt_tick() -> bool:
 					break
 		var hunt: float = value * float(_pv("capsule_hunt", 1.0))
 		_hunting = not reach.is_empty() and hunt >= push and _roll("notice_hunt", lerpf(0.5, 1.0, smartness))
-		PlayLog.event("red_capsule_choice", {"choice": "hunt" if _hunting else "push", "capsules": yours,
+		PlayLog.event(log_tag("capsule_choice"), {"choice": "hunt" if _hunting else "push", "capsules": yours,
 			"reachable": reach.size(), "value": snappedf(hunt, 0.01), "push": push, "respawn": snappedf(left, 0.1)})
 	if not _hunting or reach.is_empty():
 		return false
@@ -1691,7 +2159,7 @@ func _bullet_tick() -> bool:
 	if gap / best.SPEED <= 0.45 and best.hp / maxf(attack_damage() / attack_interval(), 1.0) > gap / best.SPEED \
 			and guard_cd <= 0.0 and _roll("shell_block", 0.25 + 0.75 * smartness):
 		if guard():
-			PlayLog.event("red_shell_block", {"gap": roundi(gap)})
+			PlayLog.event(log_tag("shell_block"), {"gap": roundi(gap)})
 	why = "bullet"
 	_attack_move = null
 	attack_target = best
@@ -1937,7 +2405,7 @@ func _start_combo(eh: Node2D) -> void:
 			seq[k + 1] = tmp
 	var react := _jitter(float(difficulty.get("reaction", REACTION)))  # it sees the opening a moment late
 	_combo = {"seq": seq, "i": 0, "next": _clock + react, "target": eh, "waited": 0.0, "cast": []}
-	PlayLog.event("red_combo", {"seq": seq, "you_hp": snappedf(eh.hp / eh.max_hp, 0.01), "you_dist": roundi(position.distance_to(eh.position)), "react": snappedf(react, 0.01)})
+	PlayLog.event(log_tag("combo"), {"seq": seq, "you_hp": snappedf(eh.hp / eh.max_hp, 0.01), "you_dist": roundi(position.distance_to(eh.position)), "react": snappedf(react, 0.01)})
 	_stutter_target = null
 	_stepping = false
 
@@ -1978,7 +2446,15 @@ func _combo_tick() -> void:
 	var gap := _jitter(0.2 + 0.35 * float(difficulty.get("reaction", REACTION)))  # sharper bots chain faster
 	if randf() < 0.25:
 		gap += _jitter(float(difficulty.get("hesitate", 0.0))) * 0.5  # now and then it hesitates mid-combo
+	# WHY A STEP WAS SKIPPED. These paths advance `i` silently, so `combo_end`
+	# could say which slots landed but never why the others did not — which on
+	# 2026-10-30 cost an hour chasing a "combos drop half their casts" bug that
+	# turned out to be sequence length plus an expensive ultimate.
+	var ready_and_paid: bool = is_ready(slot) and can_afford(slot)
 	if not is_ready(slot) or not can_afford(slot) or randf() < (1.0 - smartness) * 0.3:
+		PlayLog.event(log_tag("combo_skip"), {"slot": slot, "step": i,
+			"reason": "fumble" if ready_and_paid else ("cooldown" if not is_ready(slot) else "mana"),
+			"mana": roundi(mana), "cost": roundi(ability_cost(slot))})
 		_combo["i"] = i + 1  # not available (or a fumble): on to the next
 		_combo["next"] = _clock + gap * 0.5
 		return
@@ -1986,6 +2462,8 @@ func _combo_tick() -> void:
 	if at == null:  # not in reach yet: keep closing for a moment, then skip it
 		_combo["waited"] = float(_combo["waited"]) + get_process_delta_time()
 		if float(_combo["waited"]) > COMBO_STEP_WAIT:
+			PlayLog.event(log_tag("combo_skip"), {"slot": slot, "step": i, "reason": "out of reach",
+				"dist": roundi(position.distance_to(eh.position))})
 			_combo["i"] = i + 1
 			_combo["waited"] = 0.0
 		return
@@ -2062,20 +2540,46 @@ func _end_combo(reason := "") -> void:
 		_commit_block_until = _clock + COMBO_BREATH * (1.0 - smartness)  # it landed one: a dull bot savours it instead of chaining
 	if not _combo.is_empty():
 		var eh: Variant = _combo.get("target")
-		PlayLog.event("red_combo_end", {"reason": reason, "step": int(_combo.get("i", 0)), "of": (_combo.get("seq", []) as Array).size(),
+		PlayLog.event(log_tag("combo_end"), {"reason": reason, "step": int(_combo.get("i", 0)), "of": (_combo.get("seq", []) as Array).size(),
 			"cast": _combo.get("cast", []),  # "done" only means it ran out of steps: this is what actually fired
 			"you_hp": snappedf(eh.hp / eh.max_hp, 0.01) if eh != null and is_instance_valid(eh) else -1})
 	_combo = {}
 	_cast_gap = difficulty.get("cast_gap", CAST_GAP)  # back to the normal pace
 
 
+## Why `_defend` passed, when it did. INSTRUMENTATION, not behaviour — it only
+## writes to the play log.
+##
+## 52 of 160 defends on 2026-10-29 (32%) ended with the hero's own tower STILL
+## losing health over the next 3 s; the worst dropped 1046 -> 627 and
+## 1886 -> 1441. The other 68% are correct (tower safe, stop defending). Four
+## guesses at which branch was responsible — retreating 35%, wary 15%, shy 12%,
+## the dead-hero early-out 0% — all failed to explain the majority, and over
+## half the cases carry none of those flags. The log held nothing that could
+## settle it, so it could not be recovered by inference. Hence: ask the code.
+##
+## Logged once per CHANGE of reason — this runs every 0.2 s — and reset at the
+## call site when `_defend` acts, so the next pass logs afresh.
+var _defend_pass_why := ""
+
+
+func _defend_pass(reason: String) -> bool:
+	if reason != _defend_pass_why:
+		_defend_pass_why = reason
+		var tw: Node2D = lane.tower(team) if lane else null
+		PlayLog.event(log_tag("defend_pass"), {"reason": reason,
+			"tower": roundi(tw.hp) if tw else -1, "left": snappedf(_defend_left, 0.1),
+			"shy": _clock < _shy_until, "wary": _wary, "retreating": _retreating})
+	return false
+
+
 ## Its tower is being hurt: all in on what's doing it. True if it acted.
 func _defend(eh: Node2D) -> bool:
 	if _defend_left <= 0.0:
-		return false
+		return _defend_pass("timer")
 	var t: Node2D = lane.tower(team) if lane else null
 	if t == null or not t.is_targetable():
-		return false
+		return _defend_pass("no tower")
 	var shy := _clock < _shy_until
 	var key := _shield_key(t)  # you walked a creep in to open the shield: kill it and the shield's back
 	# You're dead: the one window it can't be punished in, and chipping creeps
@@ -2085,7 +2589,7 @@ func _defend(eh: Node2D) -> bool:
 	# a real emergency: the shield walked open, or the tower is genuinely low.
 	if is_instance_valid(enemy_hero) and not enemy_hero.is_targetable() \
 			and key == null and t.hp > t.max_hp * DEFEND_PANIC:
-		return false
+		return _defend_pass("you dead")
 	if key != null and _roll("kill_key", 0.4 + 0.6 * smartness) and not (shy and _too_close_to_foe(key.position)):
 		why = "defend:key"
 		_clear_casts(1, false)
@@ -2118,7 +2622,7 @@ func _defend(eh: Node2D) -> bool:
 			if best == null or c.hp < best.hp:
 				best = c
 	if best == null:
-		return false  # (a siege minion: nothing to do about it)
+		return _defend_pass("no creep")  # (a siege minion: nothing to do about it)
 	_clear_casts(1, false)
 	if attack_target != best:
 		order_attack(best.position)
@@ -2256,13 +2760,13 @@ func _clear_point(a: Dictionary, need: int) -> Variant:
 ## weakest within reach of a short walk — only where it's safe to stand.
 func _clear_creep() -> Node2D:
 	var cur: Variant = attack_target  # sticks with the creep it's on unless there's a last hit to take
-	var keep_cur: bool = is_instance_valid(cur) and cur.is_in_group("creeps") and cur.team != team and cur.is_targetable() 		and _safe(cur.position) and not (_wary and _too_close_to_foe(cur.position))
+	var keep_cur: bool = is_instance_valid(cur) and cur.is_in_group("creeps") and cur.team != team and cur.is_targetable() 		and _safe(cur.position) and not (_keeping_out() and _too_close_to_foe(cur.position))
 	var best: Node2D = cur if keep_cur else null
 	var best_k := INF if not keep_cur else 0.0
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
 		if c.team == team or not c.is_targetable() or not _safe(c.position) or position.distance_to(c.position) > FARM_RANGE:
 			continue
-		if _wary and _too_close_to_foe(c.position):
+		if _keeping_out() and _too_close_to_foe(c.position):
 			continue  # outmatched (or shy): not inside your reach
 		var k: float = c.hp - (10000.0 if c.hp <= attack_damage() else 0.0)  # a last hit first, then the weakest
 		if k < best_k:
@@ -2291,7 +2795,9 @@ func _free_hit() -> void:
 
 ## What to hit right now from where it stands: your hero, a creep it can
 ## finish, the weakest creep, then a tower it's allowed to hit — or null.
-func _free_target() -> Node2D:
+## `value_only`: just the first two, the shots that are free. The rest push
+## the wave or pull a tower, which is a decision, not a shot taken in passing.
+func _free_target(value_only: bool = false) -> Node2D:
 	var reach := attack_range()
 	var eh := _enemy_hero_alive()
 	if eh and position.distance_to(eh.position) <= reach + eh.radius:
@@ -2307,6 +2813,8 @@ func _free_target() -> Node2D:
 			weakest = c
 	if finish:
 		return finish
+	if value_only:
+		return null
 	if weakest:
 		return weakest
 	var et := _enemy_tower()
@@ -2370,6 +2878,164 @@ func _wave_y() -> float:
 			sum += c.position.y
 			n += 1
 	return sum / float(n) if n > 0 else INF
+
+
+# ------------------------------------------------------------------ stepping out of the wave
+
+## How many ENEMY creeps could hit a unit of ours standing at `p`.
+func _creeps_reaching(p: Vector2) -> int:
+	var n := 0
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		if c.team != team and c.reaches(p, radius):
+			n += 1
+	return n
+
+
+## Standing inside the enemy wave being chewed: take two steps sideways.
+##
+## THE BIGGEST MEASURED THING IN THE LOGS (2026-10-28, autoplay + two watched
+## runs). Blue spent 1,018 snapshots — about 250 s a run — with enemy creeps
+## in reach of it, losing 5,021 hp doing it; red 1,027 and 6,171. It happens
+## under every `why` there is (push, trade, press, retreat, combo, farm), so it
+## is not one broken state, it is the absence of a behaviour. Worked example,
+## R4 t=13.8–16.3: 335 damage taken in 2.5 stationary seconds with four creeps
+## on it, `why` going trade -> commit -> combo the whole time.
+##
+## Everything built the same evening — `dps_on` in `_their_burst`, the creep
+## term in `_in_danger`, `_creep_dps` in `_escape` — decides WHETHER TO LEAVE
+## THE LANE. All three are about the walk home. Nothing anywhere said "minions
+## are hitting me, stand somewhere else", which is what a player does roughly
+## once a second and costs nothing.
+##
+## Three rules keep it from eating the farm, which is the real risk:
+##   - it never drops its current `attack_target` out of range, so a step can
+##     never cost a last hit (last hits are the only income in act 1);
+##   - it never ends up nearer the enemy hero than it already is — out of the
+##     creeps is not into the duel;
+##   - `CREEP_STEP_GAIN` + `CREEP_STEP_EVERY`: a spot has to shed two creeps to
+##     be worth walking to, and only one step every 0.8 s. Without hysteresis a
+##     200 px fan re-picks every 0.2 s and the hero vibrates, which is exactly
+##     the "looks stupid" failure we are trying not to trade into.
+##
+## Deliberately placed AFTER the nine special ticks and the combo guard: a
+## committed dive, key run, totem trip or combo outranks being chewed. It is a
+## lane-play behaviour, not an emergency — the emergency path is `_in_danger`.
+##
+## **IT HAS TO HOLD, and the first build of this did not.** A step that merely
+## issues `_go` and returns is undone 0.2 s later: `_creep_step_tick` is then
+## inside its own `CREEP_STEP_EVERY` cooldown, so the order loop runs, `push`
+## calls `order_attack`, and `order_move`'s destination is thrown away — the
+## hero takes one frame of walk and turns straight back into the wave.
+## Measured on the first test run (seed 4242, R1 t=173.8): step fires, `why`
+## is back to `push` 0.21 s later, steps again at 174.6, `push` again 0.22 s
+## later, and blue's health goes 508 -> 443 -> 424 -> 400 -> 378 straight
+## through the whole sequence. **Twenty-one steps in the round and not one of
+## them moved the hero out of anything.** So the step now re-asserts itself
+## every decision until it arrives (`TRAVEL_ARRIVE`) or `CREEP_STEP_HOLD`
+## expires, exactly the way `_dive_tick` and `_key_tick` own their moments.
+## It casts while walking (`_use_abilities`, the same gap `dive:chase` had),
+## and `_travel_tick` weaves free shots into the leg, so the hold is not dead
+## time and cannot eat a last hit it could otherwise have taken.
+##
+## Trim knob: `CREEP_CROWD`. At 3 it fires in a real clump only; raise it to 4
+## to make the bot tankier, drop it to 2 if heroes still read as rooted.
+func _creep_step_tick(eh: Node2D) -> bool:
+	if _dashing or is_stunned() or spin_left > 0.0 or _plant_left > 0.0 or _moving_only:
+		_step_to = null
+		return false
+	if _step_to != null:  # a step in progress owns the hero until it lands
+		if _clock < _step_until and position.distance_to(_step_to) > TRAVEL_ARRIVE:
+			why = "creeps:step"
+			_use_abilities()  # walking is not a reason to hold the kit (see `dive:chase`)
+			_go(_step_to)
+			return true
+		_step_to = null
+		_creep_step_at = _clock  # the gap is between steps, not between starts
+	# A KILL IN PROGRESS OUTRANKS BEING CHEWED. The step already yields to a
+	# dive, key run, totem trip and combo — but not to a kill that no behaviour
+	# OWNS, which is the common case: the combo has ended and the dive's own
+	# gates (`_safe`, chase depth, `_dive_worth`) never let it start.
+	#
+	# Watched 2026-10-30, five separate kill sequences; the worst was four steps
+	# in five seconds, each pulling the hero from ~50 px back out to 140-190 px
+	# while the target fell 43%% -> 4%%. It escaped and healed to 902. Across the
+	# day 59%% of heroes that reached 15%% health got away and recovered, and this
+	# is one of the six gates shaving the conversion rate.
+	#
+	# Only NEW steps are blocked: one already under way still owns the hero to
+	# its spot, because a behaviour that moves the hero must finish (the lesson
+	# the first creep-step build was rebuilt around). Steps are short, so a live
+	# kill costs at most one of them.
+	#
+	# `DIVE_HP_MAX` is reused rather than inventing a second "nearly dead" bar,
+	# and the reach is `_wants_trade`'s own formula, so this covers exactly the
+	# band where an engage is possible.
+	#
+	# Trim knob: drop the ceiling toward 0.25 if heroes now stand in waves too
+	# long chasing kills they do not get.
+	if eh != null and eh.is_targetable() and eh.hp / eh.max_hp < DIVE_HP_MAX \
+			and position.distance_to(eh.position) <= maxf(attack_range() + eh.radius + TRADE_PAD,
+				float(_pv("engage", ENGAGE))):
+		if not _step_held:
+			_step_held = true
+			PlayLog.event(log_tag("step_held"), {"you_hp": snappedf(eh.hp / eh.max_hp, 0.01),
+				"dist": roundi(position.distance_to(eh.position)), "creeps": _creeps_reaching(position)})
+		return false
+	_step_held = false
+	if _clock - _creep_step_at < CREEP_STEP_EVERY:
+		return false
+	var here := _creeps_reaching(position)
+	if here < CREEP_CROWD:
+		return false
+	var keep: Node2D = null
+	if attack_target != null and is_instance_valid(attack_target) and attack_target.is_targetable():
+		keep = attack_target
+	var reach: float = attack_range() + radius + (keep.radius if keep != null else 0.0)
+	var gap: float = position.distance_to(eh.position) if eh != null else 0.0
+	var home := Lane.base_of(team)
+	var cap := here - CREEP_STEP_GAIN
+	var best: Variant = null
+	var best_n := 99
+	var best_home := INF
+	for i: int in CREEP_STEP_FAN:
+		var spot: Vector2 = position + Vector2(CREEP_STEP, 0.0).rotated(TAU * float(i) / float(CREEP_STEP_FAN))
+		if Bounds.active:
+			spot = Bounds.clamp_point(spot, radius)
+		if not _safe(spot):
+			continue  # out of the creeps and under their tower is not an improvement
+		if keep != null and spot.distance_to(keep.position) > reach:
+			continue  # would drop what it is shooting: never costs a last hit
+		if eh != null and spot.distance_to(eh.position) < gap:
+			continue  # out of the creeps is not into the enemy hero
+		var n := _creeps_reaching(spot)
+		if n > cap:
+			continue
+		var h: float = absf(spot.x - home.x)
+		if n < best_n or (n == best_n and h < best_home):
+			best_n = n
+			best_home = h
+			best = spot
+	if best == null:
+		return false
+	_creep_step_at = _clock
+	_step_to = best
+	_step_until = _clock + CREEP_STEP_HOLD
+	why = "creeps:step"
+	_pv_log_step(here, best_n)
+	_go(best)
+	return true
+
+
+## One log line per step, so the next analysis can say whether this worked:
+## how crowded it was and how crowded the spot it picked is.
+func _pv_log_step(was: int, now: int) -> void:
+	PlayLog.event(log_tag("creep_step"), {"was": was, "now": now, "hp": snappedf(hp / max_hp, 0.01)})
+
+
+var _creep_step_at := -99.0
+var _step_held := false     # a kill is live: the step is standing down (logged once per window)
+var _step_to: Variant = null   # where a step in progress is walking to, or null
+var _step_until := 0.0         # ...and when it gives up on getting there
 
 
 # ------------------------------------------------------------------ stutter-stepping
@@ -2490,6 +3156,7 @@ func _backoff_spot(foe: Node2D, home: Vector2) -> Vector2:
 		away = Vector2(-_forward(), 0.0)  # standing on top of each other: straight back
 	away = away.normalized()
 	var pull: float = BACKOFF_HOME_PULL * 2.0 * (1.0 - float(_rule("sidestep", SIDESTEP)))
+	var home_now: float = absf(position.x - home.x)
 	var best_cost := INF
 	for turn: int in BACKOFF_FAN:
 		for side: int in ([0] if turn == 0 else [1, -1]):
@@ -2500,6 +3167,8 @@ func _backoff_spot(foe: Node2D, home: Vector2) -> Vector2:
 				continue  # the lane edge pushed it back inside your reach
 			if not _safe(spot):
 				continue  # under your tower is not an escape
+			if absf(spot.x - home.x) > home_now + BACKOFF_DEEPER:
+				continue  # deeper into their half than we already are is not a retreat
 			var cost: float = position.distance_to(spot) + absf(spot.x - home.x) * pull
 			if cost < best_cost:
 				best_cost = cost
@@ -2518,9 +3187,92 @@ func _safe(p: Vector2) -> bool:
 
 ## Order a move unless already heading (roughly) there.
 func _go(p: Vector2) -> void:
-	if attack_target == null and _target != null and (_target as Vector2).distance_to(p) < 40.0:
+	if _weaving != null or _clock < _weave_until:
+		_travel_to = p  # mid-shot on the way: _travel_tick walks on when it is away
 		return
+	if attack_target == null and _target != null and (_target as Vector2).distance_to(p) < 40.0:
+		_travel_to = p  # already walking there: the same trip, still weaving
+		return
+	_travel_to = p
 	order_move(p)
+
+
+## Withdrawing, but nothing can charge us for the beat it takes to shoot: no
+## creep close enough to swing at us, and the enemy hero unable to auto us
+## from here. `_moving_only` ("fleeing: never stop to shoot") is right while
+## something is actually hitting you and wrong once you have broken away — the
+## walk home was 100% dead time either way, and in act 1 the creeps passed on
+## the way are last hits, which are the only income in the game.
+##
+## The stricter test the idea started as — shoot while retreating whenever we
+## out-reach them — turns out to be nearly impossible here: every dash in the
+## game is longer than every auto-attack range, so a window where we can hit
+## them and they cannot reach us exists ONLY for BECKY, against KYLE (100 px)
+## and KAREN (80 px). Worth knowing before designing another behaviour around
+## out-ranging someone.
+func _free_shot_ok() -> bool:
+	if _creep_dps() > 0.0:
+		return false
+	var eh := _enemy_hero_alive()
+	return eh == null or position.distance_to(eh.position) > eh.attack_range() + radius + eh.radius
+
+
+## Walking somewhere is NOT dead time. A trip is as many legs as the reload
+## allows: walk while the gun is down, stop the moment it is up and something
+## is in reach, shoot, walk on. CHAD crosses 760 px in three legs (400 px/s x
+## 0.65 s) and lands three attacks doing it; the same trip used to be three
+## seconds of nothing.
+##
+## This is the half of stutter-stepping the bot never had. `_stutter_tick`
+## ORBITS something it is already fighting - every step point it weighs sits
+## on a ring round that target - so it can hold a distance but it cannot
+## stutter-step anywhere. Going somewhere was a bare `order_move` with the gun
+## silent the whole way, which is why CHAD threw 42 STARS from beyond their
+## range at a BECKY he never walked at and finished the round on 280 damage,
+## every point of it autos (run of 2026-10-28 19:45). The reload maths was
+## already here, in `_step_point`'s budget; what was missing was a destination.
+##
+## It weaves at FREE value only - the enemy hero, or a creep it can finish -
+## never at the weakest creep in reach. Plinking creeps on every walk would
+## shove the wave about as a side effect of repositioning, and the wave is
+## what decides rounds; `_free_hit` still takes those shots when the bot has
+## nothing better to do. Trim knob: drop the `true` to let a trip plink too.
+func _travel_tick() -> void:
+	if _travel_to == null or _stutter_target != null or _dashing or is_stunned() or spin_left > 0.0 or _plant_left > 0.0:
+		_weaving = null  # not travelling, or busy with something that is not a walk
+		return
+	if _moving_only and not _free_shot_ok():
+		_weaving = null  # fleeing something that can make us pay for the pause: run
+		return
+	var to: Vector2 = _travel_to
+	if position.distance_to(to) <= TRAVEL_ARRIVE:
+		_travel_to = null
+		_weaving = null
+		return
+	var well: float = clampf(smartness * float(_p.get("stutter", STUTTER_DEFAULT)), 0.0, 1.0)
+	if _weaving != null:  # stopped for a shot
+		var mine: bool = is_instance_valid(_weaving) and attack_target == _weaving
+		var gone: bool = not mine or not _weaving.is_targetable() or position.distance_to(_weaving.position) > attack_range() + _weaving.radius
+		if not gone and _attack_cd <= 0.0:
+			return  # still lining it up: it has stopped, let the shot land
+		_weaving = null
+		if mine:
+			attack_target = null
+		_weave_until = _clock + WEAVE_DWELL * (1.0 - well)  # sharp: walks on at once
+		return
+	if _clock < _weave_until or attack_target != null:
+		return  # the beat after a shot, or the decision has it on something
+	if _target == null:
+		order_move(to)  # standing with the shot behind it: walk on
+		return
+	if _attack_cd > WEAVE_SLOP * (1.0 - well) or not _safe(position):
+		return  # the gun is not up yet (a dull bot calls it ready early and waits)
+	var t := _free_target(true)
+	if t == null:
+		return
+	_attack_move = null
+	attack_target = t
+	_weaving = t
 
 
 func _wants_trade(eh: Node2D) -> bool:
@@ -2531,23 +3283,43 @@ func _wants_trade(eh: Node2D) -> bool:
 			and position.distance_to(eh.position) <= _bully_reach():
 		return true  # its tower is being hit: it fights now whether or not it wins the race
 	var reach: float = maxf(attack_range() + eh.radius + TRADE_PAD, float(_pv("engage", ENGAGE)))
-	if position.distance_to(eh.position) > reach or not _safe(eh.position) or not _may_chase(eh):
+	# Asked ONCE and shared by both gates: the safety test and the chase-depth
+	# test would otherwise each veto the dive on its own, and the exemption in
+	# `_may_chase` would stay as dead as it was before.
+	var diveable: bool = eh.hp / eh.max_hp < DIVE_HP_MAX and _dive_worth(eh)
+	# Each refusal names itself (see `_trade_no`), read by `_log_pass` at the call
+	# site, so the log says WHICH gate turned a kill down.
+	if position.distance_to(eh.position) > reach:
+		_trade_no = "out of reach"
+		return false
+	if not _safe(eh.position) and not diveable:
+		_trade_no = "under your tower, dive not worth it"
+		return false
+	if not _may_chase(eh, diveable):
+		_trade_no = "past chase_depth"
 		return false
 	match str(_pv("trade_when", "always")):
 		"vulnerable":
 			if not _vulnerable(eh):
+				_trade_no = "you are not vulnerable"
 				return false
 		"provoked":  # only after it hit us (hero_aggro), or to finish a very weak hero
 			if eh.hero_aggro <= 0.0 and eh.hp / eh.max_hp > 0.25:
+				_trade_no = "unprovoked"
 				return false
 	# Must be this far ahead on health — capped, so a healthy bot still fights
 	# a healthy you (the margin makes a hurt bot back off sooner, not never).
 	var need: float = eh.hp / eh.max_hp + float(_pv("trade_margin", STANDARD_MARGIN))
 	if hp / max_hp < minf(need, float(_pv("trade_cap", TRADE_CAP))):
+		_trade_no = "health margin"
 		return false
 	# …and it has to win (enough of) the damage race: health % alone ignores
 	# that your hero and build may simply out-damage it
-	return _race(eh) >= float(_pv("race_need", STANDARD_RACE))
+	if _race(eh) < float(_pv("race_need", STANDARD_RACE)):
+		_trade_no = "loses the race"
+		return false
+	_trade_no = ""
+	return true
 
 
 ## How close you have to be for a bully (the anchor) to turn on you: what it
@@ -2562,14 +3334,74 @@ func _bully_reach() -> float:
 	return r
 
 
+## How much of a RACE_WINDOW fight `u` can actually spend hurting `other`:
+## all of it once `other` is inside what `u` can hit with, less as it has
+## further to walk first, never below REACH_FLOOR.
+##
+## Reach here is DAMAGE reach, not _threat_reach's "can it start a fight on
+## me": every damaging ability's range counts whether or not it is up (the
+## cooldown is already priced into _fight_dps), and a ready dash or blink adds
+## its own on top because that one is mobility.
+static func _damage_reach(u: Node2D, other: Node2D) -> float:
+	var reach: float = u.attack_range() + u.radius + other.radius
+	for slot: String in SLOT_ORDER:
+		var a: Dictionary = u.abilities[slot]
+		if str(a["kind"]) in ["dash", "blink"] and u.is_ready(slot) and u.mana >= u.ability_cost(slot):
+			reach = maxf(reach, float(a.get("range", 0.0)) + u.attack_range() + u.radius + other.radius)
+		elif a.get("damage", 0.0) > 0.0:
+			reach = maxf(reach, float(a.get("range", 0.0)) + other.radius)
+	return reach
+
+
+## Does it simply out-reach us? Then WARY IS NOT A STRATEGY WE OWN, and the
+## flag has to be withheld or it becomes a trap — the same shape as the one
+## _reach_frac was added to fix, pointed at the other kind of hero.
+##
+## Wary means "hold outside its reach and decline anything that commits inside
+## it", and both the stand-off (_decide_spot) and _too_close_to_foe measure
+## that with _threat_reach — attack range PLUS a ready dash or blink. Against
+## BECKY that is 520 + a 450 blink, about 1020 px, and six farm / attack sites
+## gate on it. So a wary KAREN (damage reach ~330) does not merely fail to
+## close: she declines every creep within 1000 px of BECKY, which is the whole
+## lane. She cannot farm, cannot push, and cannot improve the odds that made
+## her wary, because the only thing that would — walking in — is the one move
+## the flag forbids. A hero that is behind should farm carefully, not stop.
+##
+## Comparing damage reach to damage reach rather than to _threat_reach keeps
+## it honest both ways: BECKY (850) keeps wary against everyone, KAREN (330)
+## keeps it in her own mirror, and it is withheld only where holding off
+## genuinely wins nothing. Being out-reached is a reason to walk in.
+func _out_ranged(eh: Node2D) -> bool:
+	return _damage_reach(self, eh) < _damage_reach(eh, self)
+
+
+## How much of a RACE_WINDOW fight `u` can actually spend hurting `other`:
+## all of it once `other` is inside what `u` can hit with, less as it has
+## further to walk first, never below REACH_FLOOR.
+static func _reach_frac(u: Node2D, other: Node2D, dist: float) -> float:
+	var reach := _damage_reach(u, other)
+	if dist <= reach:
+		return 1.0
+	var close: float = (dist - reach) / maxf(u.speed * u.move_speed_mult(), 1.0)
+	return clampf(1.0 - close / RACE_WINDOW, REACH_FLOOR, 1.0)
+
+
 ## The damage race against `eh`: how long it takes to kill us ÷ how long we
-## take to kill it, over a RACE_WINDOW-second fight (attacks + abilities
-## ready now). > 1 = we win it.
+## take to kill it, over a RACE_WINDOW-second fight. > 1 = we win it.
+##
+## Both sides are scaled by whether they can reach the other at all. Without
+## that the race is a model of two heroes nose to nose swinging until one
+## dies — a matchup BECKY loses badly and never actually plays. She attacks
+## at 520 and reaches 760 / 850 with her kit; the run of 2026-10-28 ended on a
+## round where her race read 0.19 while CHAD went 0 hits from 36 STARS and 0
+## from 22 TRAP and dealt her nothing at all. Who can touch whom is half of
+## who wins a fight, and it was the half this had no term for.
 func _race(eh: Node2D) -> float:
-	var ours := _fight_dps(self)
-	var theirs := _fight_dps(eh)
-	var we_kill: float = _fight_hp(eh) / maxf(ours, 1.0)
-	var they_kill: float = _fight_hp(self) / maxf(theirs, 1.0)
+	var d: float = position.distance_to(eh.position)
+	var ours: float = _fight_dps(self) * _reach_frac(self, eh, d)
+	var theirs: float = _fight_dps(eh) * _reach_frac(eh, self, d)
+	var we_kill: float = _fight_hp(eh, _has_guard(eh)) / maxf(ours, 1.0)
+	var they_kill: float = _fight_hp(self, _has_guard(self)) / maxf(theirs, 1.0)
 	return they_kill / maxf(we_kill, 0.01)
 
 
@@ -2580,10 +3412,11 @@ static func _power_up(u: Node2D, kind: String) -> bool:
 	return str(u.get("power")) == kind and float(u.get("power_left")) > 0.0
 
 
-## Health for the damage race: shields up now, a ready shield ability (BRACE),
-## a ready / running RAGE's damage cut, RAMPAGE's, and what a TWIN will eat.
-static func _fight_hp(u: Node2D) -> float:
-	var h: float = u.hp + u.shield_hp
+## Health for the damage race: shields up now, the D if `guard` says it has
+## one, a ready shield ability (BRACE), a ready / running RAGE's damage cut,
+## RAMPAGE's, and what a TWIN will eat.
+static func _fight_hp(u: Node2D, guard: bool) -> float:
+	var h: float = u.hp + u.shield_hp + (GUARD_SHIELD * GUARD_WORTH if guard else 0.0)
 	var cut := 0.0
 	for slot: String in SLOT_ORDER:
 		var a: Dictionary = u.abilities[slot]
@@ -2605,25 +3438,60 @@ static func _fight_hp(u: Node2D) -> float:
 
 
 ## A hero's damage per second over a short fight: its auto-attacks, a TWIN's
-## shots alongside them, RAMPAGE's aura, and the abilities it has ready and can
-## afford, spread over RACE_WINDOW.
+## shots alongside them, RAMPAGE's aura, and its damaging abilities — the ones
+## ready and affordable now at full value inside the window, the ones on
+## cooldown at the rate they really come back at.
+##
+## That second half matters more than it looks. Counting only what is off
+## cooldown right now makes a burst hero worth its whole kit in the instant
+## before it casts and its bare auto-attack every second after. BECKY swung
+## between ~244 dps and 27.8 (the weakest auto in the game, on the lowest
+## health) on nothing but her own cooldown timers, and with FALLOUT at an 80 s
+## cooldown she sat at the bottom most of the time: her logged `odds` ran a
+## median 0.11 through a round she won 23:1 on damage (2026-10-28). She read
+## that as losing, went wary, stopped farming and gave up the lane. Spreading
+## a down ability over its cooldown is what a player means by "I have a big
+## button soon".
 static func _fight_dps(u: Node2D) -> float:
 	var dps: float = u.attack_damage() / maxf(u.attack_interval(), 0.05)
 	if is_instance_valid(u.get("twin")):
 		dps += u.attack_damage() * TwinScript.TWIN_DAMAGE / maxf(u.attack_interval(), 0.05)  # it fires with every attack
-	if _power_up(u, "rampage") and u.attack_range() + u.radius <= RAMPAGE_RADIUS:
+	# THE ATTACKER'S OWN RADIUS WAS NEVER PART OF THE GAP. `targets.gd` picks up
+	# anything whose centre is within RAMPAGE_RADIUS + *the target's* radius, and a
+	# hero attacks from attack_range() + *the target's* radius (the reach formula in
+	# `_wants_trade`). The target radius is on both sides and cancels, so the test
+	# is simply attack_range() vs RAMPAGE_RADIUS. Adding `u.radius` made it
+	# arithmetically unsatisfiable: measured 2026-10-30, the four heroes score
+	# 446 / 174 / 172 / 546 against a threshold of 140, so RAMPAGE_DPS — 100, more
+	# than any hero's auto-attack — could never be counted by anybody.
+	#
+	# NOTE the other two thirds of RAMPAGE were always fine: RAMPAGE_ARMOR is
+	# counted below (it doubles `_fight_hp`) and RAMPAGE_SPEED lands in `speed()`.
+	# So a rampaging bot already knew it was TANKY; this is what tells it that it
+	# is also DEADLY, and only while it fights from inside the aura.
+	#
+	# KNOWN, left to the user: at the corrected threshold exactly one hero passes
+	# (attack_range 140, at equality); the 150-range diver misses by 10 px. Widening
+	# it is a tuning call — RAMPAGE_RADIUS 140 -> 160 — not an arithmetic one.
+	if _power_up(u, "rampage") and u.attack_range() <= RAMPAGE_RADIUS:
 		dps += RAMPAGE_DPS  # the aura, but only for a hero that fights from inside it
 	var burst := 0.0
 	var mana: float = u.mana
 	for slot: String in SLOT_ORDER:
 		var a: Dictionary = u.abilities[slot]
-		if u.is_ready(slot) and mana >= u.ability_cost(slot) and a.get("damage", 0.0) > 0.0:
+		if a.get("damage", 0.0) <= 0.0:
+			continue
+		var hits: float = float(a.get("pulses", a.get("count", 1)))
+		var dmg := 0.0
+		if a["kind"] == "rage":  # contact damage is per second: a window's worth, plus the burn
+			hits = minf(float(a.get("duration", 4.0)), RACE_WINDOW)
+			dmg = float(a.get("burn_dps", 0.0)) * 2.0 * u.ability_scale(slot)
+		dmg += a["damage"] * hits * u.ability_scale(slot)
+		if u.is_ready(slot) and mana >= u.ability_cost(slot):
 			mana -= u.ability_cost(slot)
-			var hits: float = float(a.get("pulses", a.get("count", 1)))
-			if a["kind"] == "rage":  # contact damage is per second: a window's worth, plus the burn
-				hits = minf(float(a.get("duration", 4.0)), RACE_WINDOW)
-				burst += float(a.get("burn_dps", 0.0)) * 2.0 * u.ability_scale(slot)
-			burst += a["damage"] * hits * u.ability_scale(slot)
+			burst += dmg  # it lands inside the window
+		else:  # down, or it cannot pay: what it is worth per second once it is back
+			dps += dmg / maxf(float(a["cooldown"]) * AbilityInfo.cooldown_scale(u.mods, slot), RACE_WINDOW)
 	return dps + burst / RACE_WINDOW
 
 
@@ -2643,22 +3511,197 @@ func _threat_reach(eh: Node2D) -> float:
 ## attacks), or you're faster and it's getting low. It has to notice: odds =
 ## smartness.
 func _in_danger(eh: Node2D) -> bool:
-	if eh == null or position.distance_to(eh.position) > _threat_reach(eh) or not _roll("notice_danger", smartness):
+	if not _roll("notice_danger", caution):
 		return false
-	var burst: float = (_fight_dps(eh) - eh.attack_damage() / maxf(eh.attack_interval(), 0.05)) * RACE_WINDOW \
-		+ eh.attack_damage() / maxf(eh.attack_interval(), 0.05) * BURST_WINDOW
-	if hp <= burst:
+	# A wave on its own can kill you, and the check used to return false on its
+	# first line whenever no enemy hero was near — so the creep damage added
+	# earlier today was never consulted in the one state where it matters most.
+	# "The enemy hero just died" is not a corner case in overtime, it is the
+	# moment you push in: blue died to a ranged creep 3 s after its opponent
+	# died, from 391 hp, with nine creeps on it and no danger modelling at all
+	# (2026-10-28, R2 6:15).
+	# THE ONE CHECK THAT DECIDES WHETHER TO FLEE WAS THE ONE CHECK THAT DID NOT
+	# KNOW ABOUT THE SHIELD, THE D OR A BRACE. It read the bare bar
+	# (`hp + shield_hp`) while every other sum in the bot — `_race`, `_dive_worth`,
+	# the comfy gate, `_inputs`' own `my_eff_hp` — reads `_fight_hp`, which also
+	# counts a ready shield ability, a RAGE or RAMPAGE damage cut, a TWIN's health
+	# and the D. The 2026-10-28 work that put the D and the escape into the fight
+	# sums simply missed this line.
+	#
+	# Caught live 2026-10-30, round 1, KYLE vs BECKY, watched with the user.
+	# Blue fled at **FULL HEALTH** three times in 21 s (t=130.2, 143.3, 151.1),
+	# every time with identical inputs: `my_hp` 700, `my_eff_hp` **1000**,
+	# `escape` true, BECKY 758-866 px away with `your_burst` **704**. 700 <= 704
+	# by four points, so it ran — having just logged that it was worth 1000.
+	#
+	# It does not stop at one retreat. The retreat arms `_shy_until`, shy forces
+	# `_wary`, and `COMFY_FROM` 5 means the comfy gate cannot cancel it in the
+	# tame rounds — so a four-point miscount buys a whole retreat-and-shy cycle,
+	# the hero walks back in at full health, and does it again. Three times in
+	# twenty-one seconds. A player at 100% with a dash up does not run from
+	# someone 800 px away: this is the "looks stupid, not human" failure.
+	#
+	# THE ESCAPE IS NOT DOUBLE COUNTED. `_their_burst` already shrinks its window
+	# to ESCAPE_WINDOW when `_escape_ready(self) and not _diving`, so a way out is
+	# priced on the THREAT side; `_fight_hp` adds no escape term of its own.
+	#
+	# COUNTING THE D IS NOT A CHEQUE THE BOT CANNOT CASH — checked before wiring
+	# it in, because that is exactly the bug `_their_burst` documents about the
+	# dash. The D is pressed (line ~1084) on `close and (locked or (hp_frac < 0.35
+	# and _since_hit < 0.5))`, so a hero at full health never presses it. But a
+	# burst big enough to trip this check is precisely what DRIVES it under 35%
+	# while freshly hit with the enemy close — the press condition is the state
+	# this check is predicting. `_has_guard(self)` keeps it honest: on cooldown,
+	# it is not counted.
+	#
+	# Trim knob: `GUARD_WORTH` 1.0 down (it prices the D wherever it is counted)
+	# if heroes now stand in bursts they should respect; then pass `false` here to
+	# go back to counting everything BUT the D.
+	var near: bool = eh != null and position.distance_to(eh.position) <= _threat_reach(eh)
+	if _fight_hp(self, _has_guard(self)) <= _their_burst(eh if near else null):
 		return true
-	return eh.speed > speed and hp / max_hp < float(_pv("retreat_at", RETREAT_AT)) + FASTER_MARGIN
+	return near and eh.speed > speed and hp / max_hp < float(_pv("retreat_at", RETREAT_AT)) + FASTER_MARGIN
+
+
+## What `eh` could put on us before we are out of it: its ready kit across the
+## window plus BURST_WINDOW s of its attacks — both cut to ESCAPE_WINDOW when
+## we have a way out up. "HP is a resource you have to use it" (chu8, by way
+## of the user, 2026-10-28): the old sum asked whether the most they could
+## theoretically do beat the raw health bar, which is the definition of
+## hoarding it. It now asks what they can land in the time they actually get.
+func _their_burst(eh: Node2D) -> float:
+	var win := RACE_WINDOW
+	var hit := BURST_WINDOW
+	# `not _diving`: the danger model used to discount the burst for a dash
+	# that the dive logic was about to spend engaging — it wrote cheques the
+	# engage path cashed. Three consumers share one dash (`_dive_tick`, the
+	# `dash_at` engage at ~3600, and `_escape`) with no arbitration between
+	# them, so a hero would read a position as survivable BECAUSE it had POUNCE,
+	# POUNCE in, and then be deep with no way out. A hunting bot is now held to
+	# the strict standard, which also self-corrects: no discount -> more likely
+	# in danger -> retreats -> stops hunting. (One decision stale, by design:
+	# `_in_danger` runs before `_dive_tick` within a decision.)
+	if _escape_ready(self) and not _diving:
+		win = minf(win, ESCAPE_WINDOW)
+		hit = minf(hit, ESCAPE_WINDOW)
+	var creeps: float = _creep_dps() * hit
+	if eh == null:
+		return creeps  # nobody on us but the wave — which is plenty, see `_in_danger`
+	var atk: float = eh.attack_damage() / maxf(eh.attack_interval(), 0.05)
+	return creeps + (_fight_dps(eh) - atk) * win + atk * hit
+
+
+## What the enemy creeps already swinging at us are worth per second. Steady
+## damage like an auto-attack, so it is priced over the same window.
+##
+## KNOWN GAP, left on purpose: `_in_danger` still returns early when no enemy
+## hero is within `_threat_reach`, so a hero alone in a big wave with nobody
+## else around is still only covered by the flat `retreat_at`. Lifting that
+## early return would let `_in_danger` fire with `eh == null`, and its callers
+## (`_danger_retreat`, `_backoff_spot(foe, home)`) all assume a foe exists.
+## Worth doing, but as its own change.
+func _creep_dps() -> float:
+	var d := 0.0
+	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
+		d += c.dps_on(self)
+	return d
+
+
+## Does `u`'s D look available? Its own is a fact it can read (`guard_cd`);
+## yours it has to have SEEN — `_foe_guard_at` is set from the public ring
+## (`status_immune`) in `_process`, and reading your `guard_cd` would be
+## cheating. Unseen all round means it assumes you have it, which is right.
+func _has_guard(u: Node2D) -> bool:
+	if u == self:
+		return guard_cd <= 0.0
+	return _clock - _foe_guard_at >= FOE_GUARD_CD
 
 
 ## Chase limit: will it follow you to where you are? Not past `chase_depth`
 ## into your half — unless you're nearly dead — and never under your tower.
-func _may_chase(eh: Node2D) -> bool:
+## Is a dive worth it — can you finish them before the tower finishes you?
+##
+## `_fight_hp` already counts the shield, a ready BRACE, a RAGE or RAMPAGE
+## damage cut and a TWIN, so "can I eat a shot or two" is asked of real
+## effective health, not of the bar. The kill time is the RACE's own `we_kill`
+## term, reused verbatim, so a dive can never disagree with the odds the bot
+## has already worked out for the same fight.
+##
+## Shots counted: the ones that land while you finish them, plus DIVE_WALK_OUT
+## for getting back out of the ring afterwards. Red's tower damage is scaled
+## per round (lane.gd `tower.damage`), so a late tower prices the same dive
+## higher on its own without anything here changing.
+##
+## WHY THIS EXISTS (2026-10-29, the user watching): CHAD stood 180 px from a
+## KAREN on 13% health with his own odds reading 2.22 against a need of 0.85 —
+## and went farming. Nothing was wrong with the caution rules; she had just
+## crossed x=1280 into her tower's cover on that exact tick, and `_safe` went
+## false. The 25% exemption below was written to let a hero chase a dying one
+## deep, but it is ANDed with `_safe`, and a hero under 25% is nearly always
+## running to its tower — that is what the health is making it do. So the
+## condition meant to permit the chase was cancelled by the condition
+## forbidding it, in precisely the case it was written for. It could only ever
+## fire when they were low AND in the open: the case that needed no exemption.
+##
+## Only ever asked about a hero already under that 25%: this widens "finish
+## the nearly dead", it never licenses diving a healthy hero.
+##
+## LOOSENED 2026-10-30 after the first build measured as very nearly inert.
+## A/B over 5 seeds (`DIVE_SPARE` 1.2 vs 999.0) came back with FOUR OF FIVE
+## RUNS BYTE-IDENTICAL and the same 8 `dive:chase` decisions on both sides:
+## the gate almost never fired, so it bought nothing and cost nothing.
+##
+## The binding gate was not the sums, it was the 25% ceiling in `_may_chase`.
+## Counted over 20,788 snapshots with both heroes alive inside 900 px: a foe
+## under 25% AND past `chase_depth` happened 903 times, while the 25-40% band
+## at the same depth happened 1,867 times — more than the whole pool the dive
+## was allowed to look at. Raising the ceiling to 40% roughly triples it.
+##
+## This is safe because a health fraction is the WORSE of two tests we run.
+## `DIVE_MAX_SECS` asks "is the kill close enough" directly, off the race's own
+## `we_kill`; the bar only guesses at it. A 40% hero who dies in two seconds is
+## nearly dead in the only sense that matters, and a 20% hero who would take
+## five is not. The fraction is kept as a ceiling so the dive can never be
+## asked about a healthy hero, not as the thing deciding "nearly dead".
+##
+## DIVE_SPARE 1.2 -> 1.0 is the user's words 2026-10-30 — *"if they can take a
+## tower shot or two either with shield or just enough HP"* — taken literally.
+## Thinner than it reads: `DIVE_WALK_OUT` already bills a whole extra tower
+## shot the hero may never eat, so the bill overcounts before SPARE multiplies
+## it. Overbuff then trim.
+##
+## Trim knobs, in the order to reach for them: DIVE_SPARE back up to 1.2, then
+## DIVE_HP_MAX down to 0.30, then DIVE_MAX_SECS down to 2.5. The thing that
+## tells you to trim is a death under a tower on `trade`/`dive:chase` — a dive
+## that did not come back out is the most stupid-looking thing a bot can do.
+const DIVE_HP_MAX := 0.40      # the dive's own ceiling: nearly dead by the sums, not by the bar
+const DIVE_SPARE := 1.0        # effective health must beat the tower's bill by this much
+const DIVE_WALK_OUT := 1.0     # extra shots eaten on the way back out
+const DIVE_MAX_SECS := 3.5     # a kill slower than this is not "close enough"
+
+
+func _dive_worth(eh: Node2D) -> bool:
+	var et := _enemy_tower()
+	if et == null:
+		return false
+	var d := position.distance_to(eh.position)
+	var ours: float = _fight_dps(self) * _reach_frac(self, eh, d)
+	var secs: float = _fight_hp(eh, _has_guard(eh)) / maxf(ours, 1.0)  # the race's own we_kill
+	if secs > DIVE_MAX_SECS:
+		return false
+	var shots: float = ceilf(secs / et.INTERVAL) + DIVE_WALK_OUT
+	return _fight_hp(self, false) > shots * et.damage * DIVE_SPARE
+
+
+func _may_chase(eh: Node2D, diveable: bool = false) -> bool:
 	var depth: float = eh.position.x * _forward()  # px past the middle toward your base
 	if depth <= float(_pv("chase_depth", STANDARD_CHASE)):
 		return true
-	return eh.hp / eh.max_hp < 0.25 and _safe(eh.position)
+	# Two different exemptions, deliberately NOT sharing one number. The open
+	# field keeps the old 0.25; only a dive that has priced the tower's bill
+	# (`_dive_worth`) is allowed out to DIVE_HP_MAX.
+	var frac: float = eh.hp / eh.max_hp
+	return (frac < 0.25 and _safe(eh.position)) or (frac < DIVE_HP_MAX and diveable)
 
 
 ## Last hitting: the weakest enemy creep in reach that one attack (with a
@@ -2676,7 +3719,7 @@ func _farm_target() -> Node2D:
 			continue
 		if not c.is_targetable() or not _safe(c.position) or position.distance_to(c.position) > FARM_RANGE:
 			continue
-		if _wary and not _poke_ok(c):
+		if _keeping_out() and not _poke_ok(c):
 			continue  # outmatched: this one is too deep in your reach to lean for
 		if c.hp <= dmg and c.bounty > 0 and (weakest == null or c.hp < weakest.hp):  # (no gold in it: not a last hit worth timing)
 			var id := c.get_instance_id()  # one roll per creep: does it go for this last hit?
@@ -2701,7 +3744,7 @@ func _deny_target() -> Node2D:
 	var chance: float = difficulty.get("deny_chance", 1.0)
 	var best: Node2D = null
 	for c: Node2D in get_tree().get_nodes_in_group("creeps"):
-		if c.deniable_by(team) and c.hp <= dmg and position.distance_to(c.position) <= FARM_RANGE and _safe(c.position) 				and not (_wary and _too_close_to_foe(c.position)):
+		if c.deniable_by(team) and c.hp <= dmg and position.distance_to(c.position) <= FARM_RANGE and _safe(c.position) 				and not (_keeping_out() and _too_close_to_foe(c.position)):
 			var id := c.get_instance_id()
 			if not _deny_roll.has(id):
 				_deny_roll[id] = randf() < chance
@@ -2745,8 +3788,17 @@ func _lane_spot() -> Vector2:
 	if et and not _safe(spot):
 		spot.x = et.position.x - fwd * (et.RANGE + 160.0)  # the same line backing off uses: no gap to flicker in
 	var eh := _enemy_hero_alive()
-	if _wary and eh:  # outmatched: wait just outside your reach, on its own side of you
-		var keep := _threat_reach(eh) + CLEAR_MARGIN  # the same line a danger retreat counts as clear: no gap to flicker in
+	var kept: bool = _clock < _keep_out_until  # it just stepped out of your reach: it stays out
+	if _keeping_out() and eh:  # outmatched: wait just outside your reach, on its own side of you
+		# `keep` must never be SHORTER than what `_art_tick` walks out to, or the
+		# two take turns: art steps out to `_catch_reach + pad + 20`, the lane spot
+		# walks back toward the wave, art fires again — 0.21 s apart, net movement
+		# zero. Watched 2026-10-29 (t=258-266): BECKY at FULL health alternated
+		# `art:keep out` / `hold` 26 times in 8 s, `dist` 805 on every hold tick
+		# and ~750 on every keep-out tick, never getting anywhere.
+		# CLEAR_MARGIN is the same line a danger retreat counts as clear: no gap
+		# to flicker in there either.
+		var keep: float = maxf(_threat_reach(eh) + CLEAR_MARGIN, _keep_out_need if kept else 0.0)
 		var behind: float = eh.position.x - fwd * keep
 		if spot.x * fwd > behind * fwd:  # its usual spot is inside your reach: hold back
 			var mine: float = position.x * fwd
@@ -2978,6 +4030,8 @@ func _art_tick(eh: Node2D) -> bool:
 	var away: Vector2 = (position - eh.position).normalized() if d > 1.0 else Vector2(-_forward(), 0.0)
 	why = "art:keep out"  # out of your reach first; farming resumes from there
 	_shy_until = maxf(_shy_until, _clock + SHY_FOR)  # …and stays out: no walking back in to farm (hysteresis)
+	_keep_out_until = _clock + SHY_FOR  # …and the lane spot stays out too (_lane_spot)
+	_keep_out_need = need
 	_go(eh.position + away * (need + 20.0))
 	return true
 
@@ -2987,7 +4041,12 @@ func _art_tick(eh: Node2D) -> bool:
 const HUNT_CHASE := 900.0  # px: how far it runs down a hurt hero (never under their tower)
 
 
-## Has `eh` an escape ready (a dash, a blink or a BOOP it can afford)?
+## Has `eh` an escape ready (a dash, a blink or a BOOP it can afford)? CHAD's
+## POUNCE, KAREN's SHOVE, BECKY's GHOST and KYLE's BOOP — a shove rather than
+## a step, but it moves him, it breaks tethers, and he has nothing else. One
+## each, by design. Written for the diver's `wait_escape` (is YOUR way out
+## spent yet?) and now also called on `self` by `_their_burst`, which is the
+## whole point of that change: a hero's own mobility used to count for nobody.
 func _escape_ready(eh: Node2D) -> bool:
 	for s: String in SLOT_ORDER:
 		var a: Dictionary = eh.abilities[s]
@@ -3015,6 +4074,19 @@ func _dive_tick(eh: Node2D) -> bool:
 			_cast_gap = difficulty.get("cast_gap", CAST_GAP)
 			return true
 	why = "dive:chase"
+	# Cast while chasing. `_dive_tick` returns true, which short-circuits the
+	# whole order list — including its `abilities` step — so for the length of a
+	# hunt the only `cast()` reachable in the entire bot was POUNCE above. The
+	# diver switched off STARS, TRAP and FLURRY at exactly the moment the
+	# trigger says a kill is on (`hunt_at`, an enemy under 0.4 health). Spotted
+	# by the user watching a chase end with the kit unused, 2026-10-29; measured
+	# at 55 of 6,894 snapshots, 0.8% of a run — rare, but every second of it is
+	# a live kill chance, which is why it reads as glaring and barely dents the
+	# aggregates. Safe to call here: no mind sets `creeps_first`, so
+	# `_ability_target` prefers the hero; `hunt_at` < 0.5 means `_vulnerable` is
+	# true so the `hero_casts` gates pass; and both paths bail on `_cast_gap`,
+	# so this cannot double-cast with the POUNCE above.
+	_use_abilities()
 	if attack_target != eh:
 		order_attack(eh.position)
 	return true
@@ -3221,9 +4293,21 @@ func _creep_clump(reach: float, radius_: float) -> Variant:
 func _escape(to: Vector2) -> void:
 	var eh := _enemy_hero_alive()
 	var et := _enemy_tower()
-	var threatened: bool = (eh and position.distance_to(eh.position) < 650.0) or (et and et.target == self)
-	if not threatened:
-		return
+	# `_creep_dps`: a wave can kill you on the walk home, and this test counted
+	# only the enemy hero and tower — so the hero being chewed by creeps was by
+	# definition "not threatened" and never dashed out. Watched 2026-10-28:
+	# three deaths to creeps while retreating, POUNCE up the whole way.
+	var threatened: bool = (eh and position.distance_to(eh.position) < 650.0) \
+		or (et and et.target == self) or _creep_dps() > 0.0
+	# Latched, because the old test was re-asked AFTER the reaction delay and
+	# retreating is what makes it false: in the R3 1:57 death the chaser was
+	# 174 px away when the retreat began and 962 px away 0.3 s later, past the
+	# 650 threshold, so the second call returned early and no dash was ever
+	# cast. Cleared with the retreat itself (see `_react_left` below).
+	if not _escape_armed:
+		if not threatened:
+			return
+		_escape_armed = true
 	if _react_left < 0.0:  # just noticed the danger: react after its reaction time
 		_react_left = _jitter(float(difficulty.get("reaction", REACTION)))
 	if _react_left > 0.0:

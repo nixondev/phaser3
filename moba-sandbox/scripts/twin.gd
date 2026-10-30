@@ -87,7 +87,7 @@ func end(why: String) -> void:
 	hp = 0.0
 	if effects:
 		effects.add_child(Effects.Ghost.new(position, 40.0, COLOR))
-	PlayLog.event("twin_end" if not hero.is_bot else "red_twin_end",
+	PlayLog.event(hero.log_tag("twin_end"),
 		{"why": why, "absorbed": roundi(absorbed), "shots": shots})
 	if is_instance_valid(hero) and hero.twin == self:
 		hero.twin = null

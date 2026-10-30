@@ -30,6 +30,21 @@ breaking a tower fast is the earned ending. What should NOT happen is an
 early tower crumbling the moment one normal wave reaches it (hence the +600
 tower floor). Judge tower pacing by this, not by pre-overtime tower damage.
 
+**The bots now play the two acts too (user, 2026-10-28) — ✅ BUILT.** *"shouldn't
+there be more of a focus on gold before overtime and more of a focus on push
+and kills after?"* The RULES already said so and said it strictly: `WIN_GOLD`
+is **0** (removed 2026-10-02), overtime sets `Unit.no_gold` so creeps, kills
+and denies all pay nothing, and unspent gold carries over — so act 1 is the
+entire economy of the run and act 2 pays literally zero while the tower softens
++50%/min. The bots had one priority list per round, re-picked by round number
+and never by the clock inside one. Measured over 37,255 snapshots, `push` went
+**down** at the whistle (blue 19.2% → 17.9%, red 31.9% → 29.6%) and **42% of
+every last hit a bot took paid no gold** (64% in one round — though CORRECTED
+the same evening: those last hits still feed `_earn_minion`, so act-2 farming
+is an indirect push rather than dead time), with act 2
+longer than act 1 in four rounds of six. Each mind now has an `order_overtime`
+(bot.gd reads it when `Unit.no_gold`). See BALANCE.md.
+
 ## A buyable F ability (2026-10-14, idea)
 
 User: "I think there might be an F ability or something you can buy as a future idea."
@@ -2869,6 +2884,58 @@ problem, it is how ganks actually work in a MOBA most of the time. The value is
 tempo, not the kill: free farm, free tower damage and a free totem trip while
 red retreats. Given farming is what is supposed to decide runs, that is the
 right currency for it to pay in.
+
+## HP is a resource — and travel is not dead time (user, 2026-10-28)
+
+User, on the bots standing off from BECKY: *"the stick doesn't kill you on its
+own and every hero has a D and some sort of escape. A stream named chu8 used
+to say 'HP is a resource you have to use it' or basically you get no value
+from it. also Becky's stick does less damage the closer you are to it."*
+
+Three separate holes, all in the same direction — the threat model hoards.
+
+**1. The affordability sum ignores half of what a hero has.** `_in_danger` is
+`hp <= burst`: if the most they could theoretically do beats the health bar,
+leave. `_fight_hp` counts current HP, shields already up, KAREN's BRACE, RAGE's
+damage cut and rampage — and **not the D** (hero.gd `guard()`: 300 shield for
+2 s, cleanses, blocks new effects for 0.5 s, 60 s cooldown, no mana, no level,
+every hero has it). For CHAD at 800 that is +37% effective health left out of
+every fight decision. The bots do press D, 1-4 times a round, purely as a
+reflex; it is never in the sum that decides whether a fight is affordable.
+**✅ BUILT 2026-10-28** — `_fight_hp(u, guard)` + `_has_guard`, counted in full
+while up, honest about the enemy's (seen via the public ring, never read off
+their `guard_cd`).
+
+**2. Your escape counts for the enemy and never for you.** `_threat_reach(eh)`
+adds *their* dash or blink; `_damage_reach(u, other)` adds *theirs* as well
+wherever it is used as a threat. Neither function ever adds your own mobility
+as a reason to commit. POUNCE and GHOST exist in the maths only as reasons to
+be afraid of someone — `_escape_ready(eh)` already existed and asked only
+whether YOURS was spent. **✅ BUILT 2026-10-28** — `_their_burst` cuts the
+burst window to `ESCAPE_WINDOW` 1.5 s when the bot's own way out is up.
+
+**3. Distance is treated as monotonically safe, and against BECKY it is the
+dangerous axis.** Her two weapons both get *worse* up close: SHADE the beam is
+`near_damage` 0.6 / `full_at` 600 (60% damage close, full only past 600 px),
+and RUMOR — which is where her damage actually comes from — has
+**`min_range` 250**: inside that she cannot cast it at all. In the run of
+19:45 she dealt 960, of which 935 was RUMOR. Her opponent was standing at
+~1010 px, which is the best place on the map for her. A hero with a minimum
+range or a falloff should *pull* opponents in. **Not built** — it wants a
+notion of "where is this enemy weakest" that does not exist yet, and it is the
+one that actually ends the stand-off.
+
+**What WAS built from this conversation** (2026-10-28, see BALANCE.md): the
+fourth hole, and the biggest. Asked whether the bot understood stutter-stepping,
+the user described the mechanic properly: *"you base movement length on AA
+cooldown, firing between each move, so maybe you decide to go somewhere but you
+have three stops on the way there where you weave in an AA."* The bot had the
+reload maths (`_step_point`'s budget) but every candidate stop sat on a ring
+round the TARGET — orbiting, not travelling — and `_go` was a bare
+`order_move`. Travel was silent. Now `_travel_tick` weaves free attacks into
+any trip. This is the sibling of [Red plays on one axis] below: that one gave
+red the across axis while it stands still, this one gives it the along axis
+while it moves.
 
 ## Red plays on one axis (user, 2026-10-27) — ✅ BUILT
 

@@ -518,10 +518,7 @@ func guard() -> bool:
 	status_immune = GUARD_IMMUNE
 	add_shield(GUARD_SHIELD, GUARD_TIME, self, "guard")
 	effects.add_child(Effects.ShieldPuff.new(position + Vector2(0, -radius - 30), GUARD_COLOR, "D"))
-	if not is_bot:
-		PlayLog.event("guard", {})
-	elif PlayLog.recording():
-		PlayLog.event("red_guard", {})
+	PlayLog.event(log_tag("guard"), {})
 	return true
 
 
@@ -587,16 +584,25 @@ func ability_cost(slot: String) -> float:
 	return float(abilities[slot]["cost"]) * (1.0 + mod("mana_cost")) * (1.0 - Unit.ability_haste)  # Overclock; overtime
 
 
+## The play log's two sides are the two TEAMS, not player-vs-bot: team 0 is
+## always the log's "you", team 1 is always "red_<name>". In autoplay both
+## seats are bots, so splitting on `is_bot` would file every event under red
+## and leave the blue half of the log empty. In a normal run team 0 is the
+## player, so every event keeps exactly the name it had.
+func log_tag(name: String) -> String:
+	return name if team == 0 else "red_" + name
+
+
 ## The play log: your casts, or red's (with where it aimed and how far you were).
 func _log_cast(slot: String, a: Dictionary, point: Vector2) -> void:
-	if not is_bot:
+	if team == 0:
 		PlayLog.cast(slot, a, point)
 	elif PlayLog.recording():
 		var foe: Variant = get("enemy_hero")
 		var d: int = roundi(position.distance_to(foe.position)) if foe != null and is_instance_valid(foe) and foe.is_targetable() else -1
 		PlayLog.event("red_cast", {"slot": slot, "ability": a.get("name", ""), "at": [roundi(point.x), roundi(point.y)], "you_dist": d, "mana": roundi(mana)})
-		if has_method("track_cast"):
-			call("track_cast", str(a.get("name", "")), slot)  # bot.gd: did it hit?
+	if is_bot and has_method("track_cast"):
+		call("track_cast", str(a.get("name", "")), slot, point, true)  # bot.gd: did it hit, from where, aimed how far off?
 
 
 ## Afterimage: enemies have lost track of you while your decoy is up.
@@ -717,7 +723,7 @@ func on_creep_last_hit(creep: Node2D) -> void:
 	cap.owner_hero = self
 	cap.effects = effects
 	creep.get_parent().add_child.call_deferred(cap)
-	PlayLog.event("capsule_drop" if not is_bot else "red_capsule_drop", {"power": cap.power})
+	PlayLog.event(log_tag("capsule_drop"), {"power": cap.power})
 
 
 ## You opened your capsule: its power for POWER_TIME s (replacing any other).
@@ -1040,7 +1046,7 @@ func toggle_leash(c: Node2D) -> bool:
 	if leashed.has(c):
 		leashed.erase(c)
 		c.leader = null
-		PlayLog.event("unleash" if not is_bot else "red_unleash", {"kind": _leash_kind(c)})
+		PlayLog.event(log_tag("unleash"), {"kind": _leash_kind(c)})
 		return true
 	if position.distance_to(c.position) > LEASH_RANGE + c.radius:
 		leash_flash = 0.8
@@ -1054,7 +1060,7 @@ func toggle_leash(c: Node2D) -> bool:
 	c.set("camp", null)  # (leashing a creep off a totem takes it off)
 	c.leash_slot = leashed.size()
 	leashed.append(c)
-	PlayLog.event("leash" if not is_bot else "red_leash", {"kind": _leash_kind(c)})
+	PlayLog.event(log_tag("leash"), {"kind": _leash_kind(c)})
 	return true
 
 
@@ -1087,10 +1093,7 @@ func on_deny(at: Vector2, creep: Node2D = null) -> void:
 	if mod("recruit") > 0.0 and creep != null and is_instance_valid(creep) and not creep.get("risen"):
 		_raise(creep)
 	effects.add_child(Effects.DenyMark.new(at, Color("#ffca28") if not is_bot else Color("#ef9a9a")))
-	if not is_bot:
-		PlayLog.event("deny")
-	else:
-		PlayLog.event("red_deny")
+	PlayLog.event(log_tag("deny"))
 
 
 ## Recruit: the creep you just denied gets back up for a while at half health.
@@ -1476,16 +1479,24 @@ func earn_gold(amount: int, at: Vector2, last_hit: bool, auto := true) -> void:
 		mana = minf(max_mana, mana + mod("last_hit_mana"))  # Siphon
 		cooldowns["R"] = maxf(0.0, cooldowns["R"] - mod("last_hit_ult"))  # Adrenaline
 	if no_gold:  # overtime: kills pay nothing (the last hit still counts, Siphon still works)
-		if last_hit and not is_bot:
-			PlayLog.last_hit("creep", 0)
+		if last_hit:
+			_log_last_hit(0)
 		return
-	if last_hit and not is_bot:
-		PlayLog.last_hit("creep", amount)
-	elif last_hit:
-		PlayLog.event("red_last_hit", {"gold": amount})
+	if last_hit:
+		_log_last_hit(amount)
 	gold += amount
 	if not is_bot:
 		effects.add_child(Effects.GoldNumber.new(at, amount))
+
+
+## A last hit, logged on the side that took it. Team 0 also tallies the round's
+## farming metrics (last hits vs missed) — the log's "you" numbers. Red's
+## overtime last hits now log too (gold 0), where before they were invisible.
+func _log_last_hit(amount: int) -> void:
+	if team == 0:
+		PlayLog.last_hit("creep", amount)
+	else:
+		PlayLog.event("red_last_hit", {"gold": amount})
 
 
 ## EARN_EVERY last hits done: roll a creep and send it with the next wave.
@@ -1499,13 +1510,13 @@ func _earn_minion() -> void:
 	if lane_node == null:
 		return  # Training: no waves to join
 	lane_node.earn_creep(team, kind)
-	PlayLog.event("red_earned_minion" if is_bot else "earned_minion",
+	PlayLog.event(log_tag("earned_minion"),
 		{"kind": kind, "autos": _earn_autos, "of": EARN_EVERY})
 
 
 ## Called by unit.gd for every hit this hero lands: Vampirism heals.
 func on_dealt(amount: float, _hit: Dictionary = {}, victim: Node2D = null) -> void:
-	if not is_bot:
+	if team == 0:
 		PlayLog.damage_dealt(amount)
 	if mod("lifesteal") > 0.0 and is_targetable():  # Vampirism: double the share from heroes
 		var vs_hero: bool = victim != null and is_instance_valid(victim) and victim.is_in_group("heroes")
@@ -1575,8 +1586,8 @@ func take_damage(amount: float, colour: Color, big := false, quiet := false, sou
 	if not is_bot:
 		colour = HURT
 		quiet = false
-		if is_targetable():
-			PlayLog.damage_taken(amount, source)
+	if team == 0 and is_targetable():
+		PlayLog.damage_taken(amount, source)
 	super(amount, colour, big, quiet, source, hit)
 	if mod("second_wind") > 0.0 and _second_wind_cd <= 0.0 and is_targetable() and hp < max_hp * SECOND_WIND_BELOW:
 		_second_wind_cd = SECOND_WIND_EVERY  # Second Wind: a shield when you drop low
@@ -1601,12 +1612,22 @@ func _die() -> void:
 	gold -= lost
 	if lost > 0:  # both sides: the red number shows over whoever died, so red's losses are visible too
 		effects.add_child(Effects.GoldNumber.new(position + Vector2(0, -30), -lost, Color("#ef5350")))
-	if not is_bot:
-		PlayLog.death(killed_by, position)
+	if team == 0:
+		var extra := {}
+		if has_method("log_state"):  # autoplay: your seat is a bot, so say what it was doing
+			extra = {"why": str(get("why")), "leashed": leashed.size()}
+		PlayLog.death(killed_by, position, extra)
 	else:
-		if killed_by and killed_by.is_in_group("heroes") and not killed_by.is_bot:
+		if killed_by and killed_by.is_in_group("heroes") and killed_by.team == 0:
 			PlayLog.kill(position)
+		# `killer_name` is NOT optional here: the blue branch above gets it from
+		# `PlayLog.death()`, and this hand-rolled twin simply never set it, so every
+		# red death logged `killer: "hero"` with no name. In AUTOPLAY only team 0
+		# takes the branch above, so EVERY death in every headless run has been
+		# unattributable — including the A/B runs. Found 2026-10-30: 9 red deaths
+		# with a null name against the one blue death that named CHAD correctly.
 		PlayLog.event("red_death", {"at": [roundi(position.x), roundi(position.y)], "killer": PlayLog._source_kind(killed_by),
+			"killer_name": PlayLog._source_name(killed_by),
 			"why": str(get("why")), "leashed": leashed.size()})
 	respawn_in = respawn_time
 	aiming = ""

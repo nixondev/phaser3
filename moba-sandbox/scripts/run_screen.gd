@@ -33,6 +33,19 @@ const CHEERS := ["Good job!", "Nicely done!", "Tower down!", "Well played!", "Cl
 ## champ, contender, brawler, challenger) — on purpose. Instructions (tooltips,
 ## HOW_TO_PLAY, the controls hint, the Esc menu) always say "hero".
 const SCREEN_LOCK := 1.5  # after a round ends, the shop / run-over screen ignores input this long
+## Watch bots (dev only, never shipped — see _dev_tools): a bot plays your seat
+## while every run screen stays, so you can watch a full run the way you'd
+## watch a match. The toggle is on the hero-pick screen; picking a hero then
+## starts a watched run. The shop buys itself by WATCH_POLICY (the same shopper
+## autoplay uses) and sits on screen WATCH_SHOP seconds so you can read it.
+## It never stops on its own: when a run ends it waits WATCH_OVER seconds on the
+## score, then starts the next hero in the list and plays on, round the four
+## for as long as you leave it up.
+static var watch := false
+static var watch_hero := 0      # the hero this watched run is playing; the next run takes the next one
+const WATCH_POLICY := "greedy"  # tools/autoplay.gd --policy: greedy | levels | epic | random | none
+const WATCH_SHOP := 5.0         # seconds the shop stays up before the next round starts
+const WATCH_OVER := 6.0         # seconds the run-over score stays up before the next run starts
 const GOLD := Color("#ffd54f")
 const INK := Color("#10151a")
 
@@ -51,6 +64,7 @@ var _tip := {}               # the shop tooltip to draw on top this frame: {info
 var _pick_hover := ""
 var _pick_hover_prev := ""
 var _lock := 0.0
+var _watch_next := -1.0      # watch mode: counting down to the next round
 var _cheer := ""             # this win's line over the lock bar ("" after a loss)             # seconds the screen ignores clicks / Enter after a round ends
 
 
@@ -86,6 +100,14 @@ func _process(delta: float) -> void:
 		if _ending <= 0.0:
 			_round_over(lane.winner == hero.team)
 	_lock = maxf(0.0, _lock - delta)
+	if _watch_next > 0.0:  # watch mode: the shop reads itself out, then plays on
+		_watch_next -= delta
+		if _watch_next <= 0.0:
+			_watch_next = -1.0
+			if Run.phase == "over":
+				watch_next_run()
+			else:
+				next_round()
 	if visible:
 		_panel.queue_redraw()  # hover highlights
 
@@ -116,14 +138,29 @@ func _round_over(won: bool) -> void:
 		PlayLog.event("shop_open", {"gold": Run.gold})
 		PlayLog.event("red_shop", {"bought": Run.red_bought.duplicate(), "red_upgrades": Run.red_upgrades.duplicate(),
 			"red_levels": Run.red_levels.duplicate(), "red_gold_left": Run.red_gold})
+		if _watching():  # nobody is holding the mouse: shop by policy and play on
+			for p: Dictionary in Run.policy_shop(WATCH_POLICY):
+				if p["tier"] == "level":
+					PlayLog.event("buy_level", {"slot": p["slot"], "level": p["level"], "gold_left": p["gold_left"]})
+				else:
+					PlayLog.event("buy", {"id": p["id"], "tier": p["tier"], "gold_left": p["gold_left"]})
+			_refresh()  # the offers and gold it just spent
+			_watch_next = WATCH_SHOP
 		_shop_screenshot.call_deferred()
 	else:
 		PlayLog.run_end("complete" if Run.phase == "won" else "lost R%d" % Run.round_num)
+		if _watching():
+			_watch_next = WATCH_OVER  # read the score, then the next hero goes
 
 
 # ------------------------------------------------------------------ actions
 
 func pick(i: int) -> void:
+	if watch:
+		watch_hero = i
+		get_parent().start_watch(i)  # dev: a bot takes your seat; the scene rebuilds
+		return
+	get_parent().clear_watch()  # an earlier watched run may have left a bot in your seat
 	Run.start(i)
 	hero.set_hero(i)
 	hero.start_ult_cooldown()  # picking rebuilt the hero (cooldowns reset): round 1 opens with the ultimate cooling down too
@@ -178,6 +215,11 @@ func next_round() -> void:
 	reload.emit()
 
 
+## A bot is in your seat right now (Watch bots), so no one is going to click.
+func _watching() -> bool:
+	return get_parent().has_method("watching") and bool(get_parent().watching())
+
+
 ## Dev tools (the Cards view): only when run from the project — never in an
 ## exported build, which doesn't even contain their scripts (export_presets.cfg
 ## excludes them), so they're loaded by path, not preloaded.
@@ -222,6 +264,16 @@ func continue_run() -> void:
 		PlayLog.event("continue", {"round": Run.round_num, "phase": Run.phase})
 	get_tree().paused = false
 	reload.emit()
+
+
+## Watch mode: that run is done — take the next hero and keep playing, so the
+## view cycles KYLE → CHAD → KAREN → BECKY → KYLE for as long as it's left up.
+func watch_next_run() -> void:
+	Run.clear_continue()
+	Run.reset()
+	watch_hero = (watch_hero + 1) % Heroes.LIST.size()
+	get_tree().paused = false
+	get_parent().start_watch(watch_hero)
 
 
 func new_run() -> void:
@@ -376,6 +428,8 @@ func _draw_pick(view: Vector2) -> void:
 	if RunHistoryScript.has_runs():
 		row2.append(["Run history", open_history, Color("#ffd54f").darkened(0.3)])
 	if _dev_tools():
+		row2.append(["Watch bots: %s" % ("ON — pick a hero" if watch else "OFF"),
+			func() -> void: watch = not watch, Color("#4dd0e1") if watch else Color("#546e7a")])
 		row2.append(["Cards", open_cards, Color("#ba68c8")])
 	var rx := view.x / 2.0 - (row2.size() * bw + (row2.size() - 1) * 24.0) / 2.0
 	for b: Array in row2:

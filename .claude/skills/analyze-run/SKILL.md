@@ -44,6 +44,7 @@ top of `moba-sandbox/scripts/play_log.gd`.
    python moba-sandbox/tools/analyze_log.py <stamp>      # a named run
    python moba-sandbox/tools/analyze_log.py --round N    # + one round in detail
    python moba-sandbox/tools/analyze_log.py latest --any # include an unfinished run
+   python moba-sandbox/tools/analyze_log.py --dir autoplay --list   # bot-vs-bot runs
    ```
    Training sessions log too, on the same switch (`try_<stamp>.jsonl`): the
    script prints them as a session report — hero, switches, capsule counts and
@@ -133,8 +134,17 @@ top of `moba-sandbox/scripts/play_log.gd`.
 - **Bot mistakes should look human, never stupid**: flag anything that looks
   stupid (standing still being hit, running into a tower, wasting an ability)
   as a likely bug.
-- **Autoplay logs are different**: both sides are bots there, so "red_*" events
-  can come from blue too; real games have one bot (red).
+- **Autoplay logs are a mirror match, not a broken run.** `tools/autoplay.cmd
+  --playlog` writes the same `run_*.jsonl`, with a bot in your seat, into
+  `playlogs/autoplay` (`--dir autoplay`). Which side an event belongs to is the
+  TEAM: team 0 is always "you", team 1 always `red_*`. Both seats therefore log
+  a brain, and the report prints a "your seat" section beside red's. Read them
+  as A/B material (same seed, one knob changed), not as how a human plays:
+  your seat is a bot at smartness 1.0 with no difficulty handicap, and it shops
+  by `--policy`, not by judgement. Watch for: `blue_ledger` is written from
+  blue's own seat, so its "you:" keys mean RED (the report relabels them);
+  and round 1 is NOT tuned for a full-strength bot, so a R1 loss there says
+  nothing about the "round 1 easy" rule.
 - **New ideas** that come out of an analysis go in `moba-sandbox/IDEAS.md` when
   the user wants them kept; tuning changes go in `moba-sandbox/BALANCE.md`'s
   change log when made.

@@ -260,18 +260,21 @@ static func start(hero: int) -> void:
 
 
 ## Red's late ramp this round (1.0 before RED_RAMP_FROM, then +RED_RAMP_STEP a round).
-static func red_ramp() -> float:
-	return 1.0 + RED_RAMP_STEP * maxi(0, maxi(round_num, 1) - RED_RAMP_FROM + 1)
+static func red_ramp(at_round := 0) -> float:
+	return 1.0 + RED_RAMP_STEP * maxi(0, maxi(at_round if at_round > 0 else round_num, 1) - RED_RAMP_FROM + 1)
 
 
 ## Red's strength this round: a DIFFICULTY row, and past the table the last
 ## row grown for every extra round (endless).
-static func difficulty() -> Dictionary:
-	var d := _difficulty().duplicate()
-	var stat := maxf(STAT_FLOOR, 1.0 + STAT_STEP * (maxi(round_num, 1) - STAT_ANCHOR_ROUND))
+## Red's level. `at_round` asks for the ladder at some other round instead of
+## this one — what blue_difficulty() uses to pin your stand-in (it must not
+## climb), and handy for reading the curve off in one call.
+static func difficulty(at_round := 0) -> Dictionary:
+	var r := maxi(at_round if at_round > 0 else round_num, 1)
+	var d := _difficulty(r).duplicate()
+	var stat := maxf(STAT_FLOOR, 1.0 + STAT_STEP * (r - STAT_ANCHOR_ROUND))
 	for k: String in STAT_KEYS:  # one gentle line for red's stats (the table keeps the bot's behaviour)
 		d[k] = stat
-	var r := maxi(round_num, 1)
 	d["deny_chance"] = clampf(DENY_START + DENY_STEP * (r - 1), 0.0, DENY_MAX)
 	d["last_hit_chance"] = clampf(LAST_HIT_START + LAST_HIT_STEP * (r - 1), 0.0, LAST_HIT_MAX)
 	d["reaction"] = lerpf(REACTION_START, REACTION_FLOOR, clampf(float(r - 1) / float(REACTION_FLOOR_ROUND - 1), 0.0, 1.0))
@@ -283,19 +286,19 @@ static func difficulty() -> Dictionary:
 	if r < STAT_ANCHOR_ROUND:  # the tower's own, quicker start
 		d["tower_hp"] = lerpf(TOWER_HP_START, 1.0, float(r - 1) / float(STAT_ANCHOR_ROUND - 1))
 		d["creeps"] = lerpf(CREEPS_START, 1.0, float(r - 1) / float(STAT_ANCHOR_ROUND - 1))
-	var ramp := red_ramp()
+	var ramp := red_ramp(r)
 	if ramp != 1.0:
 		for k: String in STAT_KEYS:
 			d[k] = float(d[k]) * ramp
-	if bot_stats_from > 0 and round_num >= bot_stats_from:  # experiment: skill-only bot
+	if bot_stats_from > 0 and r >= bot_stats_from:  # experiment: skill-only bot
 		d = d.duplicate()
 		d["bot_hp"] = 1.0
 		d["bot_damage"] = 1.0
 	return d
 
 
-static func _difficulty() -> Dictionary:
-	var i := clampi(round_num - 1, 0, 9999)
+static func _difficulty(at_round := 0) -> Dictionary:
+	var i := clampi((at_round if at_round > 0 else round_num) - 1, 0, 9999)
 	if i < DIFFICULTY.size():
 		return DIFFICULTY[i]
 	var d: Dictionary = DIFFICULTY[DIFFICULTY.size() - 1].duplicate()
@@ -304,6 +307,43 @@ static func _difficulty() -> Dictionary:
 	d["cast_gap"] = maxf(CAST_GAP_FLOOR, float(d["cast_gap"]) * sharpen)
 	d["aim_error"] = maxf(AIM_ERROR_FLOOR, float(d["aim_error"]) * sharpen)
 	return d
+
+
+## YOUR SEAT when a bot plays it (autoplay / the dev Watch-bots mode) — a
+## FIXED level, never the climbing ladder. It has to be fixed: red escalates,
+## so if your stand-in escalated too, a watched match would show nothing and a
+## bot-vs-bot A/B would have two moving parts instead of one.
+##
+## BLUE_ROUND 9 is a deliberate choice, not a round number pulled out of the
+## air: it is the last round before SUPER_FROM, i.e. the top of the ladder this
+## game still calls human. That is reaction 0.25 (REACTION_FLOOR), no hesitation
+## left, last hits 0.95 (LAST_HIT_MAX), denies 0.8 (DENY_MAX) and the cast gap
+## already down at its 0.6 floor. A strong player, not a machine — past 9 the
+## ladder is explicitly "beyond human" (SUPER).
+##
+## It also replaces a bug: blue used to be handed an EMPTY difficulty dict, so
+## every difficulty.get(key, fallback) took its fallback. Two of those fallbacks
+## (CAST_GAP 1.1, AIM_ERROR 35.0) are exactly DIFFICULTY[3] — round 4 — so your
+## stand-in was frozen at round-4 sharpness while red sharpened past it from
+## round 5 on, and it never hesitated (fallback 0.0) while denying and last
+## hitting perfectly (fallbacks 1.0) — timid and superhuman at the same time.
+## How readily a bot notices it is in trouble (bot.gd `caution`). FLAT on
+## purpose — it is NOT on the ladder, so climbing makes red better, never more
+## frightened. 0.5 sits between the old dull bot's effective 0.3 and the top
+## bot's 1.0, which is roughly how red felt in the rounds that played well.
+## Lower = bolder and dies more; higher = the old timid late game.
+const CAUTION := 0.5
+## -1 = the OLD behaviour, caution tracking smartness, kept so the change can
+## be A/B'd against what it replaced rather than against a guess at it.
+static var red_caution := CAUTION   # --caution      (-1: follow smartness)
+static var blue_caution := CAUTION  # --blue-caution (-1: follow smartness)
+
+static var blue_round := 9        # --blue-round
+static var blue_smartness := 1.0  # --blue-smartness (1.0 = notices everything; see bot.gd DUMB)
+
+
+static func blue_difficulty() -> Dictionary:
+	return difficulty(blue_round)
 
 
 ## Record the round reached if it's a new best (called when a run ends).
@@ -525,6 +565,62 @@ static func red_shop() -> Array:
 
 
 ## Leave the shop for the next round.
+## Shop for the blue side by a fixed policy instead of by hand — autoplay
+## (--policy) and the dev Watch-bots mode share this one shopper:
+##   greedy  the priciest affordable card or ability level, repeat
+##   levels  ability levels first (Q/W/E/R), then cards
+##   epic    only epics, so it saves up for them
+##   random  a random affordable card / level
+##   none    buy nothing (the no-upgrades baseline)
+## Returns one dict per pick, in order: {id, tier, gold_left} — plus slot /
+## level for an ability level, whose tier is "level". The CALLER writes the
+## play-log lines: play_log.gd preloads this script, so this one can't preload it.
+static func policy_shop(policy: String) -> Array:
+	var offers := shop_offers()
+	var cards: Array = []
+	for tier: String in Upgrades.TIER_ORDER:
+		cards.append_array(offers[tier])
+	if policy != "epic":
+		cards.append_array(offers.get("wave", []))
+	var picks: Array = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([run_seed, round_num, "shop"])
+	while true:
+		# everything affordable right now: {id, price, level?}
+		var can: Array = []
+		if policy != "none":
+			if policy != "epic":
+				for slot: String in ["Q", "W", "E", "R"]:
+					var to: int = levels[slot] + 1
+					if to <= Heroes.MAX_LEVEL and level_cost(slot, to) <= gold:
+						can.append({"id": slot + "+", "price": level_cost(slot, to), "level": slot})
+			for u: Dictionary in cards:
+				if card_cost(u) <= gold and Upgrades.can_offer(u, upgrades) \
+						and (policy != "epic" or u["tier"] == "epic"):
+					can.append({"id": u["id"], "price": card_cost(u), "card": u})
+		if can.is_empty():
+			break
+		var pick: Dictionary = can[0]
+		if policy == "random":
+			pick = can[rng.randi_range(0, can.size() - 1)]
+		else:
+			for o: Dictionary in can:
+				var better: bool = o["price"] > pick["price"]
+				if policy == "levels" and o.has("level") != pick.has("level"):
+					better = o.has("level")  # levels first
+				if better:
+					pick = o
+		if pick.has("level"):
+			buy_level(pick["level"])
+			picks.append({"id": pick["id"], "tier": "level", "slot": pick["level"],
+				"level": levels[pick["level"]], "gold_left": gold})
+		else:
+			buy(pick["id"])
+			cards.erase(pick["card"])  # one purchase per card, like the real shop
+			picks.append({"id": pick["id"], "tier": pick["card"]["tier"], "gold_left": gold})
+	return picks
+
+
 static func next_round() -> void:
 	round_num += 1
 	phase = "play"

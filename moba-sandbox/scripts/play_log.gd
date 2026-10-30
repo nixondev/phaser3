@@ -11,7 +11,7 @@ extends RefCounted
 ##   run_<stamp>.jsonl   the timeline, one JSON event per line: run/round
 ##                       start and end, last hits, missed last hits, casts,
 ##                       deaths and kills, shop actions, pauses, and a
-##                       snapshot every SNAPSHOT_EVERY seconds (each hero's
+##                       snapshot every snapshot_every seconds (each hero's
 ##                       line carries `near`: the creeps within NEAR_CREEPS of
 ##                       it as [yours, red's], and, only while they are up,
 ##                       `power` / `power_left`, `twin` and `shield` — the whole
@@ -45,12 +45,23 @@ extends RefCounted
 ##                       snapshot; its build and skill at round start (its
 ##                       personality only in dev runs — never in a shipped log)
 ##   run_<stamp>.json    the run summary in autoplay's format (policy
-##                       "human"), so tools/combine_reports.py can put your
+##                       "human", or autoplay's shopping policy when a bot
+##                       played it), so tools/combine_reports.py can put your
 ##                       runs next to the bots'
 ##   run_<stamp>/*.png   screenshots at deaths, round ends and the shop
 ##   try_<stamp>.jsonl   a Training session, same switch: the event stream
 ##                       only (slim snapshots, no round machinery or summary)
 ##                       — for testing things like power-ups
+##
+## WHICH SIDE AN EVENT BELONGS TO IS THE TEAM, NOT PLAYER-VS-BOT. Team 0 is
+## always "you", team 1 is always "red_<name>" (hero.gd log_tag). That matters
+## because tools/autoplay.gd --playlog writes these same logs with a bot in
+## your seat: both sides then carry a brain, so a log can have `why` / `flags`
+## / `blue_ledger` for team 0 as well as red_why / red_ledger for team 1, and
+## round_start carries a `blue` block (mind + smartness) beside `red`. run_start
+## names the `policy` that played it ("human", or autoplay's shopping policy).
+## One catch: a bot's ledger is written from ITS OWN point of view, so the
+## "you:" keys inside `blue_ledger` mean damage to and from RED.
 ##
 ## Everything here is static: the run spans several scene reloads.
 
@@ -66,6 +77,7 @@ const RACE_EVERY := 15.0        # s between tower-race samples in the round summ
 
 static var dir := "user://playlogs"
 static var enabled := false
+static var snapshot_every := SNAPSHOT_EVERY  # autoplay's --snapshot-every lowers it: a 10-run x 10-round batch at 0.25 s is ~50 MB
 static var clock := 0.0         # round time, advanced by the probe (stops while paused)
 static var viewport: Viewport   # for screenshots, set by the probe
 
@@ -74,6 +86,8 @@ static var _run_id := ""
 static var _run := {}
 static var _round := {}
 static var _shots := 0
+static var _file: FileAccess   # the open .jsonl (reopening it per event made headless autoplay crawl)
+static var _file_path := ""
 
 
 # ------------------------------------------------------------------ switch
@@ -112,6 +126,21 @@ static func set_enabled(on: bool) -> void:
 			run_end("log switched off")
 
 
+## Autoplay switches the log on for its own runs, into its own folder and at
+## its own snapshot rate, without touching the saved setting the game reads.
+static func force_on(folder_path: String, every: float) -> void:
+	_load()
+	enabled = true
+	dir = folder_path
+	snapshot_every = every
+
+
+## The log being written right now ("" when nothing is), so a caller can name
+## the file it produced.
+static func run_id() -> String:
+	return _run_id
+
+
 static func folder() -> String:
 	if dir == "user://playlogs" and OS.has_feature("template"):  # an exported build: beside the .exe
 		var beside := OS.get_executable_path().get_base_dir().path_join("playlogs")
@@ -133,20 +162,27 @@ static func _load() -> void:
 
 # ------------------------------------------------------------------ run / round
 
-static func run_start() -> void:
+## `policy` labels who was at the controls: "human" for a played run, or
+## autoplay's shopping policy when a bot ran it (combine_reports.py reads it).
+static func run_start(policy := "human") -> void:
 	if not is_on():
 		return
 	training_end("run starting")  # (a Training session left open: close it)
 	DirAccess.make_dir_recursive_absolute(folder())
-	_run_id = "run_" + Time.get_datetime_string_from_system().replace(":", "-")
+	var base := "run_" + Time.get_datetime_string_from_system().replace(":", "-")
+	_run_id = base
+	var n := 1
+	while FileAccess.file_exists(folder().path_join(_run_id + ".jsonl")):
+		n += 1  # autoplay finishes runs inside one second; the stamp alone would collide
+		_run_id = "%s_%d" % [base, n]
 	_shots = 0
-	_run = {"run": 1, "seed": Run.run_seed, "hero": Heroes.LIST[Run.hero_index]["name"], "policy": "human",
+	_run = {"run": 1, "seed": Run.run_seed, "hero": Heroes.LIST[Run.hero_index]["name"], "policy": policy,
 		"rounds": [], "result": "in progress", "build": [], "levels": Run.levels.duplicate(), "reached": 0}
 	var version: String = BuildVersion.VERSION
 	if OS.is_debug_build() and not OS.has_feature("template"):
 		version = "dev (after v%s)" % version  # run from the project: code may be newer than the last build
 	var hero_script: Variant = load("res://scripts/hero.gd")
-	event("run_start", {"hero": _run["hero"], "seed": Run.run_seed, "version": version,
+	event("run_start", {"hero": _run["hero"], "seed": Run.run_seed, "version": version, "policy": policy,
 		"settings": {"cast_indicator": bool(hero_script.cast_indicator())}})
 
 
@@ -165,11 +201,16 @@ static func round_start(main: Node) -> void:
 	var red := {}
 	if bot:
 		red = {"upgrades": Run.red_upgrades.duplicate(), "levels": Run.red_levels.duplicate(), "gold": bot.gold,
-			"smartness": snappedf(float(bot.get("smartness")), 0.01)}
+			"smartness": snappedf(float(bot.get("smartness")), 0.01), "caution": snappedf(float(bot.get("caution")), 0.01)}
 		if dev():
 			red["personality"] = str(bot.get("mind_name")) if str(bot.get("mind_name")) != "" else str(bot.get("personality"))  # its hero's own personality (or a pinned template)
-	event("round_start", {"hero": _round["hero"], "bot_hero": _round["bot_hero"], "gold": main.hero.gold,
-		"levels": Run.levels.duplicate(), "upgrades": Run.upgrades.duplicate(), "difficulty": Run.difficulty(), "red": red})
+	var d := {"hero": _round["hero"], "bot_hero": _round["bot_hero"], "gold": main.hero.gold,
+		"levels": Run.levels.duplicate(), "upgrades": Run.upgrades.duplicate(), "difficulty": Run.difficulty(), "red": red}
+	if main.hero.has_method("log_state"):  # autoplay: your seat is a bot as well, so say which mind it is
+		d["blue"] = {"smartness": snappedf(float(main.hero.get("smartness")), 0.01),
+			"caution": snappedf(float(main.hero.get("caution")), 0.01),
+			"personality": str(main.hero.get("mind_name")) if str(main.hero.get("mind_name")) != "" else str(main.hero.get("personality"))}
+	event("round_start", d)
 
 
 static func round_end(main: Node, outcome: String) -> void:
@@ -178,8 +219,9 @@ static func round_end(main: Node, outcome: String) -> void:
 	var lane: Node2D = main.lane
 	var hero: Node2D = main.hero
 	var bot: Node2D = main.bot
-	if bot != null and is_instance_valid(bot) and bot.has_method("flush_open_casts"):
-		bot.flush_open_casts()  # the last casts of the round still have their hits pending
+	for h: Variant in [hero, bot]:  # the last casts of the round still have their hits pending (both seats, under autoplay)
+		if h != null and is_instance_valid(h) and h.has_method("flush_open_casts"):
+			h.flush_open_casts()
 	var rec := {
 		"round": Run.round_num, "outcome": outcome, "time": snappedf(clock, 0.1),
 		"gold_earned": hero.gold - int(_round["gold_start"]), "gold_after": hero.gold,
@@ -193,6 +235,8 @@ static func round_end(main: Node, outcome: String) -> void:
 	}
 	if bot and bot.has_method("ledger_summary"):
 		rec["red_ledger"] = bot.ledger_summary()  # red's damage by source, both ways, and last hits it skipped
+	if hero.has_method("ledger_summary"):
+		rec["blue_ledger"] = hero.ledger_summary()  # autoplay only: the same ledger for your seat
 	rec["metrics"] = round_metrics(rec, _round)
 	rec["tower_damage"] = {"yours": _rounded(_round["tower_damage"][0]), "reds": _rounded(_round["tower_damage"][1])}
 	rec["creep_deaths"] = {"yours": _round["creep_deaths"][0], "reds": _round["creep_deaths"][1]}
@@ -253,14 +297,16 @@ static func creep_died(team: int, killer: Variant, by_ability: bool) -> void:
 	d[key] = int(d.get(key, 0)) + 1
 
 
-## Who `s` is, seen from a unit of `team`: you, red, creeps, tower, totem, siege, other.
+## Who `s` is: you, red, creeps, tower, totem, siege, other. Team 0 is "you"
+## (see hero.gd log_tag) — under autoplay your seat is a bot, so splitting on
+## is_bot here labelled red's own creep kills "red attack".
 static func _who(s: Variant, _team: int) -> String:
 	if s == null or not is_instance_valid(s):
 		return "other"  # (an attacker that died before its shot landed)
 	if s.is_in_group("siege_minions"):
 		return "siege"
 	if s.is_in_group("heroes"):
-		return "red" if s.get("is_bot") else "you"
+		return "you" if int(s.get("team")) == 0 else "red"
 	if s.is_in_group("creeps"):
 		return "creeps"
 	if s.is_in_group("towers"):
@@ -357,8 +403,11 @@ static func cast(slot: String, a: Dictionary, at := Vector2.INF) -> void:
 	event("cast", d)
 
 
-static func death(killer: Variant, at: Vector2) -> void:
-	event("death", {"killer": _source_kind(killer), "killer_name": _source_name(killer), "at": _v(at)})
+## `extra` is what a bot in the player seat adds (autoplay): why it was there.
+static func death(killer: Variant, at: Vector2, extra := {}) -> void:
+	var d := {"killer": _source_kind(killer), "killer_name": _source_name(killer), "at": _v(at)}
+	d.merge(extra)
+	event("death", d)
 	screenshot("death")
 
 
@@ -366,7 +415,7 @@ static func kill(at: Vector2) -> void:
 	event("kill", {"at": _v(at)})
 
 
-## Position / health of everything that matters, every SNAPSHOT_EVERY s.
+## Position / health of everything that matters, every snapshot_every s.
 static func snapshot(main: Node) -> void:
 	var hero: Node2D = main.hero
 	var bot: Node2D = main.bot
@@ -424,6 +473,8 @@ static func _near(creeps: Array, pos: Vector2) -> Array:
 static func _hero_snap(h: Node2D, creeps: Array) -> Dictionary:
 	var d := {"at": _v(h.position), "hp": roundi(h.hp), "mana": roundi(h.mana),
 		"alive": h.is_targetable(), "near": _near(creeps, h.position)}
+	if h.has_method("log_state"):
+		d.merge(h.log_state())  # what the brain is doing: red always, and your seat too under autoplay
 	if str(h.get("power")) != "" and float(h.get("power_left")) > 0.0:
 		d["power"] = h.power  # a timed capsule power-up running now (rampage / pierce)
 		d["power_left"] = snappedf(h.power_left, 0.1)
@@ -464,10 +515,8 @@ static func _at_towers(main: Node, creeps: Array) -> Array:
 
 ## Red in a snapshot: where, health, mana, gold, and what it's doing (bot.gd log_state).
 static func _bot_snap(bot: Node2D, creeps: Array) -> Dictionary:
-	var d := _hero_snap(bot, creeps)
+	var d := _hero_snap(bot, creeps)  # (log_state is merged in there, for whichever seat has one)
 	d["gold"] = bot.gold
-	if bot.has_method("log_state"):
-		d.merge(bot.log_state())
 	return d
 
 
@@ -511,11 +560,14 @@ static func event(type: String, data: Dictionary = {}) -> void:
 	var e := {"t": snappedf(clock, 0.01), "round": Run.round_num, "type": type}
 	e.merge(data)
 	var path := folder().path_join(_run_id + ".jsonl")
-	var f := FileAccess.open(path, FileAccess.READ_WRITE) if FileAccess.file_exists(path) else FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return
-	f.seek_end()
-	f.store_line(JSON.stringify(e))
+	if _file == null or not _file.is_open() or _file_path != path:
+		_file = FileAccess.open(path, FileAccess.READ_WRITE) if FileAccess.file_exists(path) else FileAccess.open(path, FileAccess.WRITE)
+		_file_path = path
+		if _file == null:
+			return
+		_file.seek_end()
+	_file.store_line(JSON.stringify(e))
+	_file.flush()  # every line hits disk, so a crash loses nothing (as it did when each event reopened the file)
 
 
 static func _save_summary() -> void:

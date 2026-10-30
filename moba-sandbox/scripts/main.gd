@@ -47,9 +47,13 @@ static var training_upgrades: Array = []
 static var training_levels := {"Q": 1, "W": 1, "E": 1, "R": 1}
 ## Lane mode gets an enemy hero bot (tests turn it off).
 static var bot_enabled := true
+## `autoplay` = a bot plays your seat. `driven` = a tool drives the rounds, so
+## no run screens, pause menu or Training shop are built. Headless autoplay sets
+## both; the dev Watch-bots mode sets only `autoplay`, keeping the real screens.
 ## A bot plays your seat and no run screens open; tools/autoplay.gd drives
 ## the run instead (balance testing).
 static var autoplay := false
+static var driven := false   # tools/autoplay.gd drives the rounds: build no UI
 
 var hero: Node2D
 var lane: Node2D  # null in training mode
@@ -58,7 +62,9 @@ var bot: Node2D   # the enemy hero bot, or null
 
 func _ready() -> void:
 	get_tree().paused = false  # the run screen pauses again if it's open
-	Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+	# confining the cursor is for aiming; with a bot in your seat it would just
+	# trap the mouse in the window (watch mode, or a windowed autoplay run)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if autoplay else Input.MOUSE_MODE_CONFINED
 	var ground: Node2D = GroundScript.new()
 	add_child(ground)
 
@@ -81,6 +87,7 @@ func _ready() -> void:
 			bot.difficulty = Run.difficulty()
 			bot.personality = Run.red_personality_for(bot.pick)  # never shown: learned by playing it
 			bot.smartness = Run.red_smartness_now()
+			bot.caution = Run.red_caution if Run.red_caution >= 0.0 else bot.smartness  # flat: the ladder raises skill, not fear (-1 restores the old lockstep)
 			bot.upgrade_ids = Run.red_upgrades.duplicate()  # red's build from its shopping
 			bot.ability_levels = Run.red_levels.duplicate()
 			bot.gold = Run.red_gold
@@ -91,9 +98,12 @@ func _ready() -> void:
 		lane.bot = bot
 		lane.difficulty = Run.difficulty()
 		lane.wave_mods = [Upgrades.wave_mods(Run.upgrades), Upgrades.wave_mods(Run.red_upgrades)]
-		if autoplay:  # the two bots face each other; yours plays at full strength
+		if autoplay:  # the two bots face each other; yours plays a fixed strong human
 			hero.enemy_hero = bot
 			hero.lane = lane
+			hero.difficulty = Run.blue_difficulty()  # NOT Run.difficulty(): your stand-in must not climb with red
+			hero.smartness = Run.blue_smartness
+			hero.caution = Run.blue_caution if Run.blue_caution >= 0.0 else hero.smartness
 		add_child(lane)
 		hero.spawn = LaneScript.base_of(0)
 		# the run carries over: hero, upgrades, gold; no switching mid-run
@@ -131,6 +141,8 @@ func _ready() -> void:
 	var cam: Camera2D = CameraRigScript.new()  # free camera: edge-pan, Space to hero, Y to lock
 	cam.name = "Camera"
 	cam.hero = hero
+	cam.locked = autoplay  # watching a bot: follow it by default (Y unlocks), and
+	# the lock skips edge panning, so an idle cursor can't drift the view away
 	add_child(cam)
 
 	var bar: CanvasLayer = AbilityBarScript.new()
@@ -143,7 +155,7 @@ func _ready() -> void:
 	hero.no_mana = lane == null and training_no_mana
 	add_child(bar)
 
-	if lane and not autoplay:
+	if lane and not driven:
 		var screen: CanvasLayer = RunScreenScript.new()  # hero pick, shop, run over
 		screen.name = "RunScreen"
 		screen.hero = hero
@@ -151,13 +163,13 @@ func _ready() -> void:
 		screen.reload.connect(func() -> void: get_tree().reload_current_scene())
 		add_child(screen)
 
-	if lane and not autoplay and PlayLog.recording() and Run.phase == "play":
-		start_play_log_probe()
-	elif lane == null and not autoplay and PlayLog.is_on():  # Training logs too (try_*.jsonl), same switch
+	if lane and PlayLog.recording() and Run.phase == "play":
+		start_play_log_probe()  # autoplay logs too (tools/autoplay.gd --playlog), from both bots' point of view
+	elif lane == null and not driven and PlayLog.is_on():  # Training logs too (try_*.jsonl), same switch
 		PlayLog.training_start(self)
 		start_play_log_probe()
 
-	if not autoplay:
+	if not driven:
 		var pause: CanvasLayer = PauseMenuScript.new()  # Esc
 		pause.name = "PauseMenu"
 		pause.hero = hero
@@ -170,7 +182,7 @@ func _ready() -> void:
 			get_tree().reload_current_scene())
 		add_child(pause)
 
-	if lane == null and not autoplay:  # Training's free shop (B, or the HUD button)
+	if lane == null and not driven:  # Training's free shop (B, or the HUD button)
 		var shop: CanvasLayer = TrainingShopScript.new()
 		shop.name = "TrainingShop"
 		shop.main = self
@@ -247,6 +259,29 @@ func apply_training_build() -> void:
 
 
 ## Straight into Training (the opening screen's button).
+## Dev Watch-bots mode: put a bot in your seat and rebuild the scene, keeping
+## every run screen. The hero-pick screen's toggle starts it; clear_watch()
+## hands the seat back.
+func start_watch(i: int) -> void:
+	autoplay = true
+	Run.start(i)
+	Run.save_continue()
+	if PlayLog.is_on():
+		PlayLog.run_start("watch")
+	get_tree().reload_current_scene()  # your seat has to be rebuilt as a bot
+
+
+func clear_watch() -> void:
+	autoplay = false
+
+
+## A bot is in your seat (Watch bots, or a windowed autoplay run). An instance
+## method on purpose: run_screen.gd can't preload main.gd (main preloads it),
+## so it has only get_parent() to ask through.
+func watching() -> bool:
+	return autoplay and not driven
+
+
 func start_training() -> void:
 	mode = "training"
 	get_tree().reload_current_scene()

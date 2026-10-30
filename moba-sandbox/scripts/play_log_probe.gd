@@ -1,7 +1,7 @@
 extends Node
 ## Added by main during a round while the play log is recording: keeps the
 ## round clock (it stops while the game is paused), gives the log a viewport
-## for screenshots, and takes a snapshot every PlayLog.SNAPSHOT_EVERY seconds.
+## for screenshots, and takes a snapshot every PlayLog.snapshot_every seconds.
 
 const PlayLog := preload("res://scripts/play_log.gd")
 
@@ -18,5 +18,5 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	PlayLog.clock += delta
 	if PlayLog.clock >= _next and (main.lane == null or main.lane.winner < 0):
-		_next = PlayLog.clock + PlayLog.SNAPSHOT_EVERY
+		_next = PlayLog.clock + PlayLog.snapshot_every
 		PlayLog.snapshot(main)

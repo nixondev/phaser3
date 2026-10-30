@@ -254,6 +254,25 @@ func worthless() -> bool:
 	return bounty <= 0 or no_gold  # (no_gold: the overtime flag, unit.gd)
 
 
+## The totem our leader has walked us to: our own side's, with the LEADER
+## itself inside the latch ring (in_latch reads a hero the same way it reads a
+## creep — same team test, same radius maths).
+##
+## Followers hold a line BEHIND the hero, and the line is both offset and
+## one-sided: slot 2 sits 70 px back and 67.5 px across, ~97 px from the hero,
+## and the slots never re-pack when a creep leaves, so a third can sit further
+## still. The hero cannot stand on the pole (the totem is solid), so it is
+## already ~70 px out — which put the back of a three-creep load outside the
+## ring while the front two latched. The hero then waited on a creep that was
+## never going to arrive. Found by the user watching BECKY with Command
+## (+1 leash point), 2026-10-28.
+func _leader_ring() -> Node2D:
+	for t: Node2D in get_tree().get_nodes_in_group("totems"):
+		if t.in_latch(leader):
+			return t
+	return null
+
+
 ## Led into its own side's totem ring: latch on (off the leash, the points are free).
 func _try_latch() -> bool:
 	for t: Node2D in get_tree().get_nodes_in_group("totems"):
@@ -308,8 +327,12 @@ func _follow_leader(delta: float) -> void:
 		dest = t.position
 	else:
 		target = null
-		var side: Vector2 = leader.facing.orthogonal() * (45.0 * (leash_slot - 0.5))
-		dest = leader.position - leader.facing * 70.0 + side  # just behind the hero
+		var ring := _leader_ring()
+		if ring != null:  # led into the ring: come in, whatever the formation says
+			dest = ring.position
+		else:
+			var side: Vector2 = leader.facing.orthogonal() * (45.0 * (leash_slot - 0.5))
+			dest = leader.position - leader.facing * 70.0 + side  # just behind the hero
 		if position.distance_to(dest) < 25.0:
 			push_out()
 			return
@@ -360,6 +383,35 @@ func _attack() -> void:
 			TEAM_COLORS[team].lightened(0.4), quiet, 5.0, self))
 
 
+## What this creep is doing to `u` per second right now — 0 unless it is an
+## enemy of `u` and already close enough to swing. The bot sums these in its
+## danger check (bot.gd `_their_burst`).
+##
+## Until 2026-10-28 creeps were in NO part of the bot's threat model: every
+## danger function took the enemy HERO and compared the two of them. A hero
+## could therefore stand in a full wave and read itself as safe — watched live
+## that evening, blue at smartness 1.0 went from 94% health to dead in four
+## seconds with six enemy creeps on it and nothing in its model that could
+## have seen them.
+func dps_on(u: Node2D) -> float:
+	if not is_targetable() or team == u.team:
+		return 0.0
+	if position.distance_to(u.position) - radius - u.radius > float(_stats["range"]):
+		return 0.0  # not in reach yet: conservative on purpose, this is a floor not a forecast
+	return float(_stats["damage"]) * power / maxf(float(_stats["interval"]) * attack_time_mult(), 0.05)
+
+
+## Could this creep hit a unit of radius `r` standing at `p`? The geometry of
+## `dps_on` without the damage, so the bot can ask the question about a spot
+## it is thinking of walking to rather than only about where it already is
+## (bot.gd `_creeps_reaching`). Team is the caller's business here: the bot
+## filters, because it asks about its own side's creeps too when scoring.
+func reaches(p: Vector2, r: float) -> bool:
+	if not is_targetable():
+		return false
+	return position.distance_to(p) - radius - r <= float(_stats["range"])
+
+
 ## Standard Bearer: the attack-speed bonus from a friendly banner within range (0 = none).
 func _banner_bonus() -> float:
 	var best := 0.0
@@ -387,7 +439,7 @@ func _die() -> void:
 			effects.add_child(Effects.Ghost.new(position, radius * 3.0, Color("#ffb74d")))
 	if PlayLog.recording() and not worthless():  # an enemy creep dying near you to someone else's blow: a missed last hit
 		for h: Node2D in get_tree().get_nodes_in_group("heroes"):
-			if not h.is_bot and h.team != team and h.is_targetable() and killed_by != h \
+			if h.team == 0 and h.team != team and h.is_targetable() and killed_by != h \
 					and h.position.distance_to(position) < PlayLog.MISS_RANGE:
 				PlayLog.missed(kind)
 	effects.add_child(Effects.Ghost.new(position, radius * 1.4, TEAM_COLORS[team]))

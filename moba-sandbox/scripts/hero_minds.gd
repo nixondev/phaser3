@@ -106,7 +106,9 @@ const MINDS := {
 			"KAREN": {"rules": {"stance_add": 40.0}},     # stays out of the anchor's threat zone
 			"BECKY": {"rules": {"stance_add": -60.0}},    # the artillery out-ranges him: step in to reach her
 		},
-		"personality": {"order": ["abilities", "clear", "trade", "farm", "deny", "push", "siege"], "retreat_at": 0.35, "trade_when": "vulnerable",
+		"personality": {"order": ["abilities", "clear", "trade", "farm", "deny", "push", "siege"],
+		"order_overtime": ["abilities", "push", "siege", "clear", "trade", "farm"],  # overtime: the zone is worth nothing, the tower is
+		"retreat_at": 0.35, "trade_when": "vulnerable",
 		"hero_casts": "poke", "engage": 520.0, "trade_cap": 0.7, "dash_at": 0.3, "hold_back": 160.0,
 		"race_need": 1.1, "chase_depth": 250.0, "stutter": 1.0, "commit": 1.0,
 		"shop": ["tank_minion", "arcane_edge", "overcharge", "echo", "haste", "hunters_mark",
@@ -136,7 +138,11 @@ const MINDS := {
 			"BECKY": {"rules": {"hunt_add": 0.1}},    # fragile: finish her sooner
 			"KAREN": {"rules": {"hunt_add": -0.1}},   # tanky: don't chase her too early
 		},
-		"personality": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"], "retreat_at": 0.3, "healed_at": 0.75,
+		"personality": {"order": ["abilities", "trade", "clear", "farm", "deny", "push", "siege"],
+		# trade stays second: a hero death in overtime sends the other side a siege
+		# minion (lane.gd pending_siege), so the diver's kills ARE his push.
+		"order_overtime": ["abilities", "trade", "push", "siege", "clear", "farm"],
+		"retreat_at": 0.3, "healed_at": 0.75,
 		"engage": 420.0, "trade_cap": 0.75, "trade_margin": -0.25, "dash_at": 0.35, "hold_back": 20.0,
 		"race_need": 0.85, "chase_depth": 250.0, "stutter": 0.6, "commit": 1.0,
 		"shop": ["tank_minion", "vigor", "whetstone", "quickdraw", "serrated", "vampirism",
@@ -154,7 +160,9 @@ const MINDS := {
 		# so the wave comes first and the tower before the fight. Trading is the
 		# last thing she reaches for — the anchor rule (threat) still turns her on
 		# anyone who steps up to her wave, out of turn.
-		"personality": {"order": ["abilities", "clear", "farm", "siege", "push", "deny", "trade"], "retreat_at": 0.3, "healed_at": 0.75,
+		"personality": {"order": ["abilities", "clear", "farm", "siege", "push", "deny", "trade"],
+		"order_overtime": ["abilities", "siege", "push", "clear", "farm", "trade"],  # she already leans siege-before-push: keep it
+		"retreat_at": 0.3, "healed_at": 0.75,
 		"engage": 320.0, "trade_cap": 0.75, "trade_margin": -0.25, "dash_at": 0.35, "hold_back": -30.0,
 		"race_need": 0.85, "chase_depth": 250.0, "stutter": 0.6, "commit": 1.0,
 		"shop": ["tank_minion", "healing_aura", "reinforcement", "colossus", "vigor", "vampirism",
@@ -197,7 +205,19 @@ const MINDS := {
 			"CHAD": {"rules": {"keep_add": 100.0}},   # POUNCE's long reach
 			"KAREN": {"rules": {"keep_add": 40.0}},
 		},
-		"personality": {"order": ["clear", "farm", "deny", "abilities", "trade", "push", "siege"], "retreat_at": 0.4, "trade_when": "vulnerable",
+		# race_need 1.2, and it stays there. It was dropped to 1.0 on the
+		# reasoning that _reach_frac now speaks for her distance, so the strict
+		# bar counted her caution twice — true in the model, wrong on the field.
+		# Measured the same evening: a 0.3-smartness BECKY went 3-0 against a
+		# 1.0 blue in rounds 1-3, her wary fell 24% -> 18% and her damage went
+		# 847 -> 1972 in the matched KYLE round. Round 1 has to be easy, so the
+		# bar goes back up. What made the drop look safe — the other hero being
+		# free to walk at her — never happened: their wary against her comes in
+		# through the shy window, which _out_ranged does not gate.
+		"personality": {"order": ["clear", "farm", "deny", "abilities", "trade", "push", "siege"],
+		# clear still leads: killing the enemy wave from range IS how she pushes.
+		"order_overtime": ["clear", "push", "siege", "abilities", "trade", "farm"],
+		"retreat_at": 0.4, "trade_when": "vulnerable",
 		"hero_casts": "vulnerable", "clump": 2, "hold_back": 200.0, "race_need": 1.2, "chase_depth": 0.0, "stutter": 1.0, "commit": 0.6, "totem_keen": true,
 		"shop": ["tank_minion", "arcane_edge", "haste", "focus", "wellspring", "siphon",
 		"keen_eye", "clean_finish", "bounty_hunter", "reinforcement", "echo", "healing_aura",

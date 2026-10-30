@@ -42,6 +42,25 @@ extends SceneTree
 ##   --variant V       base (today's game) | fixes (red skips economy
 ##                     cards, bot stats 1.0 from round 3, Overcharge
 ##                     cooldown-only) — for A/B balance tests           (base)
+##   --playlog         also write a full play log per run (run_*.jsonl +
+##                     run_*.json), the same format a played run writes, so
+##                     tools/analyze_log.py reads them. Your seat is team 0
+##                     ("you"), red is team 1 — and because both seats are
+##                     bots, BOTH sides log their why / flags / ledger    (off)
+##   --snapshot-every S  seconds between play-log snapshots. A played run
+##                     uses 0.25; 10 runs x 10 rounds at 0.25 is ~50 MB    (1.0)
+##   --log-dir DIR     where the play logs go — kept apart from your own
+##                     runs by default            (user://playlogs/autoplay)
+##   --blue-round N    how good YOUR seat is: the difficulty ladder frozen at
+##                     round N. 9 is the top of the human range (past it the
+##                     ladder goes superhuman — run.gd SUPER_FROM)         (9)
+##   --blue-smartness S  your seat's smartness 0..1 — competence only       (1)
+##   --caution C       red's caution 0..1: how readily it notices trouble.
+##                     Separate from smartness and flat across the run, so
+##                     the ladder raises skill, not fear. Lower = bolder,
+##                     pushes more, dies more. -1 = the old behaviour,
+##                     caution tracking smartness, for A/B                (0.5)
+##   --blue-caution C  the same dial for your seat                        (0.5)
 ##
 ## `--fixed-fps 60` matters: every frame is exactly 1/60 s of game time and the
 ## engine doesn't wait for real time, so runs finish fast and play the same
@@ -52,12 +71,15 @@ const Run := preload("res://scripts/run.gd")
 const Upgrades := preload("res://scripts/upgrades.gd")
 const Heroes := preload("res://scripts/heroes.gd")
 const Main := preload("res://scripts/main.gd")
+const PlayLog := preload("res://scripts/play_log.gd")
 
 const STEP := 1.0 / 60.0   # game seconds per frame under --fixed-fps 60
 
 var opts := {"runs": 5, "hero": "cycle", "policy": "greedy", "seed": 0,
 	"max-round": 900.0, "max-rounds": 10, "out": "res://autoplay_runs", "quiet": false, "variant": "base", "osc": false, "start-round": 1, "no-key": false, "no-totem": false,
-	"red-hero": -1, "personality": "", "smartness": -1.0}
+	"red-hero": -1, "personality": "", "smartness": -1.0,
+	"playlog": false, "snapshot-every": 1.0, "log-dir": "user://playlogs/autoplay",
+	"blue-round": 9, "blue-smartness": 1.0, "caution": 0.5, "blue-caution": 0.5}
 var _seed_base := 0
 
 
@@ -71,9 +93,17 @@ func _init() -> void:
 	Run.red_hero_fixed = int(opts["red-hero"])
 	Run.red_personality = str(opts["personality"])
 	Run.red_smartness = float(opts["smartness"])
+	Run.blue_round = int(opts["blue-round"])
+	Run.blue_smartness = float(opts["blue-smartness"])
+	Run.red_caution = float(opts["caution"])
+	Run.blue_caution = float(opts["blue-caution"])
 	Main.mode = "lane"
 	Main.autoplay = true
+	Main.driven = true   # headless: no run screens — this script drives the rounds
 	Main.bot_enabled = true
+	if opts["playlog"]:
+		PlayLog.force_on(str(opts["log-dir"]), float(opts["snapshot-every"]))
+		print("Play log: ON -> %s  (snapshot every %.2f s)" % [PlayLog.folder(), PlayLog.snapshot_every])
 	var started := Time.get_ticks_msec()
 	var runs: Array = []
 	for i in int(opts["runs"]):
@@ -131,7 +161,11 @@ func _play_run(i: int) -> Dictionary:
 	var run := {"run": i + 1, "seed": Run.run_seed, "hero": Heroes.LIST[hero_i]["name"],
 		"policy": opts["policy"], "rounds": [], "result": "",
 		"red_hero": Heroes.LIST[Run.red_hero_fixed]["name"] if Run.red_hero_fixed >= 0 else "rolled",
-		"personality": Run.red_personality if Run.red_personality != "" else "ladder"}
+		"personality": Run.red_personality if Run.red_personality != "" else "ladder",
+		"blue_round": Run.blue_round, "blue_smartness": Run.blue_smartness,
+		"caution": Run.red_caution, "blue_caution": Run.blue_caution}
+	PlayLog.run_start(str(opts["policy"]))  # no-op unless --playlog
+	run["playlog"] = PlayLog.run_id()
 	while true:
 		var rec := await _play_round()
 		run["rounds"].append(rec)
@@ -142,17 +176,21 @@ func _play_run(i: int) -> Dictionary:
 		if Run.round_num >= int(opts["max-rounds"]):
 			run["result"] = "capped R%d" % Run.round_num
 			break
+		PlayLog.event("shop_open", {"gold": Run.gold})
 		rec["bought"] = _shop()
 		Run.red_gold = rec["bot_gold_after"]
 		rec["red_gold_before_shop"] = Run.red_gold + Run.red_allowance()
 		rec["red_bought"] = Run.red_shop()
 		rec["red_gold_left"] = Run.red_gold
+		PlayLog.event("red_shop", {"bought": Run.red_bought.duplicate(), "red_upgrades": Run.red_upgrades.duplicate(),
+			"red_levels": Run.red_levels.duplicate(), "red_gold_left": Run.red_gold})
 		Run.next_round()
 	run["build"] = Run.upgrades.duplicate()
 	run["levels"] = Run.levels.duplicate()
 	run["red_upgrades"] = Run.red_upgrades.duplicate()
 	run["red_levels"] = Run.red_levels.duplicate()
 	run["reached"] = Run.round_num
+	PlayLog.run_end(run["result"])
 	if not opts["quiet"]:
 		print(_run_line(run))
 	return run
@@ -191,6 +229,7 @@ func _play_round() -> Dictionary:
 			outcome = "won" if lane.winner == hero.team else "lost"
 		elif frames * STEP > float(opts["max-round"]):
 			outcome = "timeout"
+	PlayLog.round_end(main, outcome)  # last_hits / gold / red_ledger / metrics (no-op unless --playlog)
 	var yours: Node2D = lane.tower(0)
 	var theirs: Node2D = lane.tower(1)
 	return {
@@ -261,50 +300,17 @@ func _watch_osc(osc: Dictionary, units: Array, t: float) -> void:
 		osc[u] = st
 
 
-## Spend gold in the between-round shop by the chosen policy; returns what it
-## bought (upgrade ids, and "Q+", "W+"… for ability levels).
+## Spend gold in the between-round shop by the chosen policy (Run.policy_shop,
+## shared with the dev Watch-bots mode); returns what it bought (upgrade ids,
+## and "Q+", "W+"… for ability levels), and writes the play-log lines.
 func _shop() -> Array:
-	var offers: Dictionary = Run.shop_offers()
-	var cards: Array = []
-	for tier: String in Upgrades.TIER_ORDER:
-		cards.append_array(offers[tier])
-	if str(opts["policy"]) != "epic":
-		cards.append_array(offers.get("wave", []))
 	var bought: Array = []
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash([Run.run_seed, Run.round_num, "shop"])
-	var policy := str(opts["policy"])
-	while true:
-		# everything affordable right now: {id, price, level?}
-		var can: Array = []
-		if policy != "none":
-			if policy != "epic":
-				for slot: String in ["Q", "W", "E", "R"]:
-					var to: int = Run.levels[slot] + 1
-					if to <= Heroes.MAX_LEVEL and Run.level_cost(slot, to) <= Run.gold:
-						can.append({"id": slot + "+", "price": Run.level_cost(slot, to), "level": slot})
-			for u: Dictionary in cards:
-				if Run.card_cost(u) <= Run.gold and Upgrades.can_offer(u, Run.upgrades) \
-						and (policy != "epic" or u["tier"] == "epic"):
-					can.append({"id": u["id"], "price": Run.card_cost(u), "card": u})
-		if can.is_empty():
-			break
-		var pick: Dictionary = can[0]
-		if policy == "random":
-			pick = can[rng.randi_range(0, can.size() - 1)]
+	for p: Dictionary in Run.policy_shop(str(opts["policy"])):
+		if p["tier"] == "level":
+			PlayLog.event("buy_level", {"slot": p["slot"], "level": p["level"], "gold_left": p["gold_left"]})
 		else:
-			for o: Dictionary in can:
-				var better: bool = o["price"] > pick["price"]
-				if policy == "levels" and o.has("level") != pick.has("level"):
-					better = o.has("level")  # levels first
-				if better:
-					pick = o
-		if pick.has("level"):
-			Run.buy_level(pick["level"])
-		else:
-			Run.buy(pick["id"])
-			cards.erase(pick["card"])  # one purchase per card, like the real shop
-		bought.append(pick["id"])
+			PlayLog.event("buy", {"id": p["id"], "tier": p["tier"], "gold_left": p["gold_left"]})
+		bought.append(p["id"])
 	return bought
 
 
@@ -385,3 +391,5 @@ func _save(runs: Array, wall: float) -> void:
 	f.store_string(JSON.stringify({"options": opts, "seed": _seed_base, "wall_seconds": wall,
 		"difficulty": Run.DIFFICULTY, "runs": runs}, "  "))
 	print("Saved: " + path)
+	if opts["playlog"]:
+		print("Play logs: %s   (python tools/analyze_log.py --dir autoplay --list)" % PlayLog.folder())

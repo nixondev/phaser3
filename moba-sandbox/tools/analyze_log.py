@@ -33,8 +33,10 @@ import json
 import os
 import sys
 
+PLAYLOGS = os.path.join(os.environ.get("APPDATA", ""), "Godot", "app_userdata", "MOBA Sandbox", "playlogs")
 LOG_DIRS = [
-    os.path.join(os.environ.get("APPDATA", ""), "Godot", "app_userdata", "MOBA Sandbox", "playlogs"),
+    PLAYLOGS,
+    os.path.join(PLAYLOGS, "autoplay"),  # tools/autoplay.gd --playlog writes here
     os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "builds", "windows-playtest", "playlogs"),
 ]
 OT_START, OT_PER_ROUND, OT_MAX = 150.0, 20.0, 300.0  # lane.gd OVERTIME (start + per_round × round, capped)
@@ -321,6 +323,11 @@ def header(paths, events, rounds, replayed=()):
     if rp:
         print("- replay of %s from round %s" % (rp.get("from", "?"), rp.get("round", "?")))
     print("- result: %s" % (end.get("result") if end else "unfinished (no run_end)"))
+    pol = rs.get("policy", "human")
+    if pol != "human":
+        blue = next((r.start.get("blue") for r in rounds.values() if r.start and r.start.get("blue")), None)
+        print("- AUTOPLAY run: your seat was a bot too (shopping policy %r%s). Both sides log why / flags / ledger."
+              % (pol, ", mind %s" % blue.get("personality") if blue else ""))
     print()
 
 
@@ -332,14 +339,18 @@ def round_table(rounds):
         if not r.start:
             continue
         red = r.start.get("red", {}) or {}
+        blue = r.start.get("blue", {}) or {}
         m = metrics(r)
         e = r.end
         ot = overtime_at(r.n)
         rt = tower_at(r, ot, 1) if e.get("time", 0) > ot else None
         lat = collections.Counter(x["team"] for x in r.of("latch"))
         dn = collections.Counter(x["team"] for x in r.of("totem_down"))
+        you = r.start.get("hero", "?")
+        if blue:  # autoplay: your seat has a mind of its own, worth naming beside red's
+            you = "%s [%s %s]" % (you, blue.get("personality", "?"), blue.get("smartness", "?"))
         print("| %d | %s vs %s (%s, %s) | %s | %s | %s | %s | %s | %s | %s-%s | %s | %d/%d | %d/%d |" % (
-            r.n, r.start.get("hero", "?"), r.start.get("bot_hero", "?"), red.get("personality", "?"), red.get("smartness", "?"),
+            r.n, you, r.start.get("bot_hero", "?"), red.get("personality", "?"), red.get("smartness", "?"),
             e.get("outcome", "unfinished"), fmt_t(e.get("time", r.snaps[-1]["t"] if r.snaps else 0)), fmt_t(ot),
             "%+.1f" % m["wave_adv"] if m.get("wave_adv") is not None else "—",
             "%.2f" % m["dmg_ratio"] if m.get("dmg_ratio") is not None else "—",
@@ -497,21 +508,29 @@ def why(r):
     print()
 
 
-def red_behaviour(r):
-    al = [s for s in r.snaps if s["bot"].get("alive")]
-    if not any(e["type"].startswith("red_") for e in r.ev):
+def bot_behaviour(r, side=1):
+    """One bot's round. side 1 = red (every run); side 0 = your seat, which is
+    only a bot under autoplay — there the same events log without the red_
+    prefix, so the whole section is the prefix and the snapshot key."""
+    p = "red_" if side else ""          # event-name prefix
+    sk = "bot" if side else "you"       # snapshot key
+    al = [s for s in r.snaps if (s.get(sk) or {}).get("alive")]
+    if not any(e["type"] == p + "why" for e in r.ev):
         return
     n = max(1, len(al))
-    print("### Round %d — red (%s)" % (r.n, r.start.get("bot_hero", "?")))
-    print("- doing: " + share(collections.Counter(s["bot"].get("why", "?").split(" ")[0] for s in al), n))
-    print("- flags: " + share(collections.Counter(f for s in al for f in s["bot"].get("flags", [])), n))
-    combos = collections.Counter(tuple(e["seq"]) for e in r.of("red_combo"))
+    if side:
+        print("### Round %d — red (%s)" % (r.n, r.start.get("bot_hero", "?")))
+    else:
+        print("### Round %d — your seat (%s, a bot: autoplay)" % (r.n, r.start.get("hero", "?")))
+    print("- doing: " + share(collections.Counter(s[sk].get("why", "?").split(" ")[0] for s in al), n))
+    print("- flags: " + share(collections.Counter(f for s in al for f in s[sk].get("flags", [])), n))
+    combos = collections.Counter(tuple(e["seq"]) for e in r.of(p + "combo"))
     if combos:
         print("- combos: %s · ended: %s" % (
             ", ".join("%s×%d" % ("→".join(k), v) for k, v in combos.most_common()),
-            dict(collections.Counter(e.get("reason", "?") for e in r.of("red_combo_end")))))
+            dict(collections.Counter(e.get("reason", "?") for e in r.of(p + "combo_end")))))
         # a combo "done" only means it ran out of steps: steps that weren't ready are skipped
-        ends = [e for e in r.of("red_combo_end") if "cast" in e]
+        ends = [e for e in r.of(p + "combo_end") if "cast" in e]
         if ends:
             fired = collections.Counter()
             for e in ends:
@@ -524,30 +543,40 @@ def red_behaviour(r):
                 steps, want, ", ".join("%s %d" % kv for kv in sorted(fired.items())) or "none",
                 "  — never fired: " + ", ".join(missing) if missing else ""))
     by = collections.defaultdict(lambda: [0, 0, 0, 0])
-    for e in r.of("red_cast_result"):
+    for e in r.of(p + "cast_result"):
         b = by[e["ability"]]
         b[0] += 1; b[1] += bool(e.get("hit_you")); b[2] += e.get("you_dmg", 0); b[3] += e.get("creeps_hit", 0)
+    foe = "you" if side else "red"
     if by:
-        print("- casts (hit you / cast, damage to you, creeps hit): " + ", ".join(
-            "%s %d/%d %d %d" % (k, v[1], v[0], v[2], v[3]) for k, v in by.items()))
-    passed = collections.Counter(e.get("reason", "?") for e in r.of("red_passed"))
+        print("- casts (hit %s / cast, damage to %s, creeps hit): %s" % (foe, foe, ", ".join(
+            "%s %d/%d %d %d" % (k, v[1], v[0], v[2], v[3]) for k, v in by.items())))
+    passed = collections.Counter(e.get("reason", "?") for e in r.of(p + "passed"))
     if passed:
         print("- chances passed: " + ", ".join("%s ×%d" % kv for kv in passed.most_common(6)))
-    deaths = r.of("red_death")
+    deaths = r.of(p + "death")
     if deaths:
         print("- deaths: " + ", ".join("%s (%s, doing %s)" % (fmt_t(e["t"]), e.get("killer", "?"), e.get("why", "?")) for e in deaths))
-    keys = r.of("red_key")
+    keys = r.of(p + "key")
     if keys:
-        ends = collections.Counter(e.get("reason", "?").split(":")[0] for e in r.of("red_key_end"))
-        print("- key runs: %d (sent %d) · ended: %s" % (len(keys), len(r.of("red_key_send")), dict(ends)))
-    trips, cont = r.of("red_totem_trip"), r.of("red_totem_contest")
+        ends = collections.Counter(e.get("reason", "?").split(":")[0] for e in r.of(p + "key_end"))
+        print("- key runs: %d (sent %d) · ended: %s" % (len(keys), len(r.of(p + "key_send")), dict(ends)))
+    trips, cont = r.of(p + "totem_trip"), r.of(p + "totem_contest")
     if trips or cont:
         print("- totem: %d trips, %d contests" % (len(trips), len(cont)))
-    led = r.end.get("red_ledger")
+    led = r.end.get("red_ledger" if side else "blue_ledger")
     if led:
-        print("- damage to you: %s · taken: %s · last hits skipped %s" % (
-            led.get("dealt"), led.get("taken"), led.get("skipped_last_hits")))
+        # a bot writes its ledger from its own seat, so its "you:" keys mean the
+        # OTHER hero. For your seat that is red: relabel them so the line reads true.
+        taken = led.get("taken") or {}
+        if not side:
+            taken = {("red:" + k[4:] if k.startswith("you:") else k): v for k, v in taken.items()}
+        print("- damage to %s: %s · taken: %s · last hits skipped %s" % (
+            foe, led.get("dealt"), taken, led.get("skipped_last_hits")))
     print()
+
+
+def red_behaviour(r):
+    bot_behaviour(r, 1)
 
 
 def anomalies(rounds):
@@ -694,7 +723,13 @@ def main():
     ap.add_argument("--any", action="store_true", help="allow an unfinished run")
     ap.add_argument("--round", type=int, help="also show this round in detail")
     ap.add_argument("--list", action="store_true", help="list recent logs")
+    ap.add_argument("--dir", help="look only in this folder: a path, or a name under the playlogs folder (e.g. --dir autoplay)")
     a = ap.parse_args()
+    if a.dir:
+        d = a.dir if os.path.isdir(a.dir) else os.path.join(PLAYLOGS, a.dir)
+        if not os.path.isdir(d):
+            sys.exit("no such log folder: %s" % d)
+        LOG_DIRS[:] = [d]
     if a.list:
         for p in find_logs()[:15]:
             ev = load(p)
@@ -720,7 +755,8 @@ def main():
     for r in rounds.values():
         if r.start:
             why(r)
-            red_behaviour(r)
+            bot_behaviour(r, 0)  # autoplay only: your seat has a brain to read too
+            bot_behaviour(r, 1)
     anomalies(rounds)
     trends(rounds)
     if a.round and a.round in rounds:

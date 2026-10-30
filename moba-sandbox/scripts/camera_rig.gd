@@ -8,7 +8,7 @@ const PAN_SPEED := 1500.0   # screen px per second
 const MAP_HALF := 3000.0
 
 var hero: Node2D
-var locked := false
+var locked := false        # main.gd starts it locked when a bot has your seat
 ## Edge panning only while the mouse is really in the window — otherwise a
 ## cursor that left through an edge would keep the view drifting.
 var _mouse_in := false
